@@ -1,0 +1,10 @@
+# Prevent Netlify CDN from transforming/converting images
+# no-transform tells CDNs not to modify the content (e.g., no WebP conversion)
+
+/images.squarespace-cdn.com/*
+  Cache-Control: public, no-transform, max-age=31536000
+  X-Content-Type-Options: nosniff
+
+/static1.squarespace.com/*
+  Cache-Control: public, no-transform, max-age=31536000
+  X-Content-Type-Options: nosniff
