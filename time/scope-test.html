@@ -168,12 +168,57 @@
         padding-top: 0;
       }
 
-      .section h3 {
+      .section-toggle {
+        display: flex;
+        width: 100%;
+        min-height: 44px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         margin-bottom: 10px;
+        border: 0;
+        background: transparent;
+        color: var(--muted-strong);
+        padding: 0;
+        text-align: left;
+      }
+
+      .section-title {
+        min-width: 0;
+      }
+
+      .section-title h3 {
         color: var(--muted-strong);
         font-size: 0.92rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
+      }
+
+      .section-count {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 800;
+      }
+
+      .chevron {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted-strong);
+        transition: transform 0.16s ease;
+      }
+
+      .section.collapsed .chevron {
+        transform: rotate(-90deg);
+      }
+
+      .section.collapsed .items {
+        display: none;
       }
 
       .items {
@@ -215,6 +260,13 @@
         color: var(--muted);
         font-size: 0.76rem;
         font-weight: 800;
+      }
+
+      .completion {
+        margin-top: 6px;
+        color: var(--success);
+        font-size: 0.76rem;
+        font-weight: 900;
       }
 
       .form {
@@ -355,6 +407,8 @@
         openEntry: null,
         project: null,
         items: [],
+        profileById: new Map(),
+        collapsedSections: new Set(),
       };
 
       const els = {
@@ -484,6 +538,20 @@
         }, new Map());
       }
 
+      function profileName(profile) {
+        return profile ? `${profile.first_name} ${profile.last_name}` : "Unknown";
+      }
+
+      function formatDateTime(value) {
+        return new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Halifax",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(value));
+      }
+
       function render() {
         const completed = state.items.filter((item) => item.completed_at).length;
         els.progress.textContent = `${completed} / ${state.items.length} complete`;
@@ -517,12 +585,43 @@
 
         const fragment = document.createDocumentFragment();
         groups.forEach((items, section) => {
+          const sectionCompleted = items.filter((item) => item.completed_at).length;
           const sectionEl = document.createElement("section");
           sectionEl.className = "section";
+          if (state.collapsedSections.has(section)) {
+            sectionEl.classList.add("collapsed");
+          }
+
+          const toggle = document.createElement("button");
+          toggle.className = "section-toggle";
+          toggle.type = "button";
+          toggle.setAttribute("aria-expanded", String(!state.collapsedSections.has(section)));
+          toggle.addEventListener("click", () => {
+            if (state.collapsedSections.has(section)) {
+              state.collapsedSections.delete(section);
+            } else {
+              state.collapsedSections.add(section);
+            }
+            render();
+          });
+
+          const titleWrap = document.createElement("div");
+          titleWrap.className = "section-title";
 
           const heading = document.createElement("h3");
           heading.textContent = section;
-          sectionEl.append(heading);
+
+          const count = document.createElement("p");
+          count.className = "section-count";
+          count.textContent = `${sectionCompleted} / ${items.length} complete`;
+
+          const chevron = document.createElement("span");
+          chevron.className = "chevron";
+          chevron.textContent = "v";
+
+          titleWrap.append(heading, count);
+          toggle.append(titleWrap, chevron);
+          sectionEl.append(toggle);
 
           const list = document.createElement("div");
           list.className = "items";
@@ -547,6 +646,13 @@
               source.className = "source";
               source.textContent = "Added on site";
               body.append(source);
+            }
+
+            if (item.completed_at) {
+              const completion = document.createElement("div");
+              completion.className = "completion";
+              completion.textContent = `Completed by ${profileName(state.profileById.get(item.completed_by))}, ${formatDateTime(item.completed_at)}`;
+              body.append(completion);
             }
 
             row.append(checkbox, body);
@@ -596,6 +702,17 @@
         }
 
         state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
+        const profileIds = [...new Set(state.items.map((item) => item.completed_by).filter(Boolean))];
+        if (state.profile?.id) {
+          profileIds.push(state.profile.id);
+        }
+        if (profileIds.length > 0) {
+          const uniqueIds = [...new Set(profileIds)];
+          const profileLookup = await request(`/rest/v1/profiles?select=id,first_name,last_name&id=in.(${uniqueIds.join(",")})`);
+          state.profileById = new Map(profileLookup.map((profile) => [profile.id, profile]));
+        } else {
+          state.profileById = new Map();
+        }
         render();
       }
 
