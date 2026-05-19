@@ -608,8 +608,8 @@
           });
           await load();
         } catch (error) {
+          await load().catch(() => {});
           showError(error.message);
-          await load();
         }
       }
 
