@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#17120f" />
+    <link rel="icon" href="/time/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/time/icon.svg" />
+    <title>Scope Admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #17120f;
+        --card: #251f1d;
+        --card-alt: #1d1816;
+        --border: #514640;
+        --muted: #b6ada8;
+        --muted-strong: #d9d2cf;
+        --ink: #f5f1ef;
+        --accent: #e27658;
+        --accent-strong: #ff9678;
+        --success-bg: #123529;
+        --success: #82d7b5;
+        --warn-bg: #54090b;
+        --warn-border: #b51c25;
+        --shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(circle at 15% 0%, rgba(226, 118, 88, 0.14), transparent 32rem),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .app {
+        width: min(100%, 1080px);
+        margin: 0 auto;
+        padding: calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 28px);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .icon {
+        display: grid;
+        width: 52px;
+        height: 52px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 10px;
+        background: var(--accent);
+        color: white;
+        font-weight: 900;
+      }
+
+      h1 {
+        font-size: clamp(1.55rem, 5vw, 2.3rem);
+        line-height: 1.05;
+      }
+
+      h2 {
+        font-size: 1.45rem;
+        line-height: 1.15;
+      }
+
+      h3 {
+        color: var(--muted-strong);
+        font-size: 0.92rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow {
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .link {
+        min-height: 44px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 14px;
+        color: var(--muted-strong);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .card {
+        min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--card) 94%, black);
+        box-shadow: var(--shadow);
+      }
+
+      .panel {
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+      }
+
+      .hero {
+        margin-bottom: 14px;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        background: #403832;
+        color: var(--muted-strong);
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .pill.good {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+
+      .pill.warn {
+        background: var(--warn-bg);
+        color: #ffc6c6;
+      }
+
+      .layout {
+        display: grid;
+        gap: 14px;
+      }
+
+      .section {
+        display: grid;
+        gap: 12px;
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label,
+      .label {
+        color: var(--muted);
+        font-size: 0.85rem;
+        font-weight: 800;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        min-width: 0;
+        min-height: 48px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card-alt);
+        color: var(--ink);
+        padding: 10px 12px;
+      }
+
+      textarea {
+        min-height: 88px;
+        resize: vertical;
+      }
+
+      input[type="checkbox"] {
+        width: 22px;
+        min-height: 22px;
+        accent-color: var(--accent);
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .button {
+        min-height: 50px;
+        min-width: 0;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        padding: 0 18px;
+        font-weight: 900;
+      }
+
+      .button.secondary {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted-strong);
+      }
+
+      .button:disabled {
+        opacity: 0.55;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .item {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        background: var(--card-alt);
+        padding: 12px;
+      }
+
+      .item-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .item-title {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font-weight: 900;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .small {
+        font-size: 0.86rem;
+        line-height: 1.35;
+      }
+
+      .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        overflow-wrap: anywhere;
+      }
+
+      .notice,
+      .error {
+        border-radius: 8px;
+        padding: 12px;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+      }
+
+      .notice {
+        border: 1px solid rgba(130, 215, 181, 0.35);
+        background: var(--success-bg);
+        color: var(--success);
+      }
+
+      .error {
+        border: 1px solid var(--warn-border);
+        background: var(--warn-bg);
+        color: #ffc6c6;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (min-width: 840px) {
+        .layout {
+          grid-template-columns: 0.95fr 1.05fr;
+          align-items: start;
+        }
+
+        .form-grid.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .span-2 {
+          grid-column: span 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="icon">S</div>
+          <div>
+            <p class="eyebrow">Admin Pilot</p>
+            <h1>Scope Mapping</h1>
+          </div>
+        </div>
+        <nav class="links" aria-label="Scope links">
+          <a class="link" href="/time/">Clock</a>
+          <a class="link" href="/time/scope-test.html">Scope Test</a>
+        </nav>
+      </header>
+
+      <section class="card panel hero">
+        <p class="eyebrow" id="profile-eyebrow">Checking access</p>
+        <h2 id="hero-title">Property to Notion scope mapping</h2>
+        <div class="status-row">
+          <span class="pill" id="profile-pill">Not signed in</span>
+          <span class="pill" id="mapping-pill">No property selected</span>
+          <span class="pill" id="project-pill">No project selected</span>
+        </div>
+        <p class="muted small" id="hero-status">Open the Time Clock as an admin, then return here.</p>
+        <div class="error hidden" id="error"></div>
+        <div class="notice hidden" id="notice"></div>
+      </section>
+
+      <div class="layout hidden" id="admin-layout">
+        <section class="card panel">
+          <div class="section">
+            <div>
+              <p class="eyebrow">Step 1</p>
+              <h2>Property database</h2>
+            </div>
+            <div class="field">
+              <label for="job-site-select">Property</label>
+              <select id="job-site-select"></select>
+            </div>
+            <form class="form-grid" id="mapping-form">
+              <div class="field">
+                <label for="mapping-title">Notion database title</label>
+                <input id="mapping-title" type="text" autocomplete="off" placeholder="356-358 Queen Street SOW" required />
+              </div>
+              <div class="field">
+                <label for="mapping-url">Notion database URL</label>
+                <input id="mapping-url" type="url" autocomplete="off" placeholder="https://www.notion.so/..." required />
+              </div>
+              <div class="form-grid two">
+                <div class="field">
+                  <label for="mapping-database-id">Notion database ID</label>
+                  <input id="mapping-database-id" class="code" type="text" autocomplete="off" required />
+                </div>
+                <div class="field">
+                  <label for="mapping-data-source-id">Notion data source ID</label>
+                  <input id="mapping-data-source-id" class="code" type="text" autocomplete="off" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="mapping-job-code-property">Job code property name</label>
+                <input id="mapping-job-code-property" type="text" autocomplete="off" value="Job Code" required />
+              </div>
+              <label class="checkbox-row">
+                <input id="mapping-active" type="checkbox" />
+                <span>Active mapping</span>
+              </label>
+              <div class="button-row">
+                <button class="button" type="submit" id="mapping-save">Save Property Mapping</button>
+                <button class="button secondary" type="button" id="extract-database-id">Extract ID from URL</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card panel">
+          <div class="section">
+            <div>
+              <p class="eyebrow">Step 2</p>
+              <h2>Scope project link</h2>
+            </div>
+            <div class="field">
+              <label for="project-select">Existing scope project</label>
+              <select id="project-select"></select>
+            </div>
+            <form class="form-grid two" id="project-form">
+              <div class="field">
+                <label for="project-title-input">Scope title</label>
+                <input id="project-title-input" type="text" autocomplete="off" placeholder="358 (Upper Unit)" required />
+              </div>
+              <div class="field">
+                <label for="project-unit">Unit / area</label>
+                <input id="project-unit" type="text" autocomplete="off" placeholder="358 (Upper Unit)" required />
+              </div>
+              <div class="field">
+                <label for="project-job-code">Job code</label>
+                <select id="project-job-code"></select>
+              </div>
+              <div class="field">
+                <label for="project-status">Sync status</label>
+                <input id="project-status" type="text" autocomplete="off" placeholder="notion-linked" />
+              </div>
+              <div class="field span-2">
+                <label for="project-url">Notion page URL</label>
+                <input id="project-url" type="url" autocomplete="off" placeholder="https://www.notion.so/..." required />
+              </div>
+              <div class="field">
+                <label for="project-page-id">Notion page ID</label>
+                <input id="project-page-id" class="code" type="text" autocomplete="off" required />
+              </div>
+              <div class="field">
+                <label for="project-data-source-id">Notion data source ID</label>
+                <input id="project-data-source-id" class="code" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="project-title-property">Title property name</label>
+                <input id="project-title-property" type="text" autocomplete="off" value="Name" required />
+              </div>
+              <div class="field">
+                <label for="project-job-code-property">Job code property name</label>
+                <input id="project-job-code-property" type="text" autocomplete="off" value="Job Code" required />
+              </div>
+              <label class="checkbox-row span-2">
+                <input id="project-active" type="checkbox" />
+                <span>Active scope project</span>
+              </label>
+              <div class="button-row span-2">
+                <button class="button" type="submit" id="project-save">Save Scope Project</button>
+                <button class="button secondary" type="button" id="new-project">New Project</button>
+                <button class="button secondary" type="button" id="extract-page-id">Extract ID from URL</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card panel">
+          <div class="section">
+            <div>
+              <p class="eyebrow">Saved links</p>
+              <h2>Projects for this property</h2>
+            </div>
+            <div class="list" id="project-list"></div>
+          </div>
+        </section>
+
+        <section class="card panel">
+          <div class="section">
+            <div>
+              <p class="eyebrow">Preview</p>
+              <h2>Resolution check</h2>
+            </div>
+            <div class="list" id="resolution-list"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const SUPABASE_URL = "https://akofsmmsxtfqduebetga.supabase.co";
+      const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
+
+      const state = {
+        authStore: null,
+        session: null,
+        profile: null,
+        jobSites: [],
+        jobCodes: [],
+        mappings: [],
+        projects: [],
+        selectedSiteId: "",
+        selectedProjectId: "",
+      };
+
+      const els = {
+        adminLayout: document.getElementById("admin-layout"),
+        profileEyebrow: document.getElementById("profile-eyebrow"),
+        heroTitle: document.getElementById("hero-title"),
+        profilePill: document.getElementById("profile-pill"),
+        mappingPill: document.getElementById("mapping-pill"),
+        projectPill: document.getElementById("project-pill"),
+        heroStatus: document.getElementById("hero-status"),
+        error: document.getElementById("error"),
+        notice: document.getElementById("notice"),
+        jobSiteSelect: document.getElementById("job-site-select"),
+        mappingForm: document.getElementById("mapping-form"),
+        mappingTitle: document.getElementById("mapping-title"),
+        mappingUrl: document.getElementById("mapping-url"),
+        mappingDatabaseId: document.getElementById("mapping-database-id"),
+        mappingDataSourceId: document.getElementById("mapping-data-source-id"),
+        mappingJobCodeProperty: document.getElementById("mapping-job-code-property"),
+        mappingActive: document.getElementById("mapping-active"),
+        extractDatabaseId: document.getElementById("extract-database-id"),
+        projectSelect: document.getElementById("project-select"),
+        projectForm: document.getElementById("project-form"),
+        projectTitle: document.getElementById("project-title-input"),
+        projectUnit: document.getElementById("project-unit"),
+        projectJobCode: document.getElementById("project-job-code"),
+        projectStatus: document.getElementById("project-status"),
+        projectUrl: document.getElementById("project-url"),
+        projectPageId: document.getElementById("project-page-id"),
+        projectDataSourceId: document.getElementById("project-data-source-id"),
+        projectTitleProperty: document.getElementById("project-title-property"),
+        projectJobCodeProperty: document.getElementById("project-job-code-property"),
+        projectActive: document.getElementById("project-active"),
+        newProject: document.getElementById("new-project"),
+        extractPageId: document.getElementById("extract-page-id"),
+        projectList: document.getElementById("project-list"),
+        resolutionList: document.getElementById("resolution-list"),
+      };
+
+      function getStoredAuth() {
+        const key = Object.keys(localStorage).find((candidate) => (
+          candidate.startsWith("sb-") && candidate.endsWith("-auth-token")
+        ));
+        if (!key) return null;
+        try {
+          const saved = JSON.parse(localStorage.getItem(key));
+          return {
+            key,
+            saved,
+            session: saved?.currentSession || saved?.session || saved,
+          };
+        } catch {
+          return null;
+        }
+      }
+
+      function saveStoredSession(authStore, session) {
+        if (!authStore?.key || !session) return;
+        const saved = authStore.saved || {};
+        if (saved.currentSession || saved.session) {
+          saved.currentSession = session;
+          saved.session = session;
+        } else {
+          Object.assign(saved, session);
+        }
+        localStorage.setItem(authStore.key, JSON.stringify(saved));
+        authStore.saved = saved;
+        authStore.session = session;
+      }
+
+      function sessionNeedsRefresh(session) {
+        if (!session?.refresh_token) return false;
+        if (!session.expires_at) return true;
+        return Math.floor(Date.now() / 1000) > Number(session.expires_at) - 60;
+      }
+
+      async function refreshSession(authStore) {
+        if (!authStore?.session?.refresh_token) return authStore?.session || null;
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refresh_token: authStore.session.refresh_token }),
+        });
+        if (!response.ok) {
+          throw new Error("Your Time Clock sign-in has expired. Open Time Clock, sign in again, then return here.");
+        }
+        const refreshed = await response.json();
+        saveStoredSession(authStore, refreshed);
+        return refreshed;
+      }
+
+      function headers(extra = {}) {
+        return {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${state.session?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          ...extra,
+        };
+      }
+
+      async function request(path, options = {}, hasRetried = false) {
+        const response = await fetch(`${SUPABASE_URL}${path}`, {
+          ...options,
+          headers: headers(options.headers),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          if (!hasRetried && (text.includes("PGRST303") || text.includes("JWT expired")) && state.authStore?.session?.refresh_token) {
+            state.session = await refreshSession(state.authStore);
+            return request(path, options, true);
+          }
+          throw new Error(text || `Request failed with ${response.status}`);
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      }
+
+      function showError(message) {
+        els.error.textContent = formatError(message);
+        els.error.classList.remove("hidden");
+      }
+
+      function showNotice(message) {
+        els.notice.textContent = message;
+        els.notice.classList.remove("hidden");
+      }
+
+      function clearMessages() {
+        els.error.textContent = "";
+        els.error.classList.add("hidden");
+        els.notice.textContent = "";
+        els.notice.classList.add("hidden");
+      }
+
+      function formatError(message) {
+        try {
+          const parsed = JSON.parse(message);
+          if (parsed.code === "PGRST303" || String(parsed.message || "").includes("JWT expired")) {
+            return "Your Time Clock sign-in expired. Open Time Clock, sign in again, then return here.";
+          }
+          return parsed.message || message;
+        } catch {
+          return message;
+        }
+      }
+
+      function encode(value) {
+        return encodeURIComponent(value);
+      }
+
+      function activeSite() {
+        return state.jobSites.find((site) => site.id === state.selectedSiteId) || null;
+      }
+
+      function activeMapping() {
+        return state.mappings.find((mapping) => mapping.job_site_id === state.selectedSiteId) || null;
+      }
+
+      function visibleProjects() {
+        return state.projects.filter((project) => project.job_site_id === state.selectedSiteId);
+      }
+
+      function activeProject() {
+        return state.projects.find((project) => project.id === state.selectedProjectId) || null;
+      }
+
+      function jobCodeLabel(jobCodeId) {
+        const jobCode = state.jobCodes.find((code) => code.id === jobCodeId);
+        if (!jobCode) return "No job code";
+        return [jobCode.code, jobCode.name].filter(Boolean).join(" | ");
+      }
+
+      function extractNotionId(value) {
+        const compact = String(value || "").split("?")[0].replace(/-/g, "");
+        const matches = compact.match(/[0-9a-f]{32}/gi);
+        return matches ? matches[matches.length - 1] : "";
+      }
+
+      function fillMappingForm() {
+        const mapping = activeMapping();
+        els.mappingTitle.value = mapping?.title || "";
+        els.mappingUrl.value = mapping?.notion_database_url || "";
+        els.mappingDatabaseId.value = mapping?.notion_database_id || "";
+        els.mappingDataSourceId.value = mapping?.notion_data_source_id || "";
+        els.mappingJobCodeProperty.value = mapping?.job_code_property_name || "Job Code";
+        els.mappingActive.checked = mapping?.is_active ?? true;
+      }
+
+      function fillProjectForm(project = activeProject()) {
+        const site = activeSite();
+        const mapping = activeMapping();
+        els.projectTitle.value = project?.title || "";
+        els.projectUnit.value = project?.unit_name || "";
+        els.projectJobCode.value = project?.job_code_id || "";
+        els.projectStatus.value = project?.sync_status || "";
+        els.projectUrl.value = project?.notion_url || "";
+        els.projectPageId.value = project?.notion_page_id || "";
+        els.projectDataSourceId.value = project?.notion_data_source_id || mapping?.notion_data_source_id || "";
+        els.projectTitleProperty.value = project?.notion_title_property_name || "Name";
+        els.projectJobCodeProperty.value = project?.notion_job_code_property_name || mapping?.job_code_property_name || "Job Code";
+        els.projectActive.checked = project?.is_active ?? true;
+        if (!project && site) {
+          els.projectStatus.value = "notion-linked";
+        }
+      }
+
+      function option(value, label) {
+        const node = document.createElement("option");
+        node.value = value;
+        node.textContent = label;
+        return node;
+      }
+
+      function renderSelects() {
+        els.jobSiteSelect.replaceChildren(...state.jobSites.map((site) => option(site.id, site.name)));
+        els.jobSiteSelect.value = state.selectedSiteId;
+
+        const projects = visibleProjects();
+        els.projectSelect.replaceChildren(
+          option("", "New scope project"),
+          ...projects.map((project) => option(project.id, `${project.unit_name} - ${jobCodeLabel(project.job_code_id)}`))
+        );
+        els.projectSelect.value = state.selectedProjectId;
+
+        const selectedSiteCodes = state.jobCodes.filter((code) => !code.job_site_id || code.job_site_id === state.selectedSiteId);
+        els.projectJobCode.replaceChildren(
+          option("", "No job code selected"),
+          ...selectedSiteCodes.map((code) => option(code.id, [code.code, code.name].filter(Boolean).join(" | ")))
+        );
+      }
+
+      function renderProjects() {
+        const projects = visibleProjects();
+        if (projects.length === 0) {
+          els.projectList.innerHTML = '<div class="item muted small">No scope projects are linked to this property yet.</div>';
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        projects.forEach((project) => {
+          const item = document.createElement("article");
+          item.className = "item";
+
+          const head = document.createElement("div");
+          head.className = "item-head";
+          const title = document.createElement("p");
+          title.className = "item-title";
+          title.textContent = project.unit_name;
+          const edit = document.createElement("button");
+          edit.className = "button secondary";
+          edit.type = "button";
+          edit.textContent = "Edit";
+          edit.addEventListener("click", () => {
+            state.selectedProjectId = project.id;
+            render();
+            fillProjectForm(project);
+          });
+          head.append(title, edit);
+
+          const meta = document.createElement("p");
+          meta.className = "muted small";
+          meta.textContent = `${jobCodeLabel(project.job_code_id)} - ${project.sync_status || "No sync status"} - ${project.is_active ? "Active" : "Inactive"}`;
+
+          const notion = document.createElement("p");
+          notion.className = "muted small code";
+          notion.textContent = project.notion_page_id;
+
+          item.append(head, meta, notion);
+          fragment.append(item);
+        });
+        els.projectList.replaceChildren(fragment);
+      }
+
+      function renderResolution() {
+        const site = activeSite();
+        const mapping = activeMapping();
+        const project = activeProject();
+        const rows = [
+          ["Property", site?.name || "None selected"],
+          ["Database", mapping ? `${mapping.title} (${mapping.is_active ? "active" : "inactive"})` : "No database mapping saved"],
+          ["Job Code Field", mapping?.job_code_property_name || "Job Code"],
+          ["Scope Project", project ? `${project.unit_name} (${project.is_active ? "active" : "inactive"})` : "New project draft"],
+          ["Project Job Code", project?.job_code_id ? jobCodeLabel(project.job_code_id) : "Choose a job code"],
+        ];
+
+        const fragment = document.createDocumentFragment();
+        rows.forEach(([label, value]) => {
+          const item = document.createElement("div");
+          item.className = "item";
+          const title = document.createElement("p");
+          title.className = "eyebrow";
+          title.textContent = label;
+          const text = document.createElement("p");
+          text.className = "small";
+          text.textContent = value;
+          item.append(title, text);
+          fragment.append(item);
+        });
+        els.resolutionList.replaceChildren(fragment);
+      }
+
+      function render() {
+        if (!state.profile) return;
+
+        els.profileEyebrow.textContent = "Admin access";
+        els.profilePill.textContent = `${state.profile.first_name} ${state.profile.last_name}`;
+        els.profilePill.classList.add("good");
+        els.heroStatus.textContent = "Map each property to its Notion scope database, then link individual job codes to scope pages.";
+        els.adminLayout.classList.remove("hidden");
+
+        const mapping = activeMapping();
+        const project = activeProject();
+        els.mappingPill.textContent = mapping ? "Database linked" : "Database not linked";
+        els.mappingPill.classList.toggle("good", Boolean(mapping));
+        els.mappingPill.classList.toggle("warn", !mapping);
+        els.projectPill.textContent = project ? "Project selected" : "New project";
+        els.projectPill.classList.toggle("good", Boolean(project));
+
+        renderSelects();
+        renderProjects();
+        renderResolution();
+        fillMappingForm();
+        fillProjectForm(project);
+      }
+
+      async function load() {
+        clearMessages();
+        state.authStore = getStoredAuth();
+        state.session = state.authStore?.session || null;
+        if (!state.session?.access_token || !state.session?.user?.id) {
+          els.profileEyebrow.textContent = "Sign in required";
+          els.profilePill.textContent = "Not signed in";
+          els.heroStatus.textContent = "Open the Time Clock, sign in as an admin, then return here.";
+          return;
+        }
+        if (sessionNeedsRefresh(state.session)) {
+          els.heroStatus.textContent = "Refreshing your Time Clock sign-in...";
+          state.session = await refreshSession(state.authStore);
+        }
+
+        const profileRows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
+        state.profile = profileRows[0] || null;
+        if (!state.profile?.is_active) {
+          throw new Error("This profile is not active.");
+        }
+        if (state.profile.role !== "admin") {
+          throw new Error("Admin access is required for scope mapping.");
+        }
+
+        const [jobSites, jobCodes, mappings, projects] = await Promise.all([
+          request("/rest/v1/job_sites?select=*&order=name.asc"),
+          request("/rest/v1/job_codes?select=*&order=name.asc"),
+          request("/rest/v1/scope_notion_databases?select=*&order=title.asc"),
+          request("/rest/v1/scope_projects?select=*&order=unit_name.asc"),
+        ]);
+        state.jobSites = jobSites;
+        state.jobCodes = jobCodes;
+        state.mappings = mappings;
+        state.projects = projects;
+        if (!state.selectedSiteId) {
+          state.selectedSiteId = jobSites[0]?.id || "";
+        }
+        if (state.selectedProjectId && !state.projects.some((project) => project.id === state.selectedProjectId)) {
+          state.selectedProjectId = "";
+        }
+        render();
+      }
+
+      async function saveMapping(event) {
+        event.preventDefault();
+        clearMessages();
+        const site = activeSite();
+        if (!site) return;
+        const existing = activeMapping();
+        const payload = {
+          job_site_id: site.id,
+          notion_database_id: els.mappingDatabaseId.value.trim(),
+          notion_database_url: els.mappingUrl.value.trim(),
+          notion_data_source_id: els.mappingDataSourceId.value.trim() || null,
+          title: els.mappingTitle.value.trim(),
+          job_code_property_name: els.mappingJobCodeProperty.value.trim() || "Job Code",
+          is_active: els.mappingActive.checked,
+          last_sync_status: "linked",
+        };
+        if (!payload.notion_database_id || !payload.notion_database_url || !payload.title) {
+          showError("Database title, URL, and ID are required.");
+          return;
+        }
+
+        if (existing) {
+          await request(`/rest/v1/scope_notion_databases?id=eq.${encode(existing.id)}&select=*`, {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await request("/rest/v1/scope_notion_databases?select=*", {
+            method: "POST",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(payload),
+          });
+        }
+        showNotice("Property mapping saved.");
+        await load();
+      }
+
+      async function saveProject(event) {
+        event.preventDefault();
+        clearMessages();
+        const site = activeSite();
+        if (!site) return;
+        const mapping = activeMapping();
+        const existing = activeProject();
+        const payload = {
+          notion_page_id: els.projectPageId.value.trim(),
+          notion_url: els.projectUrl.value.trim(),
+          title: els.projectTitle.value.trim(),
+          property_name: site.name,
+          unit_name: els.projectUnit.value.trim(),
+          job_site_id: site.id,
+          job_code_id: els.projectJobCode.value || null,
+          scope_notion_database_id: mapping?.id || null,
+          notion_data_source_id: els.projectDataSourceId.value.trim() || mapping?.notion_data_source_id || null,
+          notion_title_property_name: els.projectTitleProperty.value.trim() || "Name",
+          notion_job_code_property_name: els.projectJobCodeProperty.value.trim() || mapping?.job_code_property_name || "Job Code",
+          sync_status: els.projectStatus.value.trim() || "notion-linked",
+          is_active: els.projectActive.checked,
+          source_synced_at: new Date().toISOString(),
+        };
+        if (!payload.notion_page_id || !payload.notion_url || !payload.title || !payload.unit_name) {
+          showError("Scope title, unit, Notion URL, and Notion page ID are required.");
+          return;
+        }
+
+        let rows;
+        if (existing) {
+          rows = await request(`/rest/v1/scope_projects?id=eq.${encode(existing.id)}&select=*`, {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          rows = await request("/rest/v1/scope_projects?select=*", {
+            method: "POST",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(payload),
+          });
+        }
+        state.selectedProjectId = rows?.[0]?.id || state.selectedProjectId;
+        showNotice("Scope project saved.");
+        await load();
+      }
+
+      els.jobSiteSelect.addEventListener("change", () => {
+        state.selectedSiteId = els.jobSiteSelect.value;
+        state.selectedProjectId = "";
+        clearMessages();
+        render();
+      });
+
+      els.projectSelect.addEventListener("change", () => {
+        state.selectedProjectId = els.projectSelect.value;
+        clearMessages();
+        render();
+      });
+
+      els.mappingForm.addEventListener("submit", (event) => {
+        saveMapping(event).catch((error) => showError(error.message));
+      });
+
+      els.projectForm.addEventListener("submit", (event) => {
+        saveProject(event).catch((error) => showError(error.message));
+      });
+
+      els.newProject.addEventListener("click", () => {
+        state.selectedProjectId = "";
+        clearMessages();
+        render();
+      });
+
+      els.extractDatabaseId.addEventListener("click", () => {
+        const id = extractNotionId(els.mappingUrl.value);
+        if (id) {
+          els.mappingDatabaseId.value = id;
+          showNotice("Database ID extracted from the URL.");
+        } else {
+          showError("I could not find a Notion ID in that URL.");
+        }
+      });
+
+      els.extractPageId.addEventListener("click", () => {
+        const id = extractNotionId(els.projectUrl.value);
+        if (id) {
+          els.projectPageId.value = id;
+          showNotice("Page ID extracted from the URL.");
+        } else {
+          showError("I could not find a Notion ID in that URL.");
+        }
+      });
+
+      load().catch((error) => {
+        showError(error.message);
+        els.heroStatus.textContent = "Scope mapping could not be loaded.";
+      });
+    </script>
+  </body>
+</html>
