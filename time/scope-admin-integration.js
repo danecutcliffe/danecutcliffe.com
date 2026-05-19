@@ -621,10 +621,11 @@
     els.connectButton.disabled = true;
     els.connectButton.textContent = "Refreshing...";
     try {
-      const response = await fetch("/.netlify/functions/sync-scope-database", {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-database`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${state.session?.access_token || ""}`,
+          apikey: SUPABASE_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

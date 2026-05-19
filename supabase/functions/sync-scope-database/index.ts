@@ -1,36 +1,48 @@
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://akofsmmsxtfqduebetga.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
-const NOTION_TOKEN = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://akofsmmsxtfqduebetga.supabase.co";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const NOTION_TOKEN = Deno.env.get("NOTION_API_KEY") || Deno.env.get("NOTION_TOKEN");
 const NOTION_VERSION = "2026-03-11";
 const JOB_CODE_PROPERTY = "Job Code";
 
-const json = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-  },
-  body: JSON.stringify(body),
-});
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
-const textFromRichText = (items = []) => items.map((item) => item.plain_text || "").join("").trim();
+type Json = Record<string, unknown> | Array<unknown> | null;
 
-const extractNotionId = (value) => {
+function json(status: number, body: Json): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+function textFromRichText(items: Array<{ plain_text?: string }> = []): string {
+  return items.map((item) => item.plain_text || "").join("").trim();
+}
+
+function extractNotionId(value: unknown): string {
   const compact = String(value || "").split("?")[0].replace(/-/g, "");
   const matches = compact.match(/[0-9a-f]{32}/gi);
   return matches ? matches[matches.length - 1] : "";
-};
+}
 
-const notionHeaders = () => ({
-  Authorization: `Bearer ${NOTION_TOKEN}`,
-  "Notion-Version": NOTION_VERSION,
-  "Content-Type": "application/json",
-});
-
-async function notion(path, options = {}) {
+async function notion(path: string, options: RequestInit = {}): Promise<any> {
+  if (!NOTION_TOKEN) throw new Error("NOTION_API_KEY is not configured in Supabase.");
   const response = await fetch(`https://api.notion.com/v1${path}`, {
     ...options,
-    headers: notionHeaders(),
+    headers: {
+      Authorization: `Bearer ${NOTION_TOKEN}`,
+      "Notion-Version": NOTION_VERSION,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -39,12 +51,13 @@ async function notion(path, options = {}) {
   return payload;
 }
 
-async function supabase(path, accessToken, options = {}) {
+async function supabase(path: string, options: RequestInit = {}): Promise<any> {
+  if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured in Supabase.");
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${accessToken}`,
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
@@ -57,10 +70,11 @@ async function supabase(path, accessToken, options = {}) {
   return payload;
 }
 
-async function requireAdmin(accessToken) {
+async function requireAdmin(accessToken: string): Promise<void> {
+  if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured in Supabase.");
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: {
-      apikey: SUPABASE_KEY,
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${accessToken}`,
     },
   });
@@ -69,19 +83,20 @@ async function requireAdmin(accessToken) {
     throw new Error("Sign in as an admin before syncing scopes.");
   }
 
-  const profiles = await supabase(`/rest/v1/profiles?select=id,role,is_active&id=eq.${encodeURIComponent(user.id)}&limit=1`, accessToken);
+  const profiles = await supabase(`/rest/v1/profiles?select=id,role,is_active&id=eq.${encodeURIComponent(user.id)}&limit=1`);
   const profile = profiles?.[0];
   if (!profile?.is_active || profile.role !== "admin") {
     throw new Error("Admin access is required to sync scopes.");
   }
-  return profile;
 }
 
-async function resolveDataSource(databaseUrl, providedDataSourceId) {
+async function resolveDataSource(databaseUrl: string, providedDataSourceId?: string): Promise<{
+  databaseId: string;
+  dataSourceId: string;
+  title: string;
+}> {
   const databaseId = extractNotionId(databaseUrl);
-  if (!databaseId) {
-    throw new Error("Paste a valid Notion database URL.");
-  }
+  if (!databaseId) throw new Error("Paste a valid Notion database URL.");
 
   if (providedDataSourceId) {
     const source = await notion(`/data_sources/${encodeURIComponent(providedDataSourceId)}`);
@@ -95,44 +110,41 @@ async function resolveDataSource(databaseUrl, providedDataSourceId) {
   try {
     const database = await notion(`/databases/${encodeURIComponent(databaseId)}`);
     const dataSource = database.data_sources?.[0];
-    if (!dataSource?.id) {
-      throw new Error("No data source was found under that Notion database.");
-    }
+    if (!dataSource?.id) throw new Error("No data source was found under that Notion database.");
     return {
       databaseId,
       dataSourceId: dataSource.id,
       title: textFromRichText(database.title) || dataSource.name || "Notion scope database",
     };
-  } catch (error) {
+  } catch {
     const source = await notion(`/data_sources/${encodeURIComponent(databaseId)}`);
     return {
       databaseId,
       dataSourceId: source.id,
       title: source.name || "Notion scope database",
-      warning: error.message,
     };
   }
 }
 
-async function queryAllPages(dataSourceId) {
+async function queryAllPages(dataSourceId: string): Promise<any[]> {
   const pages = [];
-  let startCursor = null;
+  let startCursor: string | null = null;
   do {
-    const body = { page_size: 100, result_type: "page" };
+    const body: Record<string, unknown> = { page_size: 100, result_type: "page" };
     if (startCursor) body.start_cursor = startCursor;
     const response = await notion(`/data_sources/${encodeURIComponent(dataSourceId)}/query`, {
       method: "POST",
       body: JSON.stringify(body),
     });
-    pages.push(...(response.results || []).filter((item) => item.object === "page"));
+    pages.push(...(response.results || []).filter((item: any) => item.object === "page"));
     startCursor = response.has_more ? response.next_cursor : null;
   } while (startCursor);
   return pages;
 }
 
-async function queryPageBlocks(pageId) {
+async function queryPageBlocks(pageId: string): Promise<any[]> {
   const blocks = [];
-  let startCursor = null;
+  let startCursor: string | null = null;
   do {
     const query = startCursor ? `?start_cursor=${encodeURIComponent(startCursor)}&page_size=100` : "?page_size=100";
     const response = await notion(`/blocks/${encodeURIComponent(pageId)}/children${query}`);
@@ -142,12 +154,12 @@ async function queryPageBlocks(pageId) {
   return blocks;
 }
 
-function pageTitle(page) {
-  const titleProperty = Object.values(page.properties || {}).find((property) => property.type === "title");
+function pageTitle(page: any): string {
+  const titleProperty = Object.values(page.properties || {}).find((property: any) => property.type === "title") as any;
   return textFromRichText(titleProperty?.title || []) || "Untitled scope";
 }
 
-function propertyText(property) {
+function propertyText(property: any): string {
   if (!property) return "";
   switch (property.type) {
     case "title":
@@ -159,7 +171,7 @@ function propertyText(property) {
     case "status":
       return property.status?.name || "";
     case "multi_select":
-      return (property.multi_select || []).map((item) => item.name).join(", ");
+      return (property.multi_select || []).map((item: any) => item.name).join(", ");
     case "number":
       return property.number == null ? "" : String(property.number);
     case "formula":
@@ -174,14 +186,14 @@ function propertyText(property) {
   }
 }
 
-function blockText(block) {
+function blockText(block: any): string {
   const payload = block[block.type];
   if (!payload) return "";
   return textFromRichText(payload.rich_text || []);
 }
 
-function blocksToItems(blocks) {
-  const items = [];
+function blocksToItems(blocks: any[]): Array<{ section: string; itemText: string }> {
+  const items: Array<{ section: string; itemText: string }> = [];
   let section = "Scope";
   blocks.forEach((block) => {
     if (["heading_1", "heading_2", "heading_3"].includes(block.type)) {
@@ -193,17 +205,13 @@ function blocksToItems(blocks) {
     if (!["to_do", "bulleted_list_item", "numbered_list_item", "paragraph", "toggle"].includes(block.type)) return;
     const itemText = blockText(block);
     if (!itemText) return;
-    items.push({
-      section,
-      itemText,
-      checked: Boolean(block.type === "to_do" && block.to_do?.checked),
-    });
+    items.push({ section, itemText });
   });
   return items;
 }
 
-async function upsertMapping(accessToken, jobSiteId, database, databaseUrl) {
-  const rows = await supabase("/rest/v1/scope_notion_databases?on_conflict=job_site_id&select=*", accessToken, {
+async function upsertMapping(jobSiteId: string, database: { databaseId: string; dataSourceId: string; title: string }, databaseUrl: string): Promise<any> {
+  const rows = await supabase("/rest/v1/scope_notion_databases?on_conflict=job_site_id&select=*", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
     body: JSON.stringify([{
@@ -221,8 +229,8 @@ async function upsertMapping(accessToken, jobSiteId, database, databaseUrl) {
   return rows[0];
 }
 
-async function upsertProject(accessToken, project) {
-  const rows = await supabase("/rest/v1/scope_projects?on_conflict=notion_page_id,unit_name&select=*", accessToken, {
+async function upsertProject(project: Record<string, unknown>): Promise<any> {
+  const rows = await supabase("/rest/v1/scope_projects?on_conflict=notion_page_id,unit_name&select=*", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
     body: JSON.stringify([project]),
@@ -230,10 +238,10 @@ async function upsertProject(accessToken, project) {
   return rows[0];
 }
 
-async function insertMissingItems(accessToken, projectId, notionItems) {
+async function insertMissingItems(projectId: string, notionItems: Array<{ section: string; itemText: string }>): Promise<{ inserted: number; existing: number }> {
   if (notionItems.length === 0) return { inserted: 0, existing: 0 };
-  const existing = await supabase(`/rest/v1/scope_items?select=section,item_text&scope_project_id=eq.${encodeURIComponent(projectId)}`, accessToken);
-  const existingKeys = new Set(existing.map((item) => `${item.section}\n${item.item_text}`));
+  const existing = await supabase(`/rest/v1/scope_items?select=section,item_text&scope_project_id=eq.${encodeURIComponent(projectId)}`);
+  const existingKeys = new Set(existing.map((item: any) => `${item.section}\n${item.item_text}`));
   const rows = notionItems
     .filter((item) => !existingKeys.has(`${item.section}\n${item.itemText}`))
     .map((item, index) => ({
@@ -246,7 +254,7 @@ async function insertMissingItems(accessToken, projectId, notionItems) {
     }));
 
   if (rows.length === 0) return { inserted: 0, existing: existing.length };
-  await supabase("/rest/v1/scope_items", accessToken, {
+  await supabase("/rest/v1/scope_items", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify(rows),
@@ -254,45 +262,39 @@ async function insertMissingItems(accessToken, projectId, notionItems) {
   return { inserted: rows.length, existing: existing.length };
 }
 
-exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return json(204, {});
-  if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed." });
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return json(204, null);
+  if (request.method !== "POST") return json(405, { error: "Method not allowed." });
 
   try {
-    if (!NOTION_TOKEN) {
-      return json(500, { error: "NOTION_API_KEY is not configured in Netlify." });
-    }
-
-    const accessToken = event.headers.authorization?.replace(/^Bearer\s+/i, "");
-    if (!accessToken) {
-      return json(401, { error: "Sign in as an admin before syncing scopes." });
-    }
+    const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (!accessToken) return json(401, { error: "Sign in as an admin before syncing scopes." });
     await requireAdmin(accessToken);
 
-    const body = JSON.parse(event.body || "{}");
+    const body = await request.json().catch(() => ({}));
     const jobSiteId = body.jobSiteId;
     const notionDatabaseUrl = body.notionDatabaseUrl;
     if (!jobSiteId || !notionDatabaseUrl) {
       return json(400, { error: "Property and Notion database URL are required." });
     }
 
-    const [site] = await supabase(`/rest/v1/job_sites?select=id,name&id=eq.${encodeURIComponent(jobSiteId)}&limit=1`, accessToken);
+    const [site] = await supabase(`/rest/v1/job_sites?select=id,name&id=eq.${encodeURIComponent(jobSiteId)}&limit=1`);
     if (!site) return json(404, { error: "Property not found." });
 
-    const jobCodes = await supabase(`/rest/v1/job_codes?select=id,job_site_id,code,name&job_site_id=eq.${encodeURIComponent(jobSiteId)}`, accessToken);
+    const jobCodes = await supabase(`/rest/v1/job_codes?select=id,job_site_id,code,name&job_site_id=eq.${encodeURIComponent(jobSiteId)}`);
     const jobCodeByCode = new Map(
       jobCodes
-        .filter((code) => code.code)
-        .map((code) => [String(code.code).trim().toUpperCase(), code])
+        .filter((code: any) => code.code)
+        .map((code: any) => [String(code.code).trim().toUpperCase(), code]),
     );
 
     const database = await resolveDataSource(notionDatabaseUrl, body.notionDataSourceId);
-    const mapping = await upsertMapping(accessToken, jobSiteId, database, notionDatabaseUrl);
+    const mapping = await upsertMapping(jobSiteId, database, notionDatabaseUrl);
     const pages = await queryAllPages(database.dataSourceId);
 
     const matched = [];
     const unmatchedNotion = [];
-    const usedJobCodeIds = new Set();
+    const usedJobCodeIds = new Set<string>();
 
     for (const page of pages) {
       const rawJobCode = propertyText(page.properties?.[JOB_CODE_PROPERTY]).trim();
@@ -309,7 +311,7 @@ exports.handler = async (event) => {
       }
       usedJobCodeIds.add(jobCode.id);
 
-      const project = await upsertProject(accessToken, {
+      const project = await upsertProject({
         notion_page_id: page.id.replace(/-/g, ""),
         notion_url: page.url,
         title,
@@ -328,7 +330,7 @@ exports.handler = async (event) => {
       });
 
       const blocks = await queryPageBlocks(page.id);
-      const itemSummary = await insertMissingItems(accessToken, project.id, blocksToItems(blocks));
+      const itemSummary = await insertMissingItems(project.id, blocksToItems(blocks));
       matched.push({
         pageId: page.id,
         title,
@@ -340,8 +342,8 @@ exports.handler = async (event) => {
     }
 
     const unmatchedJobCodes = jobCodes
-      .filter((code) => code.code && !usedJobCodeIds.has(code.id))
-      .map((code) => ({ code: code.code, name: code.name }));
+      .filter((code: any) => code.code && !usedJobCodeIds.has(code.id))
+      .map((code: any) => ({ code: code.code, name: code.name }));
 
     return json(200, {
       mapping,
@@ -361,6 +363,6 @@ exports.handler = async (event) => {
       unmatchedJobCodes,
     });
   } catch (error) {
-    return json(500, { error: error.message || "Scope sync failed." });
+    return json(500, { error: error instanceof Error ? error.message : "Scope sync failed." });
   }
-};
+});
