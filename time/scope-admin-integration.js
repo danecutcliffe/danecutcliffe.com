@@ -1,20 +1,18 @@
 (function () {
   const SUPABASE_URL = "https://akofsmmsxtfqduebetga.supabase.co";
   const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
-  const JOB_CODE_PROPERTY = "Job Code";
 
   const state = {
     authStore: null,
     session: null,
     profile: null,
     jobSites: [],
-    jobCodes: [],
     mappings: [],
     projects: [],
     selectedSiteId: "",
-    selectedProjectId: "",
     isOpen: false,
     isLoading: false,
+    syncResult: null,
   };
 
   const els = {};
@@ -24,10 +22,6 @@
     const style = document.createElement("style");
     style.id = "scope-admin-integration-styles";
     style.textContent = `
-      .scope-admin-tab {
-        appearance: none;
-      }
-
       .scope-admin-overlay {
         position: fixed;
         inset: 0;
@@ -39,13 +33,13 @@
       }
 
       .scope-admin-shell {
-        width: min(100%, 72rem);
+        width: min(100%, 68rem);
         margin: 0 auto;
       }
 
       .scope-admin-topbar,
-      .scope-admin-panel-head,
-      .scope-admin-item-head {
+      .scope-admin-card-head,
+      .scope-admin-row-head {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -64,6 +58,14 @@
         font-weight: 800;
       }
 
+      .scope-admin-subtitle {
+        margin: 0.5rem 0 0;
+        max-width: 44rem;
+        color: var(--color-muted, #a8a29e);
+        font-size: 0.95rem;
+        line-height: 1.4;
+      }
+
       .scope-admin-kicker {
         margin: 0 0 0.25rem;
         color: var(--color-accent, #da7756);
@@ -78,8 +80,8 @@
         gap: 1rem;
       }
 
-      .scope-admin-panel,
-      .scope-admin-item,
+      .scope-admin-card,
+      .scope-admin-row,
       .scope-admin-notice,
       .scope-admin-error {
         border: 1px solid var(--color-border, #44403c);
@@ -88,18 +90,14 @@
         box-shadow: 0 8px 24px var(--color-shadow, rgba(0, 0, 0, 0.3));
       }
 
-      .scope-admin-panel {
+      .scope-admin-card {
         display: grid;
         gap: 0.875rem;
         padding: 1rem;
       }
 
-      .scope-admin-form {
-        display: grid;
-        gap: 0.75rem;
-      }
-
-      .scope-admin-grid {
+      .scope-admin-form,
+      .scope-admin-list {
         display: grid;
         gap: 0.75rem;
       }
@@ -126,21 +124,6 @@
         color: var(--color-ink, #e7e5e4);
         padding: 0.625rem 0.75rem;
         font: inherit;
-      }
-
-      .scope-admin-checkrow {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        min-height: 2.75rem;
-        color: var(--color-muted-strong, #d6d3d1);
-        font-weight: 700;
-      }
-
-      .scope-admin-checkrow input {
-        width: 1.25rem;
-        height: 1.25rem;
-        accent-color: var(--color-accent, #da7756);
       }
 
       .scope-admin-actions {
@@ -170,19 +153,14 @@
         opacity: 0.55;
       }
 
-      .scope-admin-list {
-        display: grid;
-        gap: 0.625rem;
-      }
-
-      .scope-admin-item {
+      .scope-admin-row {
         display: grid;
         gap: 0.5rem;
         padding: 0.75rem;
         background: var(--color-card-alt, #1c1917);
       }
 
-      .scope-admin-item-title {
+      .scope-admin-row-title {
         min-width: 0;
         overflow-wrap: anywhere;
         font-weight: 800;
@@ -195,11 +173,6 @@
       .scope-admin-small {
         font-size: 0.875rem;
         line-height: 1.35;
-      }
-
-      .scope-admin-code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-        overflow-wrap: anywhere;
       }
 
       .scope-admin-pill {
@@ -244,16 +217,8 @@
 
       @media (min-width: 840px) {
         .scope-admin-layout {
-          grid-template-columns: 0.95fr 1.05fr;
+          grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
           align-items: start;
-        }
-
-        .scope-admin-grid.two {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .scope-admin-span-2 {
-          grid-column: span 2;
         }
       }
     `;
@@ -347,14 +312,10 @@
       if (parsed.code === "PGRST303" || String(parsed.message || "").includes("JWT expired")) {
         return "Your Time Clock sign-in expired. Sign in again, then reopen Scopes.";
       }
-      return parsed.message || message;
+      return parsed.message || parsed.error || message;
     } catch {
       return message;
     }
-  }
-
-  function encode(value) {
-    return encodeURIComponent(value);
   }
 
   function option(value, label) {
@@ -362,12 +323,6 @@
     node.value = value;
     node.textContent = label;
     return node;
-  }
-
-  function extractNotionId(value) {
-    const compact = String(value || "").split("?")[0].replace(/-/g, "");
-    const matches = compact.match(/[0-9a-f]{32}/gi);
-    return matches ? matches[matches.length - 1] : "";
   }
 
   function activeSite() {
@@ -380,16 +335,6 @@
 
   function visibleProjects() {
     return state.projects.filter((project) => project.job_site_id === state.selectedSiteId);
-  }
-
-  function activeProject() {
-    return state.projects.find((project) => project.id === state.selectedProjectId) || null;
-  }
-
-  function jobCodeLabel(jobCodeId) {
-    const jobCode = state.jobCodes.find((code) => code.id === jobCodeId);
-    if (!jobCode) return "No job code";
-    return [jobCode.code, jobCode.name].filter(Boolean).join(" | ");
   }
 
   function setMessage(kind, message) {
@@ -424,20 +369,15 @@
     state.isLoading = true;
     try {
       await checkAdminProfile();
-      const [jobSites, jobCodes, mappings, projects] = await Promise.all([
+      const [jobSites, mappings, projects] = await Promise.all([
         request("/rest/v1/job_sites?select=*&order=name.asc"),
-        request("/rest/v1/job_codes?select=*&order=name.asc"),
         request("/rest/v1/scope_notion_databases?select=*&order=title.asc"),
         request("/rest/v1/scope_projects?select=*&order=unit_name.asc"),
       ]);
       state.jobSites = jobSites;
-      state.jobCodes = jobCodes;
       state.mappings = mappings;
       state.projects = projects;
       if (!state.selectedSiteId) state.selectedSiteId = jobSites[0]?.id || "";
-      if (state.selectedProjectId && !projects.some((project) => project.id === state.selectedProjectId)) {
-        state.selectedProjectId = "";
-      }
       renderPanel();
     } finally {
       state.isLoading = false;
@@ -480,9 +420,7 @@
   function openPanel() {
     state.isOpen = true;
     installStyles();
-    if (!document.getElementById("scope-admin-overlay")) {
-      buildPanel();
-    }
+    if (!document.getElementById("scope-admin-overlay")) buildPanel();
     renderPanel();
     loadData().catch((error) => setMessage("error", error.message));
   }
@@ -497,30 +435,6 @@
     return wrap;
   }
 
-  function input(id, type = "text") {
-    const node = document.createElement("input");
-    node.id = id;
-    node.type = type;
-    node.className = "scope-admin-input";
-    node.autocomplete = "off";
-    return node;
-  }
-
-  function select(id) {
-    const node = document.createElement("select");
-    node.id = id;
-    node.className = "scope-admin-select";
-    return node;
-  }
-
-  function button(label, variant = "") {
-    const node = document.createElement("button");
-    node.type = "button";
-    node.className = `scope-admin-button${variant ? ` ${variant}` : ""}`;
-    node.textContent = label;
-    return node;
-  }
-
   function buildPanel() {
     const overlay = document.createElement("div");
     overlay.id = "scope-admin-overlay";
@@ -530,45 +444,55 @@
         <header class="scope-admin-topbar">
           <div>
             <p class="scope-admin-kicker">Admin</p>
-            <h1 class="scope-admin-title">Scope Mapping</h1>
+            <h1 class="scope-admin-title">Scopes</h1>
+            <p class="scope-admin-subtitle">Choose a property, paste the Notion scope database link, and the app will match rows automatically where Notion's Job Code equals the Time app job code.</p>
           </div>
           <button class="scope-admin-button secondary" type="button" data-scope-close>Close</button>
         </header>
         <div id="scope-admin-message" class="scope-admin-notice scope-admin-hidden"></div>
         <div class="scope-admin-layout">
-          <section class="scope-admin-panel">
-            <div class="scope-admin-panel-head">
+          <section class="scope-admin-card">
+            <div class="scope-admin-card-head">
               <div>
-                <p class="scope-admin-kicker">Property Database</p>
-                <h2 class="scope-admin-title" style="font-size: 1.35rem;">Notion link</h2>
+                <p class="scope-admin-kicker">Connect</p>
+                <h2 class="scope-admin-title" style="font-size: 1.35rem;">Property scope database</h2>
               </div>
               <span class="scope-admin-pill" id="scope-mapping-pill">Loading</span>
             </div>
-            <div id="scope-mapping-form"></div>
-          </section>
-          <section class="scope-admin-panel">
-            <div class="scope-admin-panel-head">
-              <div>
-                <p class="scope-admin-kicker">Scope Project</p>
-                <h2 class="scope-admin-title" style="font-size: 1.35rem;">Job code link</h2>
+            <form class="scope-admin-form" id="scope-connect-form">
+              <label class="scope-admin-field">
+                <span class="scope-admin-label">Property</span>
+                <select class="scope-admin-select" id="scope-job-site"></select>
+              </label>
+              <label class="scope-admin-field">
+                <span class="scope-admin-label">Notion scope database URL</span>
+                <input class="scope-admin-input" id="scope-database-url" type="url" autocomplete="off" placeholder="https://www.notion.so/..." required />
+              </label>
+              <div class="scope-admin-actions">
+                <button class="scope-admin-button" type="submit" id="scope-connect-button">Connect / Refresh from Notion</button>
               </div>
-              <span class="scope-admin-pill good">Uses Notion: Job Code</span>
-            </div>
-            <div id="scope-project-form"></div>
+            </form>
           </section>
-          <section class="scope-admin-panel">
+          <section class="scope-admin-card">
             <div>
-              <p class="scope-admin-kicker">Saved Links</p>
-              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Projects</h2>
+              <p class="scope-admin-kicker">Detected Matches</p>
+              <h2 class="scope-admin-title" style="font-size: 1.35rem;">What the app found</h2>
+            </div>
+            <div class="scope-admin-list" id="scope-match-list"></div>
+          </section>
+          <section class="scope-admin-card">
+            <div>
+              <p class="scope-admin-kicker">Current Links</p>
+              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Active scope projects</h2>
             </div>
             <div class="scope-admin-list" id="scope-project-list"></div>
           </section>
-          <section class="scope-admin-panel">
+          <section class="scope-admin-card">
             <div>
-              <p class="scope-admin-kicker">Resolution</p>
-              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Current match</h2>
+              <p class="scope-admin-kicker">Review</p>
+              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Needs attention</h2>
             </div>
-            <div class="scope-admin-list" id="scope-resolution-list"></div>
+            <div class="scope-admin-list" id="scope-review-list"></div>
           </section>
         </div>
       </div>
@@ -577,319 +501,148 @@
     overlay.querySelector("[data-scope-close]").addEventListener("click", closePanel);
     els.message = overlay.querySelector("#scope-admin-message");
     els.mappingPill = overlay.querySelector("#scope-mapping-pill");
-    els.mappingForm = overlay.querySelector("#scope-mapping-form");
-    els.projectForm = overlay.querySelector("#scope-project-form");
+    els.form = overlay.querySelector("#scope-connect-form");
+    els.siteSelect = overlay.querySelector("#scope-job-site");
+    els.databaseUrl = overlay.querySelector("#scope-database-url");
+    els.connectButton = overlay.querySelector("#scope-connect-button");
+    els.matchList = overlay.querySelector("#scope-match-list");
     els.projectList = overlay.querySelector("#scope-project-list");
-    els.resolutionList = overlay.querySelector("#scope-resolution-list");
-    buildForms();
+    els.reviewList = overlay.querySelector("#scope-review-list");
+
+    els.siteSelect.addEventListener("change", () => {
+      state.selectedSiteId = els.siteSelect.value;
+      state.syncResult = null;
+      clearMessage();
+      renderPanel();
+    });
+    els.form.addEventListener("submit", (event) => {
+      syncDatabase(event).catch((error) => setMessage("error", error.message));
+    });
   }
 
-  function buildForms() {
-    const siteSelect = select("scope-job-site");
-    els.siteSelect = siteSelect;
-    const mappingTitle = input("scope-mapping-title");
-    const mappingUrl = input("scope-mapping-url", "url");
-    const mappingDatabaseId = input("scope-mapping-database-id");
-    const mappingDataSourceId = input("scope-mapping-data-source-id");
-    const mappingActive = document.createElement("input");
-    mappingActive.type = "checkbox";
-    els.mappingTitle = mappingTitle;
-    els.mappingUrl = mappingUrl;
-    els.mappingDatabaseId = mappingDatabaseId;
-    els.mappingDataSourceId = mappingDataSourceId;
-    els.mappingActive = mappingActive;
-
-    const mappingForm = document.createElement("form");
-    mappingForm.className = "scope-admin-form";
-    mappingForm.append(
-      field("Property", siteSelect),
-      field("Notion database title", mappingTitle),
-      field("Notion database URL", mappingUrl),
-      field("Notion database ID", mappingDatabaseId),
-      field("Notion data source ID", mappingDataSourceId)
-    );
-    const mappingCheck = document.createElement("label");
-    mappingCheck.className = "scope-admin-checkrow";
-    mappingCheck.append(mappingActive, document.createTextNode("Active mapping"));
-    const mappingActions = document.createElement("div");
-    mappingActions.className = "scope-admin-actions";
-    const saveMappingButton = button("Save Property Mapping");
-    saveMappingButton.type = "submit";
-    const extractDatabaseButton = button("Extract ID from URL", "secondary");
-    mappingActions.append(saveMappingButton, extractDatabaseButton);
-    mappingForm.append(mappingCheck, mappingActions);
-    els.mappingForm.replaceChildren(mappingForm);
-
-    const projectSelect = select("scope-project-select");
-    const projectTitle = input("scope-project-title");
-    const projectUnit = input("scope-project-unit");
-    const projectJobCode = select("scope-project-job-code");
-    const projectUrl = input("scope-project-url", "url");
-    const projectPageId = input("scope-project-page-id");
-    const projectDataSourceId = input("scope-project-data-source-id");
-    const projectActive = document.createElement("input");
-    projectActive.type = "checkbox";
-    els.projectSelect = projectSelect;
-    els.projectTitle = projectTitle;
-    els.projectUnit = projectUnit;
-    els.projectJobCode = projectJobCode;
-    els.projectUrl = projectUrl;
-    els.projectPageId = projectPageId;
-    els.projectDataSourceId = projectDataSourceId;
-    els.projectActive = projectActive;
-
-    const projectForm = document.createElement("form");
-    projectForm.className = "scope-admin-form";
-    const projectGrid = document.createElement("div");
-    projectGrid.className = "scope-admin-grid two";
-    projectGrid.append(
-      field("Existing scope project", projectSelect),
-      field("Job code", projectJobCode),
-      field("Scope title", projectTitle),
-      field("Unit / area", projectUnit)
-    );
-    const projectUrlField = field("Notion page URL", projectUrl);
-    projectUrlField.classList.add("scope-admin-span-2");
-    const pageIdField = field("Notion page ID", projectPageId);
-    const dataSourceField = field("Notion data source ID", projectDataSourceId);
-    projectGrid.append(projectUrlField, pageIdField, dataSourceField);
-    const projectCheck = document.createElement("label");
-    projectCheck.className = "scope-admin-checkrow";
-    projectCheck.append(projectActive, document.createTextNode("Active scope project"));
-    const projectActions = document.createElement("div");
-    projectActions.className = "scope-admin-actions";
-    const saveProjectButton = button("Save Scope Project");
-    saveProjectButton.type = "submit";
-    const newProjectButton = button("New Project", "secondary");
-    const extractPageButton = button("Extract ID from URL", "secondary");
-    projectActions.append(saveProjectButton, newProjectButton, extractPageButton);
-    projectForm.append(projectGrid, projectCheck, projectActions);
-    els.projectForm.replaceChildren(projectForm);
-
-    siteSelect.addEventListener("change", () => {
-      state.selectedSiteId = siteSelect.value;
-      state.selectedProjectId = "";
-      clearMessage();
-      renderPanel();
-    });
-    projectSelect.addEventListener("change", () => {
-      state.selectedProjectId = projectSelect.value;
-      clearMessage();
-      renderPanel();
-    });
-    mappingForm.addEventListener("submit", (event) => {
-      saveMapping(event).catch((error) => setMessage("error", error.message));
-    });
-    projectForm.addEventListener("submit", (event) => {
-      saveProject(event).catch((error) => setMessage("error", error.message));
-    });
-    newProjectButton.addEventListener("click", () => {
-      state.selectedProjectId = "";
-      clearMessage();
-      renderPanel();
-    });
-    extractDatabaseButton.addEventListener("click", () => {
-      const id = extractNotionId(els.mappingUrl.value);
-      if (id) {
-        els.mappingDatabaseId.value = id;
-        setMessage("notice", "Database ID extracted from the URL.");
-      } else {
-        setMessage("error", "I could not find a Notion ID in that URL.");
-      }
-    });
-    extractPageButton.addEventListener("click", () => {
-      const id = extractNotionId(els.projectUrl.value);
-      if (id) {
-        els.projectPageId.value = id;
-        setMessage("notice", "Page ID extracted from the URL.");
-      } else {
-        setMessage("error", "I could not find a Notion ID in that URL.");
-      }
-    });
+  function row(title, detail, pillText, pillGood = false) {
+    const item = document.createElement("article");
+    item.className = "scope-admin-row";
+    const head = document.createElement("div");
+    head.className = "scope-admin-row-head";
+    const titleNode = document.createElement("p");
+    titleNode.className = "scope-admin-row-title";
+    titleNode.textContent = title;
+    head.append(titleNode);
+    if (pillText) {
+      const pill = document.createElement("span");
+      pill.className = `scope-admin-pill${pillGood ? " good" : ""}`;
+      pill.textContent = pillText;
+      head.append(pill);
+    }
+    const detailNode = document.createElement("p");
+    detailNode.className = "scope-admin-muted scope-admin-small";
+    detailNode.textContent = detail;
+    item.append(head, detailNode);
+    return item;
   }
 
   function renderPanel() {
-    if (!state.isOpen || !els.mappingForm) return;
-    const site = activeSite();
+    if (!state.isOpen || !els.form) return;
     const mapping = activeMapping();
-    const project = activeProject();
-    els.mappingPill.textContent = mapping ? "Database linked" : "Database not linked";
+    els.siteSelect.replaceChildren(...state.jobSites.map((site) => option(site.id, site.name)));
+    els.siteSelect.value = state.selectedSiteId;
+    els.databaseUrl.value = mapping?.notion_database_url || "";
+    els.mappingPill.textContent = mapping ? "Connected" : "Not connected";
     els.mappingPill.classList.toggle("good", Boolean(mapping));
 
-    els.siteSelect.replaceChildren(...state.jobSites.map((item) => option(item.id, item.name)));
-    els.siteSelect.value = state.selectedSiteId;
-
-    els.mappingTitle.value = mapping?.title || "";
-    els.mappingUrl.value = mapping?.notion_database_url || "";
-    els.mappingDatabaseId.value = mapping?.notion_database_id || "";
-    els.mappingDataSourceId.value = mapping?.notion_data_source_id || "";
-    els.mappingActive.checked = mapping?.is_active ?? true;
-
-    const projects = visibleProjects();
-    els.projectSelect.replaceChildren(
-      option("", "New scope project"),
-      ...projects.map((item) => option(item.id, `${item.unit_name} - ${jobCodeLabel(item.job_code_id)}`))
-    );
-    els.projectSelect.value = state.selectedProjectId;
-
-    const selectedSiteCodes = state.jobCodes.filter((code) => !code.job_site_id || code.job_site_id === state.selectedSiteId);
-    els.projectJobCode.replaceChildren(
-      option("", "No job code selected"),
-      ...selectedSiteCodes.map((code) => option(code.id, [code.code, code.name].filter(Boolean).join(" | ")))
-    );
-
-    els.projectTitle.value = project?.title || "";
-    els.projectUnit.value = project?.unit_name || "";
-    els.projectJobCode.value = project?.job_code_id || "";
-    els.projectUrl.value = project?.notion_url || "";
-    els.projectPageId.value = project?.notion_page_id || "";
-    els.projectDataSourceId.value = project?.notion_data_source_id || mapping?.notion_data_source_id || "";
-    els.projectActive.checked = project?.is_active ?? true;
-
+    renderMatches();
     renderProjects();
-    renderResolution(site, mapping, project);
+    renderReview();
+  }
+
+  function renderMatches() {
+    const result = state.syncResult;
+    if (!result) {
+      els.matchList.replaceChildren(row("No refresh run yet", "Paste a Notion database URL and refresh. The app will match rows using the Job Code property.", null));
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    if (result.matched.length === 0) {
+      fragment.append(row("No matches found", "No Notion rows had a Job Code that matched this property's Time app job codes.", null));
+    } else {
+      result.matched.forEach((match) => {
+        fragment.append(row(match.title, `${match.jobCode} | ${match.jobCodeName || "Job code"} | ${match.insertedItems} new checklist items`, "Matched", true));
+      });
+    }
+    els.matchList.replaceChildren(fragment);
   }
 
   function renderProjects() {
     const projects = visibleProjects();
     if (projects.length === 0) {
-      els.projectList.innerHTML = '<div class="scope-admin-item scope-admin-muted scope-admin-small">No scope projects are linked to this property yet.</div>';
+      els.projectList.replaceChildren(row("No scope projects linked", "Refresh from Notion to create links automatically.", null));
       return;
     }
-
     const fragment = document.createDocumentFragment();
     projects.forEach((project) => {
-      const item = document.createElement("article");
-      item.className = "scope-admin-item";
-      const head = document.createElement("div");
-      head.className = "scope-admin-item-head";
-      const title = document.createElement("p");
-      title.className = "scope-admin-item-title";
-      title.textContent = project.unit_name;
-      const edit = button("Edit", "secondary");
-      edit.addEventListener("click", () => {
-        state.selectedProjectId = project.id;
-        renderPanel();
-      });
-      head.append(title, edit);
-      const meta = document.createElement("p");
-      meta.className = "scope-admin-muted scope-admin-small";
-      meta.textContent = `${jobCodeLabel(project.job_code_id)} - ${project.sync_status || "No sync status"} - ${project.is_active ? "Active" : "Inactive"}`;
-      const notion = document.createElement("p");
-      notion.className = "scope-admin-muted scope-admin-small scope-admin-code";
-      notion.textContent = project.notion_page_id;
-      item.append(head, meta, notion);
-      fragment.append(item);
+      fragment.append(row(project.unit_name, `${project.sync_status || "linked"} | ${project.is_active ? "Active" : "Inactive"}`, project.job_code_id ? "Linked" : "No job code", Boolean(project.job_code_id)));
     });
     els.projectList.replaceChildren(fragment);
   }
 
-  function renderResolution(site, mapping, project) {
-    const rows = [
-      ["Property", site?.name || "None selected"],
-      ["Notion Database", mapping ? `${mapping.title} (${mapping.is_active ? "active" : "inactive"})` : "No database mapping saved"],
-      ["Matching Convention", `Notion property "${JOB_CODE_PROPERTY}" must equal the Time app job code.`],
-      ["Scope Project", project ? `${project.unit_name} (${project.is_active ? "active" : "inactive"})` : "New project draft"],
-      ["Project Job Code", project?.job_code_id ? jobCodeLabel(project.job_code_id) : "Choose a job code"],
-    ];
+  function renderReview() {
+    const result = state.syncResult;
     const fragment = document.createDocumentFragment();
-    rows.forEach(([label, value]) => {
-      const item = document.createElement("div");
-      item.className = "scope-admin-item";
-      const kicker = document.createElement("p");
-      kicker.className = "scope-admin-kicker";
-      kicker.textContent = label;
-      const text = document.createElement("p");
-      text.className = "scope-admin-small";
-      text.textContent = value;
-      item.append(kicker, text);
-      fragment.append(item);
+    if (!result) {
+      fragment.append(row("Matching rule", 'Each Notion row needs a property named exactly "Job Code". Its value should match the Time app job code, like QS0358.', "Convention", true));
+      els.reviewList.replaceChildren(fragment);
+      return;
+    }
+
+    result.unmatchedNotion.forEach((item) => {
+      fragment.append(row(item.title, `${item.jobCode || "No job code"} | ${item.reason}`, "Notion"));
     });
-    els.resolutionList.replaceChildren(fragment);
+    result.unmatchedJobCodes.forEach((item) => {
+      fragment.append(row(item.code, `${item.name} has no matching Notion scope row.`, "Time app"));
+    });
+    if (!fragment.childNodes.length) {
+      fragment.append(row("Everything matched", "No unmatched Notion rows or Time app job codes were found for this property.", "Clean", true));
+    }
+    els.reviewList.replaceChildren(fragment);
   }
 
-  async function saveMapping(event) {
+  async function syncDatabase(event) {
     event.preventDefault();
     clearMessage();
     const site = activeSite();
-    if (!site) return;
-    const existing = activeMapping();
-    const payload = {
-      job_site_id: site.id,
-      notion_database_id: els.mappingDatabaseId.value.trim(),
-      notion_database_url: els.mappingUrl.value.trim(),
-      notion_data_source_id: els.mappingDataSourceId.value.trim() || null,
-      title: els.mappingTitle.value.trim(),
-      job_code_property_name: JOB_CODE_PROPERTY,
-      is_active: els.mappingActive.checked,
-      last_sync_status: "linked",
-    };
-    if (!payload.notion_database_id || !payload.notion_database_url || !payload.title) {
-      setMessage("error", "Database title, URL, and ID are required.");
-      return;
-    }
-    if (existing) {
-      await request(`/rest/v1/scope_notion_databases?id=eq.${encode(existing.id)}&select=*`, {
-        method: "PATCH",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await request("/rest/v1/scope_notion_databases?select=*", {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(payload),
-      });
-    }
-    setMessage("notice", "Property mapping saved.");
-    await loadData();
-  }
-
-  async function saveProject(event) {
-    event.preventDefault();
-    clearMessage();
-    const site = activeSite();
-    if (!site) return;
-    const mapping = activeMapping();
-    const existing = activeProject();
-    const payload = {
-      notion_page_id: els.projectPageId.value.trim(),
-      notion_url: els.projectUrl.value.trim(),
-      title: els.projectTitle.value.trim(),
-      property_name: site.name,
-      unit_name: els.projectUnit.value.trim(),
-      job_site_id: site.id,
-      job_code_id: els.projectJobCode.value || null,
-      scope_notion_database_id: mapping?.id || null,
-      notion_data_source_id: els.projectDataSourceId.value.trim() || mapping?.notion_data_source_id || null,
-      notion_title_property_name: "Name",
-      notion_job_code_property_name: JOB_CODE_PROPERTY,
-      sync_status: "notion-linked",
-      is_active: els.projectActive.checked,
-      source_synced_at: new Date().toISOString(),
-    };
-    if (!payload.notion_page_id || !payload.notion_url || !payload.title || !payload.unit_name) {
-      setMessage("error", "Scope title, unit, Notion URL, and Notion page ID are required.");
+    const notionDatabaseUrl = els.databaseUrl.value.trim();
+    if (!site || !notionDatabaseUrl) {
+      setMessage("error", "Choose a property and paste the Notion database URL.");
       return;
     }
 
-    let rows;
-    if (existing) {
-      rows = await request(`/rest/v1/scope_projects?id=eq.${encode(existing.id)}&select=*`, {
-        method: "PATCH",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      rows = await request("/rest/v1/scope_projects?select=*", {
+    els.connectButton.disabled = true;
+    els.connectButton.textContent = "Refreshing...";
+    try {
+      const response = await fetch("/.netlify/functions/sync-scope-database", {
         method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(payload),
+        headers: {
+          Authorization: `Bearer ${state.session?.access_token || ""}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobSiteId: site.id,
+          notionDatabaseUrl,
+        }),
       });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Scope sync failed.");
+      state.syncResult = payload;
+      setMessage("notice", `Synced ${payload.summary.matched} scope match${payload.summary.matched === 1 ? "" : "es"} from Notion.`);
+      await loadData();
+      state.syncResult = payload;
+      renderPanel();
+    } finally {
+      els.connectButton.disabled = false;
+      els.connectButton.textContent = "Connect / Refresh from Notion";
     }
-    state.selectedProjectId = rows?.[0]?.id || state.selectedProjectId;
-    setMessage("notice", "Scope project saved.");
-    await loadData();
   }
 
   async function tick() {
