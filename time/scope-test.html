@@ -274,6 +274,7 @@
         color: #ffc6c6;
         padding: 12px;
         font-weight: 800;
+        overflow-wrap: anywhere;
       }
 
       .hidden {
@@ -348,6 +349,7 @@
       const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
 
       const state = {
+        authStore: null,
         session: null,
         profile: null,
         openEntry: null,
@@ -370,17 +372,59 @@
         formStatus: document.getElementById("form-status"),
       };
 
-      function getStoredSession() {
+      function getStoredAuth() {
         const key = Object.keys(localStorage).find((candidate) => (
           candidate.startsWith("sb-") && candidate.endsWith("-auth-token")
         ));
         if (!key) return null;
         try {
           const saved = JSON.parse(localStorage.getItem(key));
-          return saved?.currentSession || saved?.session || saved;
+          return {
+            key,
+            saved,
+            session: saved?.currentSession || saved?.session || saved,
+          };
         } catch {
           return null;
         }
+      }
+
+      function saveStoredSession(authStore, session) {
+        if (!authStore?.key || !session) return;
+        const saved = authStore.saved || {};
+        if (saved.currentSession || saved.session) {
+          saved.currentSession = session;
+          saved.session = session;
+        } else {
+          Object.assign(saved, session);
+        }
+        localStorage.setItem(authStore.key, JSON.stringify(saved));
+        authStore.saved = saved;
+        authStore.session = session;
+      }
+
+      function sessionNeedsRefresh(session) {
+        if (!session?.refresh_token) return false;
+        if (!session.expires_at) return true;
+        return Math.floor(Date.now() / 1000) > Number(session.expires_at) - 60;
+      }
+
+      async function refreshSession(authStore) {
+        if (!authStore?.session?.refresh_token) return authStore?.session || null;
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refresh_token: authStore.session.refresh_token }),
+        });
+        if (!response.ok) {
+          throw new Error("Your Time Clock sign-in has expired. Open Time Clock, sign in again, then return to Scope Test.");
+        }
+        const refreshed = await response.json();
+        saveStoredSession(authStore, refreshed);
+        return refreshed;
       }
 
       function headers(extra = {}) {
@@ -392,13 +436,17 @@
         };
       }
 
-      async function request(path, options = {}) {
+      async function request(path, options = {}, hasRetried = false) {
         const response = await fetch(`${SUPABASE_URL}${path}`, {
           ...options,
           headers: headers(options.headers),
         });
         if (!response.ok) {
           const text = await response.text();
+          if (!hasRetried && (text.includes("PGRST303") || text.includes("JWT expired")) && state.authStore?.session?.refresh_token) {
+            state.session = await refreshSession(state.authStore);
+            return request(path, options, true);
+          }
           throw new Error(text || `Request failed with ${response.status}`);
         }
         if (response.status === 204) return null;
@@ -406,8 +454,20 @@
       }
 
       function showError(message) {
-        els.error.textContent = message;
+        els.error.textContent = formatError(message);
         els.error.classList.remove("hidden");
+      }
+
+      function formatError(message) {
+        try {
+          const parsed = JSON.parse(message);
+          if (parsed.code === "PGRST303" || String(parsed.message || "").includes("JWT expired")) {
+            return "Your Time Clock sign-in expired. Open Time Clock, sign in again, then return to Scope Test.";
+          }
+          return parsed.message || message;
+        } catch {
+          return message;
+        }
       }
 
       function clearError() {
@@ -501,12 +561,17 @@
 
       async function load() {
         clearError();
-        state.session = getStoredSession();
+        state.authStore = getStoredAuth();
+        state.session = state.authStore?.session || null;
         if (!state.session?.access_token || !state.session?.user?.id) {
           els.profile.textContent = "Not signed in";
           els.job.textContent = "Open Time Clock first";
           els.status.textContent = "Sign into the Time Clock, then reopen this pilot page.";
           return;
+        }
+        if (sessionNeedsRefresh(state.session)) {
+          els.status.textContent = "Refreshing your Time Clock sign-in...";
+          state.session = await refreshSession(state.authStore);
         }
 
         const profileRows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
