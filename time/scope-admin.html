@@ -401,7 +401,7 @@
                   <input id="mapping-data-source-id" class="code" type="text" autocomplete="off" />
                 </div>
               </div>
-              <div class="field">
+              <div class="field hidden">
                 <label for="mapping-job-code-property">Job code property name</label>
                 <input id="mapping-job-code-property" type="text" autocomplete="off" value="Job Code" required />
               </div>
@@ -460,7 +460,7 @@
                 <label for="project-title-property">Title property name</label>
                 <input id="project-title-property" type="text" autocomplete="off" value="Name" required />
               </div>
-              <div class="field">
+              <div class="field hidden">
                 <label for="project-job-code-property">Job code property name</label>
                 <input id="project-job-code-property" type="text" autocomplete="off" value="Job Code" required />
               </div>
@@ -502,6 +502,7 @@
     <script>
       const SUPABASE_URL = "https://akofsmmsxtfqduebetga.supabase.co";
       const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
+      const JOB_CODE_PROPERTY = "Job Code";
 
       const state = {
         authStore: null,
@@ -896,7 +897,7 @@
           notion_database_url: els.mappingUrl.value.trim(),
           notion_data_source_id: els.mappingDataSourceId.value.trim() || null,
           title: els.mappingTitle.value.trim(),
-          job_code_property_name: els.mappingJobCodeProperty.value.trim() || "Job Code",
+          job_code_property_name: JOB_CODE_PROPERTY,
           is_active: els.mappingActive.checked,
           last_sync_status: "linked",
         };
@@ -940,7 +941,7 @@
           scope_notion_database_id: mapping?.id || null,
           notion_data_source_id: els.projectDataSourceId.value.trim() || mapping?.notion_data_source_id || null,
           notion_title_property_name: els.projectTitleProperty.value.trim() || "Name",
-          notion_job_code_property_name: els.projectJobCodeProperty.value.trim() || mapping?.job_code_property_name || "Job Code",
+          notion_job_code_property_name: JOB_CODE_PROPERTY,
           sync_status: els.projectStatus.value.trim() || "notion-linked",
           is_active: els.projectActive.checked,
           source_synced_at: new Date().toISOString(),
