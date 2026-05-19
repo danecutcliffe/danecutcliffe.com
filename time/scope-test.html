@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#17120f" />
+    <link rel="icon" href="/time/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/time/icon.svg" />
+    <title>Scope Test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #17120f;
+        --card: #251f1d;
+        --card-alt: #1d1816;
+        --border: #514640;
+        --muted: #b6ada8;
+        --muted-strong: #d9d2cf;
+        --ink: #f5f1ef;
+        --accent: #e27658;
+        --accent-strong: #ff9678;
+        --success-bg: #123529;
+        --success: #82d7b5;
+        --warn-bg: #54090b;
+        --warn-border: #b51c25;
+        --shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(circle at 15% 0%, rgba(226, 118, 88, 0.14), transparent 32rem),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .app {
+        width: min(100%, 980px);
+        margin: 0 auto;
+        padding: calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 28px);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .icon {
+        display: grid;
+        width: 52px;
+        height: 52px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 10px;
+        background: var(--accent);
+        color: white;
+        font-weight: 900;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.55rem, 5vw, 2.3rem);
+        line-height: 1.05;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .link {
+        min-height: 44px;
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 14px;
+        color: var(--muted-strong);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .card {
+        min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--card) 94%, black);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+      }
+
+      .eyebrow {
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        background: #403832;
+        color: var(--muted-strong);
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .pill.good {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+
+      .layout {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .section {
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 16px 0;
+      }
+
+      .section:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .section h3 {
+        margin-bottom: 10px;
+        color: var(--muted-strong);
+        font-size: 0.92rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .items {
+        display: grid;
+        gap: 8px;
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        background: var(--card-alt);
+        padding: 10px;
+      }
+
+      .item input {
+        width: 24px;
+        height: 24px;
+        margin: 1px 0 0;
+        accent-color: var(--accent);
+      }
+
+      .item.done .text {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+
+      .text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        line-height: 1.35;
+      }
+
+      .source {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 800;
+      }
+
+      .form {
+        display: grid;
+        gap: 10px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label {
+        color: var(--muted);
+        font-size: 0.85rem;
+        font-weight: 800;
+      }
+
+      select,
+      input[type="text"] {
+        width: 100%;
+        min-width: 0;
+        min-height: 48px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card-alt);
+        color: var(--ink);
+        padding: 10px 12px;
+      }
+
+      .button {
+        min-height: 50px;
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        font-weight: 900;
+      }
+
+      .button:disabled {
+        opacity: 0.55;
+      }
+
+      .status {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      .error {
+        border: 1px solid var(--warn-border);
+        border-radius: 8px;
+        background: var(--warn-bg);
+        color: #ffc6c6;
+        padding: 12px;
+        font-weight: 800;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (min-width: 840px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr) 320px;
+          align-items: start;
+        }
+
+        .side {
+          position: sticky;
+          top: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="icon">S</div>
+          <div>
+            <p class="eyebrow">Pilot</p>
+            <h1>Scope Test</h1>
+          </div>
+        </div>
+        <a class="link" href="/time/">Clock</a>
+      </header>
+
+      <section class="card hero">
+        <div>
+          <p class="eyebrow" id="project-eyebrow">Loading scope</p>
+          <h2 id="project-title">356-358 Queen St</h2>
+        </div>
+        <div class="meta">
+          <span class="pill" id="profile-pill">Checking sign-in</span>
+          <span class="pill" id="job-pill">Checking current job</span>
+          <span class="pill good" id="progress-pill">0 / 0 complete</span>
+        </div>
+        <p class="status" id="hero-status">Reading your active Time Clock session.</p>
+      </section>
+
+      <div class="layout">
+        <section class="card panel">
+          <div id="error" class="error hidden"></div>
+          <div id="sections"></div>
+        </section>
+
+        <aside class="card panel side">
+          <h2>Add line item</h2>
+          <form class="form" id="add-form">
+            <div class="field">
+              <label for="section-select">Section</label>
+              <select id="section-select"></select>
+            </div>
+            <div class="field">
+              <label for="item-text">Item</label>
+              <input id="item-text" type="text" autocomplete="off" placeholder="Add a scope item" />
+            </div>
+            <button class="button" type="submit">Add Item</button>
+          </form>
+          <p class="status" id="form-status">New items are saved to the pilot scope list.</p>
+        </aside>
+      </div>
+    </main>
+
+    <script>
+      const SUPABASE_URL = "https://akofsmmsxtfqduebetga.supabase.co";
+      const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
+
+      const state = {
+        session: null,
+        profile: null,
+        openEntry: null,
+        project: null,
+        items: [],
+      };
+
+      const els = {
+        eyebrow: document.getElementById("project-eyebrow"),
+        title: document.getElementById("project-title"),
+        profile: document.getElementById("profile-pill"),
+        job: document.getElementById("job-pill"),
+        progress: document.getElementById("progress-pill"),
+        status: document.getElementById("hero-status"),
+        sections: document.getElementById("sections"),
+        error: document.getElementById("error"),
+        form: document.getElementById("add-form"),
+        section: document.getElementById("section-select"),
+        itemText: document.getElementById("item-text"),
+        formStatus: document.getElementById("form-status"),
+      };
+
+      function getStoredSession() {
+        const key = Object.keys(localStorage).find((candidate) => (
+          candidate.startsWith("sb-") && candidate.endsWith("-auth-token")
+        ));
+        if (!key) return null;
+        try {
+          const saved = JSON.parse(localStorage.getItem(key));
+          return saved?.currentSession || saved?.session || saved;
+        } catch {
+          return null;
+        }
+      }
+
+      function headers(extra = {}) {
+        return {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${state.session?.access_token || SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          ...extra,
+        };
+      }
+
+      async function request(path, options = {}) {
+        const response = await fetch(`${SUPABASE_URL}${path}`, {
+          ...options,
+          headers: headers(options.headers),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || `Request failed with ${response.status}`);
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      }
+
+      function showError(message) {
+        els.error.textContent = message;
+        els.error.classList.remove("hidden");
+      }
+
+      function clearError() {
+        els.error.textContent = "";
+        els.error.classList.add("hidden");
+      }
+
+      function groupItems(items) {
+        return items.reduce((groups, item) => {
+          const list = groups.get(item.section) || [];
+          list.push(item);
+          groups.set(item.section, list);
+          return groups;
+        }, new Map());
+      }
+
+      function render() {
+        const completed = state.items.filter((item) => item.completed_at).length;
+        els.progress.textContent = `${completed} / ${state.items.length} complete`;
+
+        if (state.profile) {
+          els.profile.textContent = `${state.profile.first_name} ${state.profile.last_name}`;
+        }
+
+        if (state.openEntry) {
+          els.job.textContent = "Clocked into matching job";
+        } else {
+          els.job.textContent = "No active punch";
+        }
+
+        if (state.project) {
+          els.eyebrow.textContent = state.project.unit_name;
+          els.title.textContent = state.project.property_name;
+          els.status.textContent = state.openEntry
+            ? "Scope loaded from the active job code."
+            : "Showing the pilot scope. Clock into QS0358 to test job-code matching.";
+        }
+
+        const groups = groupItems(state.items);
+        els.section.replaceChildren();
+        els.section.append(...Array.from(groups.keys()).map((section) => {
+          const option = document.createElement("option");
+          option.value = section;
+          option.textContent = section;
+          return option;
+        }));
+
+        const fragment = document.createDocumentFragment();
+        groups.forEach((items, section) => {
+          const sectionEl = document.createElement("section");
+          sectionEl.className = "section";
+
+          const heading = document.createElement("h3");
+          heading.textContent = section;
+          sectionEl.append(heading);
+
+          const list = document.createElement("div");
+          list.className = "items";
+
+          items.forEach((item) => {
+            const row = document.createElement("label");
+            row.className = `item${item.completed_at ? " done" : ""}`;
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = Boolean(item.completed_at);
+            checkbox.addEventListener("change", () => toggleItem(item.id, checkbox.checked));
+
+            const body = document.createElement("div");
+            const text = document.createElement("div");
+            text.className = "text";
+            text.textContent = item.item_text;
+            body.append(text);
+
+            if (item.source === "employee") {
+              const source = document.createElement("div");
+              source.className = "source";
+              source.textContent = "Added on site";
+              body.append(source);
+            }
+
+            row.append(checkbox, body);
+            list.append(row);
+          });
+
+          sectionEl.append(list);
+          fragment.append(sectionEl);
+        });
+        els.sections.replaceChildren(fragment);
+      }
+
+      async function load() {
+        clearError();
+        state.session = getStoredSession();
+        if (!state.session?.access_token || !state.session?.user?.id) {
+          els.profile.textContent = "Not signed in";
+          els.job.textContent = "Open Time Clock first";
+          els.status.textContent = "Sign into the Time Clock, then reopen this pilot page.";
+          return;
+        }
+
+        const profileRows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
+        state.profile = profileRows[0];
+        if (!state.profile?.is_active) {
+          throw new Error("This profile is not active.");
+        }
+
+        const openRows = await request(`/rest/v1/time_entries?select=id,job_code_id,clock_in,event_type&user_id=eq.${state.session.user.id}&event_type=eq.work&clock_out=is.null&order=clock_in.desc&limit=1`);
+        state.openEntry = openRows[0] || null;
+
+        let projectRows = [];
+        if (state.openEntry?.job_code_id) {
+          projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
+        }
+        if (projectRows.length === 0) {
+          projectRows = await request("/rest/v1/scope_projects?select=*&is_active=eq.true&order=unit_name.asc&limit=1");
+        }
+        state.project = projectRows[0] || null;
+        if (!state.project) {
+          throw new Error("No active scope project is available yet.");
+        }
+
+        state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
+        render();
+      }
+
+      async function toggleItem(itemId, completed) {
+        clearError();
+        try {
+          await request("/rest/v1/rpc/scope_toggle_item", {
+            method: "POST",
+            body: JSON.stringify({ p_item_id: itemId, p_completed: completed }),
+          });
+          await load();
+        } catch (error) {
+          showError(error.message);
+          await load();
+        }
+      }
+
+      els.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearError();
+        if (!state.project) return;
+        const text = els.itemText.value.trim();
+        if (!text) return;
+
+        els.formStatus.textContent = "Saving item...";
+        try {
+          await request("/rest/v1/rpc/scope_add_item", {
+            method: "POST",
+            body: JSON.stringify({
+              p_scope_project_id: state.project.id,
+              p_section: els.section.value,
+              p_item_text: text,
+            }),
+          });
+          els.itemText.value = "";
+          els.formStatus.textContent = "Item added.";
+          await load();
+        } catch (error) {
+          els.formStatus.textContent = "Item was not saved.";
+          showError(error.message);
+        }
+      });
+
+      load().catch((error) => {
+        showError(error.message);
+        els.status.textContent = "Scope could not be loaded.";
+      });
+    </script>
+  </body>
+</html>
