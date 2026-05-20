@@ -214,6 +214,30 @@
       .scope-admin-hidden {
         display: none !important;
       }
+
+      [data-scope-admin-nav="true"] {
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        align-items: center;
+      }
+
+      [data-scope-admin-nav="true"] [data-scope-admin-tab="true"] {
+        min-width: 0;
+        width: 100%;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 420px) {
+        [data-scope-admin-nav="true"] {
+          gap: 0.25rem !important;
+        }
+
+        [data-scope-admin-nav="true"] button {
+          min-width: 0;
+          padding-left: 0.25rem !important;
+          padding-right: 0.25rem !important;
+          font-size: 0.8rem !important;
+        }
+      }
     `;
     document.head.append(style);
   }
@@ -391,6 +415,7 @@
     reportButtons.forEach((reportButton) => {
       const parent = reportButton.parentElement;
       if (!parent || parent.querySelector("[data-scope-admin-tab='true']")) return;
+      parent.dataset.scopeAdminNav = "true";
       const tab = reportButton.cloneNode(true);
       tab.dataset.scopeAdminTab = "true";
       tab.type = "button";
