@@ -33,7 +33,7 @@
       }
 
       .scope-admin-shell {
-        width: min(100%, 68rem);
+        width: min(100%, 56rem);
         margin: 0 auto;
       }
 
@@ -213,13 +213,6 @@
 
       .scope-admin-hidden {
         display: none !important;
-      }
-
-      @media (min-width: 840px) {
-        .scope-admin-layout {
-          grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-          align-items: start;
-        }
       }
     `;
     document.head.append(style);
