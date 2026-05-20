@@ -13,6 +13,13 @@ const corsHeaders = {
 type Json = Record<string, unknown> | Array<unknown> | null;
 
 function json(status: number, body: Json): Response {
+  if (status === 204) {
+    return new Response(null, {
+      status,
+      headers: corsHeaders,
+    });
+  }
+
   return new Response(JSON.stringify(body), {
     status,
     headers: {
