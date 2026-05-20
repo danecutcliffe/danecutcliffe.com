@@ -520,6 +520,18 @@
         els.error.classList.add("hidden");
       }
 
+      function showNoScope(message = "No scope available at this time.") {
+        state.project = null;
+        state.items = [];
+        els.eyebrow.textContent = "Scope";
+        els.title.textContent = "No active scope";
+        els.progress.textContent = "0 / 0 complete";
+        els.status.textContent = message;
+        els.sections.replaceChildren();
+        els.section.replaceChildren();
+        els.formStatus.textContent = "Line items can be added once a scope is linked to this job.";
+      }
+
       function groupItems(items) {
         return items.reduce((groups, item) => {
           const list = groups.get(item.section) || [];
@@ -660,11 +672,15 @@
           projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
         }
         if (projectRows.length === 0) {
-          projectRows = await request("/rest/v1/scope_projects?select=*&is_active=eq.true&order=unit_name.asc&limit=1");
+          showNoScope(state.openEntry
+            ? "No scope available at this time for this job."
+            : "Clock into a scoped job to see its scope of work.");
+          return;
         }
         state.project = projectRows[0] || null;
         if (!state.project) {
-          throw new Error("No active scope project is available yet.");
+          showNoScope();
+          return;
         }
 
         state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
@@ -674,10 +690,15 @@
       async function toggleItem(itemId, completed) {
         clearError();
         try {
-          await request("/rest/v1/rpc/scope_toggle_item", {
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
             method: "POST",
-            body: JSON.stringify({ p_item_id: itemId, p_completed: completed }),
+            headers: headers(),
+            body: JSON.stringify({ action: "toggle", itemId, completed }),
           });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || "Unable to update scope item.");
+          }
           await load();
         } catch (error) {
           await load().catch(() => {});
@@ -694,14 +715,15 @@
 
         els.formStatus.textContent = "Saving item...";
         try {
-          await request("/rest/v1/rpc/scope_add_item", {
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
             method: "POST",
-            body: JSON.stringify({
-              p_scope_project_id: state.project.id,
-              p_section: els.section.value,
-              p_item_text: text,
-            }),
+            headers: headers(),
+            body: JSON.stringify({ action: "add", scopeProjectId: state.project.id, section: els.section.value, itemText: text }),
           });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || "Unable to add scope item.");
+          }
           els.itemText.value = "";
           els.formStatus.textContent = "Item added.";
           await load();
