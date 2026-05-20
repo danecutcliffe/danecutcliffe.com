@@ -10,7 +10,7 @@
     mappings: [],
     projects: [],
     selectedSiteId: "",
-    isOpen: false,
+    isMounted: false,
     isLoading: false,
     syncResult: null,
   };
@@ -22,18 +22,9 @@
     const style = document.createElement("style");
     style.id = "scope-admin-integration-styles";
     style.textContent = `
-      .scope-admin-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 45;
-        overflow: auto;
-        background: var(--color-paper, #1c1917);
-        color: var(--color-ink, #e7e5e4);
-        padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 84px);
-      }
-
       .scope-admin-shell {
-        width: min(100%, 56rem);
+        width: 100%;
+        max-width: 56rem;
         margin: 0 auto;
       }
 
@@ -214,30 +205,6 @@
       .scope-admin-hidden {
         display: none !important;
       }
-
-      [data-scope-admin-nav="true"] {
-        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-        align-items: center;
-      }
-
-      [data-scope-admin-nav="true"] [data-scope-admin-tab="true"] {
-        min-width: 0;
-        width: 100%;
-        white-space: nowrap;
-      }
-
-      @media (max-width: 420px) {
-        [data-scope-admin-nav="true"] {
-          gap: 0.25rem !important;
-        }
-
-        [data-scope-admin-nav="true"] button {
-          min-width: 0;
-          padding-left: 0.25rem !important;
-          padding-right: 0.25rem !important;
-          font-size: 0.8rem !important;
-        }
-      }
     `;
     document.head.append(style);
   }
@@ -249,25 +216,15 @@
     if (!key) return null;
     try {
       const saved = JSON.parse(localStorage.getItem(key));
-      return {
-        key,
-        saved,
-        session: saved?.currentSession || saved?.session || saved,
-      };
-    } catch {
-      return null;
-    }
+      return { key, saved, session: saved?.currentSession || saved?.session || saved };
+    } catch { return null; }
   }
 
   function saveStoredSession(authStore, session) {
     if (!authStore?.key || !session) return;
     const saved = authStore.saved || {};
-    if (saved.currentSession || saved.session) {
-      saved.currentSession = session;
-      saved.session = session;
-    } else {
-      Object.assign(saved, session);
-    }
+    if (saved.currentSession || saved.session) { saved.currentSession = session; saved.session = session; }
+    else { Object.assign(saved, session); }
     localStorage.setItem(authStore.key, JSON.stringify(saved));
     authStore.saved = saved;
     authStore.session = session;
@@ -283,15 +240,10 @@
     if (!authStore?.session?.refresh_token) return authStore?.session || null;
     const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        "Content-Type": "application/json",
-      },
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: authStore.session.refresh_token }),
     });
-    if (!response.ok) {
-      throw new Error("Your Time Clock sign-in has expired. Sign in again, then reopen Scopes.");
-    }
+    if (!response.ok) throw new Error("Your Time Clock sign-in has expired. Sign in again.");
     const refreshed = await response.json();
     saveStoredSession(authStore, refreshed);
     return refreshed;
@@ -307,10 +259,7 @@
   }
 
   async function request(path, options = {}, hasRetried = false) {
-    const response = await fetch(`${SUPABASE_URL}${path}`, {
-      ...options,
-      headers: headers(options.headers),
-    });
+    const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers: headers(options.headers) });
     if (!response.ok) {
       const text = await response.text();
       if (!hasRetried && (text.includes("PGRST303") || text.includes("JWT expired")) && state.authStore?.session?.refresh_token) {
@@ -327,12 +276,10 @@
     try {
       const parsed = JSON.parse(message);
       if (parsed.code === "PGRST303" || String(parsed.message || "").includes("JWT expired")) {
-        return "Your Time Clock sign-in expired. Sign in again, then reopen Scopes.";
+        return "Your Time Clock sign-in expired. Sign in again.";
       }
       return parsed.message || parsed.error || message;
-    } catch {
-      return message;
-    }
+    } catch { return message; }
   }
 
   function option(value, label) {
@@ -342,17 +289,9 @@
     return node;
   }
 
-  function activeSite() {
-    return state.jobSites.find((site) => site.id === state.selectedSiteId) || null;
-  }
-
-  function activeMapping() {
-    return state.mappings.find((mapping) => mapping.job_site_id === state.selectedSiteId) || null;
-  }
-
-  function visibleProjects() {
-    return state.projects.filter((project) => project.job_site_id === state.selectedSiteId);
-  }
+  function activeSite() { return state.jobSites.find((site) => site.id === state.selectedSiteId) || null; }
+  function activeMapping() { return state.mappings.find((m) => m.job_site_id === state.selectedSiteId) || null; }
+  function visibleProjects() { return state.projects.filter((p) => p.job_site_id === state.selectedSiteId); }
 
   function setMessage(kind, message) {
     if (!els.message) return;
@@ -361,23 +300,16 @@
     els.message.classList.toggle("scope-admin-hidden", !message);
   }
 
-  function clearMessage() {
-    setMessage("notice", "");
-  }
+  function clearMessage() { setMessage("notice", ""); }
 
   async function checkAdminProfile() {
     state.authStore = getStoredAuth();
     state.session = state.authStore?.session || null;
     if (!state.session?.access_token || !state.session?.user?.id) return null;
-    if (sessionNeedsRefresh(state.session)) {
-      state.session = await refreshSession(state.authStore);
-    }
+    if (sessionNeedsRefresh(state.session)) state.session = await refreshSession(state.authStore);
     const rows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
     const profile = rows[0] || null;
-    if (profile?.is_active && profile.role === "admin") {
-      state.profile = profile;
-      return profile;
-    }
+    if (profile?.is_active && profile.role === "admin") { state.profile = profile; return profile; }
     return null;
   }
 
@@ -396,136 +328,94 @@
       state.projects = projects;
       if (!state.selectedSiteId) state.selectedSiteId = jobSites[0]?.id || "";
       renderPanel();
-    } finally {
-      state.isLoading = false;
-    }
+    } finally { state.isLoading = false; }
   }
 
-  function findAdminNavButtons() {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const labels = new Set(buttons.map((button) => button.textContent.trim()));
-    if (!labels.has("Dashboard") || !labels.has("Reports")) return [];
-    return buttons.filter((button) => ["Dashboard", "Timesheets", "Employees", "Reports"].includes(button.textContent.trim()));
-  }
+  /* ── Mount into React placeholder ────────────────────── */
 
-  function installNavTab() {
-    if (!state.profile || state.profile.role !== "admin") return;
-    const navButtons = findAdminNavButtons();
-    const reportButtons = navButtons.filter((button) => button.textContent.trim() === "Reports");
-    reportButtons.forEach((reportButton) => {
-      const parent = reportButton.parentElement;
-      if (!parent || parent.querySelector("[data-scope-admin-tab='true']")) return;
-      parent.dataset.scopeAdminNav = "true";
-      const tab = reportButton.cloneNode(true);
-      tab.dataset.scopeAdminTab = "true";
-      tab.type = "button";
-      tab.textContent = "Scopes";
-      tab.className = reportButton.className;
-      tab.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        openPanel();
-      });
-      parent.insertBefore(tab, reportButton.nextSibling);
-    });
-  }
-
-  function closePanel() {
-    state.isOpen = false;
-    document.getElementById("scope-admin-overlay")?.remove();
-  }
-
-  function openPanel() {
-    state.isOpen = true;
+  function mount(root) {
+    if (state.isMounted) return;
+    state.isMounted = true;
     installStyles();
-    if (!document.getElementById("scope-admin-overlay")) buildPanel();
+    buildPanel(root);
     renderPanel();
     loadData().catch((error) => setMessage("error", error.message));
   }
 
-  function field(label, input) {
-    const wrap = document.createElement("label");
-    wrap.className = "scope-admin-field";
-    const text = document.createElement("span");
-    text.className = "scope-admin-label";
-    text.textContent = label;
-    wrap.append(text, input);
-    return wrap;
+  function unmount() {
+    state.isMounted = false;
+    Object.keys(els).forEach((key) => { els[key] = null; });
   }
 
-  function buildPanel() {
-    const overlay = document.createElement("div");
-    overlay.id = "scope-admin-overlay";
-    overlay.className = "scope-admin-overlay";
-    overlay.innerHTML = `
-      <div class="scope-admin-shell">
-        <header class="scope-admin-topbar">
-          <div>
-            <p class="scope-admin-kicker">Admin</p>
-            <h1 class="scope-admin-title">Scopes</h1>
-            <p class="scope-admin-subtitle">Choose a property, paste the Notion scope database link, and the app will match rows automatically where Notion's Job Code equals the Time app job code.</p>
-          </div>
-          <button class="scope-admin-button secondary" type="button" data-scope-close>Close</button>
-        </header>
-        <div id="scope-admin-message" class="scope-admin-notice scope-admin-hidden"></div>
-        <div class="scope-admin-layout">
-          <section class="scope-admin-card">
-            <div class="scope-admin-card-head">
-              <div>
-                <p class="scope-admin-kicker">Connect</p>
-                <h2 class="scope-admin-title" style="font-size: 1.35rem;">Property scope database</h2>
-              </div>
-              <span class="scope-admin-pill" id="scope-mapping-pill">Loading</span>
-            </div>
-            <form class="scope-admin-form" id="scope-connect-form">
-              <label class="scope-admin-field">
-                <span class="scope-admin-label">Property</span>
-                <select class="scope-admin-select" id="scope-job-site"></select>
-              </label>
-              <label class="scope-admin-field">
-                <span class="scope-admin-label">Notion scope database URL</span>
-                <input class="scope-admin-input" id="scope-database-url" type="url" autocomplete="off" placeholder="https://www.notion.so/..." required />
-              </label>
-              <div class="scope-admin-actions">
-                <button class="scope-admin-button" type="submit" id="scope-connect-button">Connect / Refresh from Notion</button>
-              </div>
-            </form>
-          </section>
-          <section class="scope-admin-card">
-            <div>
-              <p class="scope-admin-kicker">Detected Matches</p>
-              <h2 class="scope-admin-title" style="font-size: 1.35rem;">What the app found</h2>
-            </div>
-            <div class="scope-admin-list" id="scope-match-list"></div>
-          </section>
-          <section class="scope-admin-card">
-            <div>
-              <p class="scope-admin-kicker">Current Links</p>
-              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Active scope projects</h2>
-            </div>
-            <div class="scope-admin-list" id="scope-project-list"></div>
-          </section>
-          <section class="scope-admin-card">
-            <div>
-              <p class="scope-admin-kicker">Review</p>
-              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Needs attention</h2>
-            </div>
-            <div class="scope-admin-list" id="scope-review-list"></div>
-          </section>
+  function buildPanel(root) {
+    const shell = document.createElement("div");
+    shell.className = "scope-admin-shell";
+    shell.innerHTML = `
+      <header class="scope-admin-topbar">
+        <div>
+          <p class="scope-admin-kicker">Admin</p>
+          <h1 class="scope-admin-title">Scope</h1>
+          <p class="scope-admin-subtitle">Choose a property, paste the Notion scope database link, and the app will match rows automatically where Notion's Job Code equals the Time app job code.</p>
         </div>
+      </header>
+      <div id="scope-admin-message" class="scope-admin-notice scope-admin-hidden"></div>
+      <div class="scope-admin-layout">
+        <section class="scope-admin-card">
+          <div class="scope-admin-card-head">
+            <div>
+              <p class="scope-admin-kicker">Connect</p>
+              <h2 class="scope-admin-title" style="font-size: 1.35rem;">Property scope database</h2>
+            </div>
+            <span class="scope-admin-pill" id="scope-mapping-pill">Loading</span>
+          </div>
+          <form class="scope-admin-form" id="scope-connect-form">
+            <label class="scope-admin-field">
+              <span class="scope-admin-label">Property</span>
+              <select class="scope-admin-select" id="scope-job-site"></select>
+            </label>
+            <label class="scope-admin-field">
+              <span class="scope-admin-label">Notion scope database URL</span>
+              <input class="scope-admin-input" id="scope-database-url" type="url" autocomplete="off" placeholder="https://www.notion.so/..." required />
+            </label>
+            <div class="scope-admin-actions">
+              <button class="scope-admin-button" type="submit" id="scope-connect-button">Connect / Refresh from Notion</button>
+            </div>
+          </form>
+        </section>
+        <section class="scope-admin-card">
+          <div>
+            <p class="scope-admin-kicker">Detected Matches</p>
+            <h2 class="scope-admin-title" style="font-size: 1.35rem;">What the app found</h2>
+          </div>
+          <div class="scope-admin-list" id="scope-match-list"></div>
+        </section>
+        <section class="scope-admin-card">
+          <div>
+            <p class="scope-admin-kicker">Current Links</p>
+            <h2 class="scope-admin-title" style="font-size: 1.35rem;">Active scope projects</h2>
+          </div>
+          <div class="scope-admin-list" id="scope-project-list"></div>
+        </section>
+        <section class="scope-admin-card">
+          <div>
+            <p class="scope-admin-kicker">Review</p>
+            <h2 class="scope-admin-title" style="font-size: 1.35rem;">Needs attention</h2>
+          </div>
+          <div class="scope-admin-list" id="scope-review-list"></div>
+        </section>
       </div>
     `;
-    document.body.append(overlay);
-    overlay.querySelector("[data-scope-close]").addEventListener("click", closePanel);
-    els.message = overlay.querySelector("#scope-admin-message");
-    els.mappingPill = overlay.querySelector("#scope-mapping-pill");
-    els.form = overlay.querySelector("#scope-connect-form");
-    els.siteSelect = overlay.querySelector("#scope-job-site");
-    els.databaseUrl = overlay.querySelector("#scope-database-url");
-    els.connectButton = overlay.querySelector("#scope-connect-button");
-    els.matchList = overlay.querySelector("#scope-match-list");
-    els.projectList = overlay.querySelector("#scope-project-list");
-    els.reviewList = overlay.querySelector("#scope-review-list");
+    root.replaceChildren(shell);
+
+    els.message = shell.querySelector("#scope-admin-message");
+    els.mappingPill = shell.querySelector("#scope-mapping-pill");
+    els.form = shell.querySelector("#scope-connect-form");
+    els.siteSelect = shell.querySelector("#scope-job-site");
+    els.databaseUrl = shell.querySelector("#scope-database-url");
+    els.connectButton = shell.querySelector("#scope-connect-button");
+    els.matchList = shell.querySelector("#scope-match-list");
+    els.projectList = shell.querySelector("#scope-project-list");
+    els.reviewList = shell.querySelector("#scope-review-list");
 
     els.siteSelect.addEventListener("change", () => {
       state.selectedSiteId = els.siteSelect.value;
@@ -561,14 +451,13 @@
   }
 
   function renderPanel() {
-    if (!state.isOpen || !els.form) return;
+    if (!state.isMounted || !els.form) return;
     const mapping = activeMapping();
     els.siteSelect.replaceChildren(...state.jobSites.map((site) => option(site.id, site.name)));
     els.siteSelect.value = state.selectedSiteId;
     els.databaseUrl.value = mapping?.notion_database_url || "";
     els.mappingPill.textContent = mapping ? "Connected" : "Not connected";
     els.mappingPill.classList.toggle("good", Boolean(mapping));
-
     renderMatches();
     renderProjects();
     renderReview();
@@ -580,7 +469,6 @@
       els.matchList.replaceChildren(row("No refresh run yet", "Paste a Notion database URL and refresh. The app will match rows using the Job Code property.", null));
       return;
     }
-
     const fragment = document.createDocumentFragment();
     if (result.matched.length === 0) {
       fragment.append(row("No matches found", "No Notion rows had a Job Code that matched this property's Time app job codes.", null));
@@ -613,7 +501,6 @@
       els.reviewList.replaceChildren(fragment);
       return;
     }
-
     result.unmatchedNotion.forEach((item) => {
       fragment.append(row(item.title, `${item.jobCode || "No job code"} | ${item.reason}`, "Notion"));
     });
@@ -635,7 +522,6 @@
       setMessage("error", "Choose a property and paste the Notion database URL.");
       return;
     }
-
     els.connectButton.disabled = true;
     els.connectButton.textContent = "Refreshing...";
     try {
@@ -646,10 +532,7 @@
           apikey: SUPABASE_KEY,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          jobSiteId: site.id,
-          notionDatabaseUrl,
-        }),
+        body: JSON.stringify({ jobSiteId: site.id, notionDatabaseUrl }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Scope sync failed.");
@@ -664,23 +547,17 @@
     }
   }
 
-  async function tick() {
-    installStyles();
-    try {
-      await checkAdminProfile();
-      installNavTab();
-    } catch {
-      // The main app owns sign-in errors. This integration stays quiet until an admin session exists.
-    }
-  }
+  /* ── Watch for React placeholder ─────────────────────── */
 
   const observer = new MutationObserver(() => {
-    installNavTab();
+    const root = document.getElementById("scope-content-root");
+    if (root && !state.isMounted) mount(root);
+    else if (!root && state.isMounted) unmount();
   });
 
   window.addEventListener("load", () => {
     observer.observe(document.body, { childList: true, subtree: true });
-    tick();
-    setInterval(tick, 4000);
+    const root = document.getElementById("scope-content-root");
+    if (root) mount(root);
   });
 })();

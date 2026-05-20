@@ -10,7 +10,7 @@
     project: null,
     items: [],
     collapsedSections: new Set(),
-    isOpen: false,
+    isMounted: false,
     isLoading: false,
   };
 
@@ -21,20 +21,9 @@
     const style = document.createElement("style");
     style.id = "scope-employee-integration-styles";
     style.textContent = `
-      .scope-employee-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 44;
-        overflow: auto;
-        background:
-          radial-gradient(circle at 15% 0%, rgba(218, 119, 86, 0.12), transparent 28rem),
-          var(--color-paper, #1c1917);
-        color: var(--color-ink, #e7e5e4);
-        padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 88px);
-      }
-
       .scope-employee-shell {
-        width: min(100%, 48rem);
+        width: 100%;
+        max-width: 48rem;
         margin: 0 auto;
         display: grid;
         gap: 1rem;
@@ -268,30 +257,6 @@
       .scope-employee-hidden {
         display: none !important;
       }
-
-      [data-scope-employee-nav="true"] {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        align-items: center;
-      }
-
-      [data-scope-employee-nav="true"] [data-scope-employee-tab="true"] {
-        min-width: 0;
-        width: 100%;
-        white-space: nowrap;
-      }
-
-      @media (max-width: 420px) {
-        [data-scope-employee-nav="true"] {
-          gap: 0.25rem !important;
-        }
-
-        [data-scope-employee-nav="true"] button {
-          min-width: 0;
-          padding-left: 0.25rem !important;
-          padding-right: 0.25rem !important;
-          font-size: 0.8rem !important;
-        }
-      }
     `;
     document.head.append(style);
   }
@@ -303,25 +268,15 @@
     if (!key) return null;
     try {
       const saved = JSON.parse(localStorage.getItem(key));
-      return {
-        key,
-        saved,
-        session: saved?.currentSession || saved?.session || saved,
-      };
-    } catch {
-      return null;
-    }
+      return { key, saved, session: saved?.currentSession || saved?.session || saved };
+    } catch { return null; }
   }
 
   function saveStoredSession(authStore, session) {
     if (!authStore?.key || !session) return;
     const saved = authStore.saved || {};
-    if (saved.currentSession || saved.session) {
-      saved.currentSession = session;
-      saved.session = session;
-    } else {
-      Object.assign(saved, session);
-    }
+    if (saved.currentSession || saved.session) { saved.currentSession = session; saved.session = session; }
+    else { Object.assign(saved, session); }
     localStorage.setItem(authStore.key, JSON.stringify(saved));
     authStore.saved = saved;
     authStore.session = session;
@@ -337,15 +292,10 @@
     if (!authStore?.session?.refresh_token) return authStore?.session || null;
     const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        "Content-Type": "application/json",
-      },
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: authStore.session.refresh_token }),
     });
-    if (!response.ok) {
-      throw new Error("Your Time Clock sign-in expired. Sign in again, then reopen Scopes.");
-    }
+    if (!response.ok) throw new Error("Your Time Clock sign-in expired. Sign in again.");
     const refreshed = await response.json();
     saveStoredSession(authStore, refreshed);
     return refreshed;
@@ -361,10 +311,7 @@
   }
 
   async function request(path, options = {}, hasRetried = false) {
-    const response = await fetch(`${SUPABASE_URL}${path}`, {
-      ...options,
-      headers: headers(options.headers),
-    });
+    const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers: headers(options.headers) });
     if (!response.ok) {
       const text = await response.text();
       if (!hasRetried && (text.includes("PGRST303") || text.includes("JWT expired")) && state.authStore?.session?.refresh_token) {
@@ -381,150 +328,103 @@
     try {
       const parsed = JSON.parse(message);
       if (parsed.code === "PGRST303" || String(parsed.message || "").includes("JWT expired")) {
-        return "Your Time Clock sign-in expired. Sign in again, then reopen Scopes.";
+        return "Your Time Clock sign-in expired. Sign in again.";
       }
       return parsed.message || parsed.error || message;
-    } catch {
-      return message;
-    }
+    } catch { return message; }
   }
 
   async function loadProfile() {
     state.authStore = getStoredAuth();
     state.session = state.authStore?.session || null;
     if (!state.session?.access_token || !state.session?.user?.id) return null;
-    if (sessionNeedsRefresh(state.session)) {
-      state.session = await refreshSession(state.authStore);
-    }
+    if (sessionNeedsRefresh(state.session)) state.session = await refreshSession(state.authStore);
     const rows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
     state.profile = rows[0] || null;
     return state.profile;
   }
 
-  function findEmployeeNavButtons() {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const labels = new Set(buttons.map((button) => button.textContent.trim()));
-    if (!labels.has("Clock") || !labels.has("Timesheets") || !labels.has("Settings")) return [];
-    if (labels.has("Dashboard") || labels.has("Reports")) return [];
-    return buttons.filter((button) => ["Clock", "Timesheets", "Settings"].includes(button.textContent.trim()));
-  }
+  /* ── Mount into React placeholder ────────────────────── */
 
-  function installNavTab() {
-    if (!state.profile || state.profile.role === "admin" || !state.profile.is_active) return;
-    const navButtons = findEmployeeNavButtons();
-    const settingsButtons = navButtons.filter((button) => button.textContent.trim() === "Settings");
-    settingsButtons.forEach((settingsButton) => {
-      const parent = settingsButton.parentElement;
-      const navRoot = settingsButton.closest("nav") || parent;
-      if (!parent || navRoot.querySelector("[data-scope-employee-tab='true']")) return;
-
-      const isMobileGrid = parent.className && String(parent.className).includes("grid");
-      if (isMobileGrid) parent.dataset.scopeEmployeeNav = "true";
-
-      const tab = settingsButton.cloneNode(true);
-      tab.dataset.scopeEmployeeTab = "true";
-      tab.type = "button";
-      tab.textContent = "Scopes";
-      tab.className = settingsButton.className.replace("text-accent", "text-muted");
-      tab.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        openPanel();
-      });
-
-      if (settingsButton.parentElement?.tagName === "LI") {
-        const li = document.createElement("li");
-        li.append(tab);
-        settingsButton.parentElement.after(li);
-      } else {
-        settingsButton.after(tab);
-      }
-    });
-  }
-
-  function closePanel() {
-    state.isOpen = false;
-    document.getElementById("scope-employee-overlay")?.remove();
-  }
-
-  function openPanel() {
-    state.isOpen = true;
+  function mount(root) {
+    if (state.isMounted) return;
+    state.isMounted = true;
     installStyles();
-    if (!document.getElementById("scope-employee-overlay")) buildPanel();
+    buildPanel(root);
     load().catch((error) => {
       showError(error.message);
       showNoScope("Scope could not be loaded.");
     });
   }
 
-  function buildPanel() {
-    const overlay = document.createElement("div");
-    overlay.id = "scope-employee-overlay";
-    overlay.className = "scope-employee-overlay";
-    overlay.innerHTML = `
-      <div class="scope-employee-shell">
-        <header class="scope-employee-topbar">
-          <div>
-            <p class="scope-employee-kicker">Scope</p>
-            <h1 class="scope-employee-title">Scopes</h1>
-          </div>
-          <button class="scope-employee-button secondary" type="button" data-scope-close>Close</button>
-        </header>
+  function unmount() {
+    state.isMounted = false;
+    Object.keys(els).forEach((key) => { els[key] = null; });
+  }
 
-        <section class="scope-employee-card">
-          <div>
-            <p class="scope-employee-kicker" id="scope-employee-eyebrow">Loading scope</p>
-            <h2 class="scope-employee-title" id="scope-employee-title" style="font-size: 1.5rem;">Checking active job</h2>
-          </div>
-          <div class="scope-employee-pills">
-            <span class="scope-employee-pill" id="scope-employee-profile">Checking sign-in</span>
-            <span class="scope-employee-pill" id="scope-employee-job">Checking current job</span>
-            <span class="scope-employee-pill good" id="scope-employee-progress">0 / 0 complete</span>
-          </div>
-          <p class="scope-employee-status" id="scope-employee-status">Reading your active Time Clock session.</p>
-        </section>
+  function buildPanel(root) {
+    const shell = document.createElement("div");
+    shell.className = "scope-employee-shell";
+    shell.innerHTML = `
+      <header class="scope-employee-topbar">
+        <div>
+          <p class="scope-employee-kicker">Scope</p>
+          <h1 class="scope-employee-title">Scope</h1>
+        </div>
+      </header>
 
-        <section class="scope-employee-card">
-          <div id="scope-employee-error" class="scope-employee-error scope-employee-hidden"></div>
-          <div id="scope-employee-sections" class="scope-employee-sections"></div>
-        </section>
+      <section class="scope-employee-card">
+        <div>
+          <p class="scope-employee-kicker" id="scope-employee-eyebrow">Loading scope</p>
+          <h2 class="scope-employee-title" id="scope-employee-title" style="font-size: 1.5rem;">Checking active job</h2>
+        </div>
+        <div class="scope-employee-pills">
+          <span class="scope-employee-pill" id="scope-employee-profile">Checking sign-in</span>
+          <span class="scope-employee-pill" id="scope-employee-job">Checking current job</span>
+          <span class="scope-employee-pill good" id="scope-employee-progress">0 / 0 complete</span>
+        </div>
+        <p class="scope-employee-status" id="scope-employee-status">Reading your active Time Clock session.</p>
+      </section>
 
-        <section class="scope-employee-card" id="scope-employee-add-card">
-          <div>
-            <p class="scope-employee-kicker">Add item</p>
-            <h2 class="scope-employee-title" style="font-size: 1.35rem;">New line item</h2>
-          </div>
-          <form class="scope-employee-form" id="scope-employee-add-form">
-            <label class="scope-employee-field">
-              <span class="scope-employee-label">Section</span>
-              <select class="scope-employee-select" id="scope-employee-section"></select>
-            </label>
-            <label class="scope-employee-field">
-              <span class="scope-employee-label">Item</span>
-              <input class="scope-employee-input" id="scope-employee-item-text" type="text" autocomplete="off" placeholder="Add a scope item" />
-            </label>
-            <button class="scope-employee-button" type="submit">Add Item</button>
-          </form>
-          <p class="scope-employee-muted" id="scope-employee-form-status">New items are saved to this scope and synced to Notion.</p>
-        </section>
-      </div>
+      <section class="scope-employee-card">
+        <div id="scope-employee-error" class="scope-employee-error scope-employee-hidden"></div>
+        <div id="scope-employee-sections" class="scope-employee-sections"></div>
+      </section>
+
+      <section class="scope-employee-card" id="scope-employee-add-card">
+        <div>
+          <p class="scope-employee-kicker">Add item</p>
+          <h2 class="scope-employee-title" style="font-size: 1.35rem;">New line item</h2>
+        </div>
+        <form class="scope-employee-form" id="scope-employee-add-form">
+          <label class="scope-employee-field">
+            <span class="scope-employee-label">Section</span>
+            <select class="scope-employee-select" id="scope-employee-section"></select>
+          </label>
+          <label class="scope-employee-field">
+            <span class="scope-employee-label">Item</span>
+            <input class="scope-employee-input" id="scope-employee-item-text" type="text" autocomplete="off" placeholder="Add a scope item" />
+          </label>
+          <button class="scope-employee-button" type="submit">Add Item</button>
+        </form>
+        <p class="scope-employee-muted" id="scope-employee-form-status">New items are saved to this scope and synced to Notion.</p>
+      </section>
     `;
-    document.body.append(overlay);
+    root.replaceChildren(shell);
 
-    overlay.querySelector("[data-scope-close]").addEventListener("click", closePanel);
-    els.eyebrow = overlay.querySelector("#scope-employee-eyebrow");
-    els.title = overlay.querySelector("#scope-employee-title");
-    els.profile = overlay.querySelector("#scope-employee-profile");
-    els.job = overlay.querySelector("#scope-employee-job");
-    els.progress = overlay.querySelector("#scope-employee-progress");
-    els.status = overlay.querySelector("#scope-employee-status");
-    els.error = overlay.querySelector("#scope-employee-error");
-    els.sections = overlay.querySelector("#scope-employee-sections");
-    els.addCard = overlay.querySelector("#scope-employee-add-card");
-    els.form = overlay.querySelector("#scope-employee-add-form");
-    els.section = overlay.querySelector("#scope-employee-section");
-    els.itemText = overlay.querySelector("#scope-employee-item-text");
-    els.formStatus = overlay.querySelector("#scope-employee-form-status");
+    els.eyebrow = shell.querySelector("#scope-employee-eyebrow");
+    els.title = shell.querySelector("#scope-employee-title");
+    els.profile = shell.querySelector("#scope-employee-profile");
+    els.job = shell.querySelector("#scope-employee-job");
+    els.progress = shell.querySelector("#scope-employee-progress");
+    els.status = shell.querySelector("#scope-employee-status");
+    els.error = shell.querySelector("#scope-employee-error");
+    els.sections = shell.querySelector("#scope-employee-sections");
+    els.addCard = shell.querySelector("#scope-employee-add-card");
+    els.form = shell.querySelector("#scope-employee-add-form");
+    els.section = shell.querySelector("#scope-employee-section");
+    els.itemText = shell.querySelector("#scope-employee-item-text");
+    els.formStatus = shell.querySelector("#scope-employee-form-status");
 
     els.form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -550,13 +450,13 @@
   function showNoScope(message) {
     state.project = null;
     state.items = [];
-    els.eyebrow.textContent = "Scope";
-    els.title.textContent = "No active scope";
-    els.progress.textContent = "0 / 0 complete";
-    els.status.textContent = message || "No scope available at this time.";
-    els.sections.replaceChildren();
-    els.section.replaceChildren();
-    els.addCard.classList.add("scope-employee-hidden");
+    if (els.eyebrow) els.eyebrow.textContent = "Scope";
+    if (els.title) els.title.textContent = "No active scope";
+    if (els.progress) els.progress.textContent = "0 / 0 complete";
+    if (els.status) els.status.textContent = message || "No scope available at this time.";
+    if (els.sections) els.sections.replaceChildren();
+    if (els.section) els.section.replaceChildren();
+    if (els.addCard) els.addCard.classList.add("scope-employee-hidden");
   }
 
   function groupItems(items) {
@@ -570,6 +470,7 @@
   }
 
   function render() {
+    if (!state.isMounted) return;
     const completed = state.items.filter((item) => item.completed_at).length;
     els.progress.textContent = `${completed} / ${state.items.length} complete`;
     els.profile.textContent = state.profile ? `${state.profile.first_name} ${state.profile.last_name}` : "Not signed in";
@@ -605,11 +506,8 @@
       toggle.type = "button";
       toggle.setAttribute("aria-expanded", String(!isCollapsed));
       toggle.addEventListener("click", () => {
-        if (state.collapsedSections.has(section)) {
-          state.collapsedSections.delete(section);
-        } else {
-          state.collapsedSections.add(section);
-        }
+        if (state.collapsedSections.has(section)) state.collapsedSections.delete(section);
+        else state.collapsedSections.add(section);
         render();
       });
 
@@ -665,9 +563,9 @@
     try {
       const profile = await loadProfile();
       if (!profile) {
-        els.profile.textContent = "Not signed in";
-        els.job.textContent = "Open Time Clock first";
-        showNoScope("Sign into the Time Clock, then reopen Scopes.");
+        if (els.profile) els.profile.textContent = "Not signed in";
+        if (els.job) els.job.textContent = "Open Time Clock first";
+        showNoScope("Sign into the Time Clock first.");
         return;
       }
       if (!profile.is_active) {
@@ -744,24 +642,17 @@
     await load();
   }
 
-  async function boot() {
-    installStyles();
-    try {
-      const profile = await loadProfile();
-      if (profile?.is_active && profile.role !== "admin") {
-        installNavTab();
-      }
-    } catch {
-      // The main app owns sign-in errors. This script only adds the scope tab.
-    }
-  }
+  /* ── Watch for React placeholder ─────────────────────── */
 
   const observer = new MutationObserver(() => {
-    if (state.profile?.is_active && state.profile.role !== "admin") installNavTab();
+    const root = document.getElementById("scope-content-root");
+    if (root && !state.isMounted) mount(root);
+    else if (!root && state.isMounted) unmount();
   });
 
   window.addEventListener("load", () => {
-    boot();
     observer.observe(document.body, { childList: true, subtree: true });
+    const root = document.getElementById("scope-content-root");
+    if (root) mount(root);
   });
 })();
