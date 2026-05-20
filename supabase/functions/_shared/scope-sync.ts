@@ -546,7 +546,12 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
   if (!project?.notion_page_id) return false;
 
   const siblings = await supabase(`/rest/v1/scope_items?select=notion_parent_block_id&scope_project_id=eq.${encodeURIComponent(item.scope_project_id)}&section=eq.${encodeURIComponent(item.section)}&notion_parent_block_id=not.is.null&limit=1`);
-  const parentBlockId = siblings[0]?.notion_parent_block_id || project.notion_page_id;
+  let parentBlockId = siblings[0]?.notion_parent_block_id || null;
+  if (!parentBlockId) {
+    const notionItems = await pageBlocksToItems(project.notion_page_id);
+    parentBlockId = notionItems.find((notionItem) => notionItem.section === item.section && notionItem.parentBlockId)?.parentBlockId || null;
+  }
+  parentBlockId = parentBlockId || project.notion_page_id;
   const response = await notion(`/blocks/${encodeURIComponent(parentBlockId)}/children`, {
     method: "PATCH",
     body: JSON.stringify({

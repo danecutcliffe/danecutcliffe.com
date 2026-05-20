@@ -12,6 +12,7 @@
     collapsedSections: new Set(),
     isMounted: false,
     isLoading: false,
+    hasLoaded: false,
   };
 
   const els = {};
@@ -68,6 +69,31 @@
         display: grid;
         gap: 1rem;
         padding: 1rem;
+      }
+
+      .scope-employee-loading {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-height: 4.5rem;
+        color: var(--color-muted-strong, #d6d3d1);
+        font-weight: 900;
+      }
+
+      .scope-employee-spinner {
+        width: 1.75rem;
+        height: 1.75rem;
+        flex: 0 0 auto;
+        border: 3px solid var(--color-badge-neutral, #44403c);
+        border-top-color: var(--color-accent, #da7756);
+        border-radius: 999px;
+        animation: scope-employee-spin 0.8s linear infinite;
+      }
+
+      @keyframes scope-employee-spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       .scope-employee-button {
@@ -344,6 +370,49 @@
     return state.profile;
   }
 
+  async function refreshScopeData() {
+    const profile = await loadProfile();
+    state.openEntry = null;
+    state.project = null;
+    state.items = [];
+
+    if (!profile || !profile.is_active) {
+      state.hasLoaded = true;
+      return;
+    }
+
+    const openRows = await request(`/rest/v1/time_entries?select=id,job_code_id,clock_in,event_type&user_id=eq.${state.session.user.id}&event_type=eq.work&clock_out=is.null&order=clock_in.desc&limit=1`);
+    state.openEntry = openRows[0] || null;
+
+    if (!state.openEntry?.job_code_id) {
+      state.hasLoaded = true;
+      return;
+    }
+
+    const projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
+    state.project = projectRows[0] || null;
+    if (!state.project) {
+      state.hasLoaded = true;
+      return;
+    }
+
+    state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
+    state.hasLoaded = true;
+  }
+
+  async function prefetchScopeData() {
+    if (state.isLoading) return;
+    state.isLoading = true;
+    try {
+      await refreshScopeData();
+    } catch {
+      state.hasLoaded = false;
+    } finally {
+      state.isLoading = false;
+      if (state.isMounted && state.hasLoaded) render();
+    }
+  }
+
   /* ── Mount into React placeholder ────────────────────── */
 
   function mount(root) {
@@ -351,6 +420,11 @@
     state.isMounted = true;
     installStyles();
     buildPanel(root);
+    if (state.hasLoaded) {
+      render();
+    } else {
+      showLoading();
+    }
     load().catch((error) => {
       showError(error.message);
       showNoScope("Scope could not be loaded.");
@@ -373,7 +447,7 @@
         </div>
       </header>
 
-      <section class="scope-employee-card">
+      <section class="scope-employee-card scope-employee-hidden" id="scope-employee-hero-card">
         <div>
           <p class="scope-employee-kicker" id="scope-employee-eyebrow">Loading scope</p>
           <h2 class="scope-employee-title" id="scope-employee-title" style="font-size: 1.5rem;">Checking active job</h2>
@@ -386,12 +460,19 @@
         <p class="scope-employee-status" id="scope-employee-status">Reading your active Time Clock session.</p>
       </section>
 
-      <section class="scope-employee-card">
+      <section class="scope-employee-card" id="scope-employee-loading-card">
+        <div class="scope-employee-loading">
+          <span class="scope-employee-spinner" aria-hidden="true"></span>
+          <span>Loading scope</span>
+        </div>
+      </section>
+
+      <section class="scope-employee-card scope-employee-hidden" id="scope-employee-list-card">
         <div id="scope-employee-error" class="scope-employee-error scope-employee-hidden"></div>
         <div id="scope-employee-sections" class="scope-employee-sections"></div>
       </section>
 
-      <section class="scope-employee-card" id="scope-employee-add-card">
+      <section class="scope-employee-card scope-employee-hidden" id="scope-employee-add-card">
         <div>
           <p class="scope-employee-kicker">Add item</p>
           <h2 class="scope-employee-title" style="font-size: 1.35rem;">New line item</h2>
@@ -412,6 +493,9 @@
     `;
     root.replaceChildren(shell);
 
+    els.heroCard = shell.querySelector("#scope-employee-hero-card");
+    els.loadingCard = shell.querySelector("#scope-employee-loading-card");
+    els.listCard = shell.querySelector("#scope-employee-list-card");
     els.eyebrow = shell.querySelector("#scope-employee-eyebrow");
     els.title = shell.querySelector("#scope-employee-title");
     els.profile = shell.querySelector("#scope-employee-profile");
@@ -447,7 +531,22 @@
     els.error.classList.add("scope-employee-hidden");
   }
 
+  function showLoading() {
+    if (els.loadingCard) els.loadingCard.classList.remove("scope-employee-hidden");
+    if (els.heroCard) els.heroCard.classList.add("scope-employee-hidden");
+    if (els.listCard) els.listCard.classList.add("scope-employee-hidden");
+    if (els.addCard) els.addCard.classList.add("scope-employee-hidden");
+  }
+
+  function showLoadedShell() {
+    if (els.loadingCard) els.loadingCard.classList.add("scope-employee-hidden");
+    if (els.heroCard) els.heroCard.classList.remove("scope-employee-hidden");
+    if (els.listCard) els.listCard.classList.remove("scope-employee-hidden");
+  }
+
   function showNoScope(message) {
+    showLoadedShell();
+    state.hasLoaded = true;
     state.project = null;
     state.items = [];
     if (els.eyebrow) els.eyebrow.textContent = "Scope";
@@ -456,6 +555,9 @@
     if (els.status) els.status.textContent = message || "No scope available at this time.";
     if (els.sections) els.sections.replaceChildren();
     if (els.section) els.section.replaceChildren();
+    if (els.listCard && els.error?.classList.contains("scope-employee-hidden")) {
+      els.listCard.classList.add("scope-employee-hidden");
+    }
     if (els.addCard) els.addCard.classList.add("scope-employee-hidden");
   }
 
@@ -471,6 +573,7 @@
 
   function render() {
     if (!state.isMounted) return;
+    showLoadedShell();
     const completed = state.items.filter((item) => item.completed_at).length;
     els.progress.textContent = `${completed} / ${state.items.length} complete`;
     els.profile.textContent = state.profile ? `${state.profile.first_name} ${state.profile.last_name}` : "Not signed in";
@@ -560,21 +663,19 @@
     if (state.isLoading) return;
     state.isLoading = true;
     clearError();
+    if (!state.hasLoaded) showLoading();
     try {
-      const profile = await loadProfile();
-      if (!profile) {
+      await refreshScopeData();
+      if (!state.profile) {
         if (els.profile) els.profile.textContent = "Not signed in";
         if (els.job) els.job.textContent = "Open Time Clock first";
         showNoScope("Sign into the Time Clock first.");
         return;
       }
-      if (!profile.is_active) {
+      if (!state.profile.is_active) {
         showNoScope("This profile is not active.");
         return;
       }
-
-      const openRows = await request(`/rest/v1/time_entries?select=id,job_code_id,clock_in,event_type&user_id=eq.${state.session.user.id}&event_type=eq.work&clock_out=is.null&order=clock_in.desc&limit=1`);
-      state.openEntry = openRows[0] || null;
 
       if (!state.openEntry?.job_code_id) {
         showNoScope("Clock into a scoped job to see its scope of work.");
@@ -582,15 +683,12 @@
         return;
       }
 
-      const projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
-      state.project = projectRows[0] || null;
       if (!state.project) {
         showNoScope("No scope available at this time.");
         render();
         return;
       }
 
-      state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
       render();
     } finally {
       state.isLoading = false;
@@ -654,5 +752,6 @@
     observer.observe(document.body, { childList: true, subtree: true });
     const root = document.getElementById("scope-content-root");
     if (root) mount(root);
+    prefetchScopeData();
   });
 })();
