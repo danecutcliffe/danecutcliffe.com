@@ -4,6 +4,7 @@ export const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 export const NOTION_TOKEN = Deno.env.get("NOTION_API_KEY") || Deno.env.get("NOTION_TOKEN") || "";
 export const NOTION_VERSION = "2026-03-11";
 export const JOB_CODE_PROPERTY = "Job Code";
+const ON_SITE_NOTION_PREFIX = "[On-site] ";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,6 +41,10 @@ export function extractNotionId(value: unknown): string {
 
 export function textFromRichText(items: Array<{ plain_text?: string }> = []): string {
   return items.map((item) => item.plain_text || "").join("").trim();
+}
+
+function stripOnSitePrefix(value: string): string {
+  return value.startsWith(ON_SITE_NOTION_PREFIX) ? value.slice(ON_SITE_NOTION_PREFIX.length).trim() : value;
 }
 
 export async function notion(path: string, options: RequestInit = {}): Promise<any> {
@@ -253,7 +258,7 @@ export async function pageBlocksToItems(pageId: string): Promise<NotionScopeItem
       }
 
       if (["to_do", "bulleted_list_item", "numbered_list_item", "paragraph"].includes(block.type)) {
-        const itemText = blockText(block);
+        const itemText = stripOnSitePrefix(blockText(block));
         if (itemText) {
           items.push({
             blockId: block.id,
@@ -559,7 +564,14 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
         object: "block",
         type: "to_do",
         to_do: {
-          rich_text: [{ type: "text", text: { content: item.item_text } }],
+          rich_text: [{
+            type: "text",
+            text: { content: `${ON_SITE_NOTION_PREFIX}${item.item_text}` },
+            annotations: {
+              italic: true,
+              color: "orange_background",
+            },
+          }],
           checked: false,
         },
       }],

@@ -391,6 +391,7 @@
     <script>
       const SUPABASE_URL = "https://akofsmmsxtfqduebetga.supabase.co";
       const SUPABASE_KEY = "sb_publishable_5IC3CkcNPr9-XrMBymBcoQ_XrL66k4y";
+      const PILOT_SCOPE_JOB_CODE = "QS0358";
 
       const state = {
         authStore: null,
@@ -400,6 +401,7 @@
         project: null,
         items: [],
         collapsedSections: new Set(),
+        isPilotFallback: false,
       };
 
       const els = {
@@ -551,6 +553,8 @@
 
         if (state.openEntry) {
           els.job.textContent = "Clocked into matching job";
+        } else if (state.isPilotFallback) {
+          els.job.textContent = `Pilot ${PILOT_SCOPE_JOB_CODE}`;
         } else {
           els.job.textContent = "No active punch";
         }
@@ -560,7 +564,7 @@
           els.title.textContent = state.project.property_name;
           els.status.textContent = state.openEntry
             ? "Scope loaded from the active job code."
-            : "Showing the pilot scope. Clock into QS0358 to test job-code matching.";
+            : `Previewing the ${PILOT_SCOPE_JOB_CODE} pilot scope. Changes stay in this browser until you clock into the job.`;
         }
 
         const groups = groupItems(state.items);
@@ -666,15 +670,24 @@
 
         const openRows = await request(`/rest/v1/time_entries?select=id,job_code_id,clock_in,event_type&user_id=eq.${state.session.user.id}&event_type=eq.work&clock_out=is.null&order=clock_in.desc&limit=1`);
         state.openEntry = openRows[0] || null;
+        state.isPilotFallback = false;
 
         let projectRows = [];
         if (state.openEntry?.job_code_id) {
           projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
         }
         if (projectRows.length === 0) {
+          const jobRows = await request(`/rest/v1/job_codes?select=id,code&code=eq.${PILOT_SCOPE_JOB_CODE}&is_active=eq.true&limit=1`);
+          const pilotJob = jobRows[0] || null;
+          if (pilotJob?.id) {
+            projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${pilotJob.id}&limit=1`);
+            state.isPilotFallback = projectRows.length > 0;
+          }
+        }
+        if (projectRows.length === 0) {
           showNoScope(state.openEntry
             ? "No scope available at this time for this job."
-            : "Clock into a scoped job to see its scope of work.");
+            : `No pilot scope is linked to ${PILOT_SCOPE_JOB_CODE} yet.`);
           return;
         }
         state.project = projectRows[0] || null;
@@ -684,11 +697,21 @@
         }
 
         state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
+        els.formStatus.textContent = state.isPilotFallback && !state.openEntry
+          ? "Preview mode: added items stay in this browser and do not sync to Notion."
+          : "New items are saved to this scope and synced to Notion.";
         render();
       }
 
       async function toggleItem(itemId, completed) {
         clearError();
+        if (state.isPilotFallback && !state.openEntry) {
+          state.items = state.items.map((item) => item.id === itemId
+            ? { ...item, completed_at: completed ? new Date().toISOString() : null }
+            : item);
+          render();
+          return;
+        }
         try {
           const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
             method: "POST",
@@ -715,6 +738,26 @@
 
         els.formStatus.textContent = "Saving item...";
         try {
+          if (state.isPilotFallback && !state.openEntry) {
+            const section = els.section.value || "Added on site";
+            const nextSort = state.items
+              .filter((item) => item.section === section)
+              .reduce((max, item) => Math.max(max, Number(item.sort_order || 0)), 0) + 10;
+            state.items = [...state.items, {
+              id: `preview-${Date.now()}`,
+              scope_project_id: state.project.id,
+              section,
+              item_text: text,
+              sort_order: nextSort,
+              source: "employee",
+              completed_at: null,
+              is_active: true,
+            }];
+            els.itemText.value = "";
+            els.formStatus.textContent = "Preview item added locally. Nothing was written to payroll, Supabase, or Notion.";
+            render();
+            return;
+          }
           const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
             method: "POST",
             headers: headers(),
