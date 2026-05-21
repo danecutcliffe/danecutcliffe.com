@@ -12,6 +12,7 @@
     selectedSiteId: "",
     isMounted: false,
     isLoading: false,
+    isCheckingMount: false,
     syncResult: null,
   };
 
@@ -549,15 +550,29 @@
 
   /* ── Watch for React placeholder ─────────────────────── */
 
-  const observer = new MutationObserver(() => {
+  async function reconcileMount() {
     const root = document.getElementById("scope-content-root");
-    if (root && !state.isMounted) mount(root);
-    else if (!root && state.isMounted) unmount();
+    if (!root) {
+      if (state.isMounted) unmount();
+      return;
+    }
+    if (state.isMounted || state.isCheckingMount) return;
+
+    state.isCheckingMount = true;
+    try {
+      const profile = await checkAdminProfile().catch(() => null);
+      if (profile?.role === "admin") mount(root);
+    } finally {
+      state.isCheckingMount = false;
+    }
+  }
+
+  const observer = new MutationObserver(() => {
+    reconcileMount();
   });
 
   window.addEventListener("load", () => {
     observer.observe(document.body, { childList: true, subtree: true });
-    const root = document.getElementById("scope-content-root");
-    if (root) mount(root);
+    reconcileMount();
   });
 })();
