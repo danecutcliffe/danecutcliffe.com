@@ -215,7 +215,7 @@
 
       .scope-employee-item {
         display: grid;
-        grid-template-columns: 2.1rem 2rem minmax(0, 1fr);
+        grid-template-columns: 2rem minmax(0, 1fr) 2.1rem;
         gap: 0.625rem;
         align-items: start;
         border: 1px solid var(--color-app-border-subtle, rgba(255, 255, 255, 0.08));
@@ -262,6 +262,7 @@
         font-size: 1rem;
         font-weight: 900;
         line-height: 1;
+        cursor: grab;
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
@@ -269,6 +270,7 @@
 
       .scope-employee-handle:disabled {
         opacity: 0.45;
+        cursor: default;
       }
 
       .scope-employee-item-placeholder {
@@ -284,6 +286,10 @@
         box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
         border-color: rgba(218, 119, 86, 0.65);
         transform: scale(1.02);
+      }
+
+      .scope-employee-item-floating .scope-employee-handle {
+        cursor: grabbing;
       }
 
       .scope-employee-item-reorder-locked {
@@ -443,7 +449,12 @@
   }
 
   function canMutateScope() {
-    return Boolean(state.profile?.is_active && state.project?.id && hasMatchingOpenPunch() && !state.isSavingReorder);
+    return Boolean(
+      state.profile?.is_active &&
+      state.project?.id &&
+      !state.isSavingReorder &&
+      (state.profile?.role === "admin" || hasMatchingOpenPunch())
+    );
   }
 
   function userDisplayName() {
@@ -787,7 +798,7 @@
           body.append(source);
         }
 
-        row.append(handle, checkbox, body);
+        row.append(checkbox, body, handle);
         list.append(row);
       });
 
@@ -875,6 +886,9 @@
     if (!canMutateScope() || state.isSavingReorder || state.drag) return;
     if (event.button != null && event.button !== 0) return;
     event.preventDefault();
+    if (typeof event.currentTarget?.setPointerCapture === "function") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
 
     const rect = row.getBoundingClientRect();
     const placeholder = document.createElement("div");
@@ -895,6 +909,7 @@
       pointerId: event.pointerId,
       section,
       itemId,
+      handle: event.currentTarget,
       row,
       list,
       placeholder,
@@ -940,8 +955,11 @@
 
   function finishReorder(cancelled = false) {
     if (!state.drag) return;
-    const { row, list, placeholder, section, startOrderIds } = state.drag;
+    const { row, list, placeholder, section, startOrderIds, handle, pointerId } = state.drag;
     clearDragListeners();
+    if (handle && typeof handle.releasePointerCapture === "function") {
+      try { handle.releasePointerCapture(pointerId); } catch {}
+    }
 
     row.classList.remove("scope-employee-item-floating");
     row.style.width = "";
