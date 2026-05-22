@@ -9,6 +9,8 @@
     openEntry: null,
     project: null,
     items: [],
+    sectionOrder: [],
+    sectionOrderProjectId: "",
     collapsedSections: new Set(),
     isMounted: false,
     isLoading: false,
@@ -672,6 +674,28 @@
     }, new Map());
   }
 
+  function syncSectionUiState(groups) {
+    const projectId = state.project?.id || "";
+    const sectionNames = Array.from(groups.keys());
+    if (state.sectionOrderProjectId !== projectId) {
+      state.sectionOrderProjectId = projectId;
+      state.sectionOrder = [...sectionNames];
+      state.collapsedSections = new Set(sectionNames);
+      return sectionNames;
+    }
+
+    const retained = state.sectionOrder.filter((section) => groups.has(section));
+    const additions = sectionNames.filter((section) => !retained.includes(section));
+    state.sectionOrder = [...retained, ...additions];
+    additions.forEach((section) => state.collapsedSections.add(section));
+
+    Array.from(state.collapsedSections).forEach((section) => {
+      if (!groups.has(section)) state.collapsedSections.delete(section);
+    });
+
+    return state.sectionOrder.filter((section) => groups.has(section));
+  }
+
   function renderFormState() {
     if (!els.form || !els.formStatus) return;
     const canMutate = canMutateScope();
@@ -726,7 +750,8 @@
       : "Scope loaded from your active job code.";
 
     const groups = groupItems(state.items);
-    els.section.replaceChildren(...Array.from(groups.keys()).map((section) => {
+    const orderedSections = syncSectionUiState(groups);
+    els.section.replaceChildren(...orderedSections.map((section) => {
       const option = document.createElement("option");
       option.value = section;
       option.textContent = section;
@@ -736,7 +761,8 @@
     renderFormState();
 
     const fragment = document.createDocumentFragment();
-    groups.forEach((items, section) => {
+    orderedSections.forEach((section) => {
+      const items = groups.get(section) || [];
       const sectionEl = document.createElement("section");
       sectionEl.className = "scope-employee-section";
       const isCollapsed = state.collapsedSections.has(section);

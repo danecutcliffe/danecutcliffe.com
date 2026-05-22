@@ -356,6 +356,10 @@ export type NotionScopeItem = {
   sortOrder: number;
 };
 
+function isScopeContentBlock(block: any): boolean {
+  return ["to_do", "bulleted_list_item", "numbered_list_item", "paragraph"].includes(String(block?.type || ""));
+}
+
 export async function pageBlocksToItems(pageId: string): Promise<NotionScopeItem[]> {
   const items: NotionScopeItem[] = [];
   let sortOrder = 10;
@@ -444,6 +448,15 @@ async function saveProject(project: Record<string, unknown>): Promise<any> {
 }
 
 async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Promise<{ inserted: number; updated: number; deactivated: number }> {
+  const dedupedNotionItems: NotionScopeItem[] = [];
+  const seenNotionKeys = new Set<string>();
+  for (const item of notionItems) {
+    const dedupeKey = `${normalizeSection(item.section)}\n${stripOnSitePrefix(item.itemText)}`;
+    if (seenNotionKeys.has(dedupeKey)) continue;
+    seenNotionKeys.add(dedupeKey);
+    dedupedNotionItems.push(item);
+  }
+
   const existing = await supabase(`/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}`);
   const activeExisting = existing.filter((item: any) => item.is_active);
   const byBlock = new Map(existing.filter((item: any) => item.notion_block_id).map((item: any) => [stripNotionId(item.notion_block_id), item]));
@@ -463,7 +476,7 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
   let updated = 0;
   const now = new Date().toISOString();
 
-  for (const item of notionItems) {
+  for (const item of dedupedNotionItems) {
     const blockKey = stripNotionId(item.blockId);
     const section = normalizeSection(item.section);
     const textKey = `${section}\n${item.itemText}`;
@@ -758,7 +771,11 @@ export async function syncSectionOrderToNotion(projectId: string, section: strin
     parentBlockId = notionItems.find((item) => item.section === section && item.parentBlockId)?.parentBlockId || null;
   }
   const targetParentId = parentBlockId || project.notion_page_id;
-  const oldBlockIds = items.map((item: any) => String(item.notion_block_id || "")).filter(Boolean);
+  const existingChildren = await queryBlockChildren(targetParentId);
+  const oldBlockIds = existingChildren
+    .filter((block: any) => isScopeContentBlock(block))
+    .map((block: any) => String(block.id || ""))
+    .filter(Boolean);
 
   const response = await notion(`/blocks/${encodeURIComponent(targetParentId)}/children`, {
     method: "PATCH",
