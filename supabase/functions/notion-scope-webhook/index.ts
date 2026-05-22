@@ -1,4 +1,5 @@
 import {
+  flushDueSectionSyncs,
   json,
   notion,
   stripNotionId,
@@ -110,6 +111,12 @@ async function processWebhook(payload: any): Promise<string> {
       result = await syncPage(refreshedPage);
     }
 
+    if (result?.project?.id) {
+      await flushDueSectionSyncs(result.project.id).catch((error) => {
+        console.error("Failed to flush queued section syncs after page webhook", error);
+      });
+    }
+
     return result
       ? `Synced page ${result.project?.unit_name || result.project?.title || stripNotionId(entityId)}.`
       : `Ignored page ${stripNotionId(entityId)} because it is not linked to a Time app scope.`;
@@ -121,6 +128,9 @@ async function processWebhook(payload: any): Promise<string> {
     for (const mapping of mappings) {
       results.push(await syncDatabaseMapping(mapping));
     }
+    await flushDueSectionSyncs().catch((error) => {
+      console.error("Failed to flush queued section syncs after data source webhook", error);
+    });
     return mappings.length
       ? `Synced ${mappings.length} mapped data source${mappings.length === 1 ? "" : "s"}.`
       : `Ignored data source ${stripNotionId(entityId)} because it is not mapped to a Time app property.`;
@@ -132,6 +142,9 @@ async function processWebhook(payload: any): Promise<string> {
     for (const mapping of mappings) {
       results.push(await syncDatabaseMapping(mapping));
     }
+    await flushDueSectionSyncs().catch((error) => {
+      console.error("Failed to flush queued section syncs after database webhook", error);
+    });
     return mappings.length
       ? `Synced ${mappings.length} mapped database${mappings.length === 1 ? "" : "s"}.`
       : `Ignored database ${stripNotionId(entityId)} because it is not mapped to a Time app property.`;

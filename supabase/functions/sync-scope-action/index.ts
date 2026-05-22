@@ -1,8 +1,9 @@
 import {
+  flushDueSectionSyncs,
   json,
   pushItemToggleToNotion,
   pushNewItemToNotion,
-  syncSectionOrderToNotion,
+  recordLocalSectionReorder,
   supabase,
   supabaseAsUser,
 } from "../_shared/scope-sync.ts";
@@ -26,6 +27,12 @@ Deno.serve(async (request) => {
     if (!accessToken) return json(401, { error: "Sign in before updating scope items." });
 
     const body = await request.json().catch(() => ({}));
+    if (body.action === "flush-due") {
+      const scopeProjectId = String(body.scopeProjectId || "");
+      const result = await flushDueSectionSyncs(scopeProjectId || undefined);
+      return json(200, result);
+    }
+
     if (body.action === "toggle") {
       const itemId = String(body.itemId || "");
       const completed = Boolean(body.completed);
@@ -74,13 +81,14 @@ Deno.serve(async (request) => {
           p_item_ids: itemIds,
         }),
       });
+      await recordLocalSectionReorder(scopeProjectId, section);
 
       if (waitUntil) {
         waitUntil((async () => {
           try {
-            await syncSectionOrderToNotion(scopeProjectId, section);
+            await flushDueSectionSyncs(scopeProjectId);
           } catch (error) {
-            console.error("Background Notion reorder sync failed", error);
+            console.error("Background scope section flush failed", error);
           }
         })());
         return json(200, {
@@ -90,14 +98,8 @@ Deno.serve(async (request) => {
         });
       }
 
-      let pushedToNotion = false;
-      let notionSyncError = "";
-      try {
-        pushedToNotion = await syncSectionOrderToNotion(scopeProjectId, section);
-      } catch (error) {
-        notionSyncError = error instanceof Error ? error.message : "Notion sync failed.";
-      }
-      return json(200, { items, pushedToNotion, notionSyncError });
+      const flushResult = await flushDueSectionSyncs(scopeProjectId);
+      return json(200, { items, pushedToNotion: flushResult.outbound > 0, notionSyncQueued: true, flushResult });
     }
 
     return json(400, { error: "Unknown scope action." });

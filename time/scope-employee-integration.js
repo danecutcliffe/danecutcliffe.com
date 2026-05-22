@@ -23,6 +23,7 @@
       forceMount: false,
     },
     usingForcedJobCode: false,
+    flushTimerId: 0,
   };
 
   const els = {};
@@ -513,14 +514,24 @@
     buildPanel(root);
     if (state.hasLoaded) render();
     else showLoading();
-    load().catch((error) => {
-      showError(error.message);
-      showNoScope("Scope could not be loaded.");
-    });
+    load()
+      .then(() => flushDueSyncs({ reload: true }).catch(() => {}))
+      .catch((error) => {
+        showError(error.message);
+        showNoScope("Scope could not be loaded.");
+      });
+    if (state.flushTimerId) window.clearInterval(state.flushTimerId);
+    state.flushTimerId = window.setInterval(() => {
+      flushDueSyncs({ reload: true }).catch(() => {});
+    }, 30_000);
   }
 
   function unmount() {
     if (state.drag) finishReorder(true);
+    if (state.flushTimerId) {
+      window.clearInterval(state.flushTimerId);
+      state.flushTimerId = 0;
+    }
     state.root = null;
     state.isMounted = false;
     Object.keys(els).forEach((key) => { els[key] = null; });
@@ -1063,6 +1074,27 @@
     await load();
   }
 
+  async function flushDueSyncs({ reload = false } = {}) {
+    if (!state.session?.access_token) return { processed: 0, outbound: 0, inbound: 0 };
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        action: "flush-due",
+        scopeProjectId: state.project?.id || "",
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || "Unable to flush pending scope syncs.");
+    }
+    const payload = await response.json().catch(() => ({ processed: 0, outbound: 0, inbound: 0 }));
+    if (reload && payload.processed > 0) {
+      await load();
+    }
+    return payload;
+  }
+
   function getMountRoot() {
     return document.getElementById("scope-content-root") || document.querySelector("[data-scope-employee-root]");
   }
@@ -1092,7 +1124,12 @@
 
   function refreshVisibleScope() {
     if (!state.isMounted || document.hidden) return;
-    load().catch((error) => showError(error.message));
+    flushDueSyncs({ reload: true })
+      .then((payload) => {
+        if (!payload.processed) return load();
+        return null;
+      })
+      .catch((error) => showError(error.message));
   }
 
   const observer = new MutationObserver(() => {

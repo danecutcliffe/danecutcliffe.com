@@ -5,6 +5,7 @@ export const NOTION_TOKEN = Deno.env.get("NOTION_API_KEY") || Deno.env.get("NOTI
 export const NOTION_VERSION = "2026-03-11";
 export const JOB_CODE_PROPERTY = "Job Code";
 const ON_SITE_NOTION_PREFIX = "[On-site] ";
+const SECTION_SYNC_DELAY_MS = 120_000;
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +46,95 @@ export function textFromRichText(items: Array<{ plain_text?: string }> = []): st
 
 function stripOnSitePrefix(value: string): string {
   return value.startsWith(ON_SITE_NOTION_PREFIX) ? value.slice(ON_SITE_NOTION_PREFIX.length).trim() : value;
+}
+
+function normalizeSection(value: unknown): string {
+  const text = String(value || "").trim();
+  return text || "Added on site";
+}
+
+function orderHash(ids: string[]): string {
+  return ids.map((id) => String(id || "")).join("|");
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (String(left[index]) !== String(right[index])) return false;
+  }
+  return true;
+}
+
+async function upsertSectionState(payload: Record<string, unknown>): Promise<any> {
+  const rows = await supabase("/rest/v1/scope_section_sync_state?on_conflict=scope_project_id,section&select=*", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify([payload]),
+  });
+  return rows[0] || null;
+}
+
+async function setSectionState(projectId: string, section: string, payload: Record<string, unknown>): Promise<any> {
+  return upsertSectionState({
+    scope_project_id: projectId,
+    section: normalizeSection(section),
+    ...payload,
+  });
+}
+
+async function currentSectionOrderIds(projectId: string, section: string): Promise<string[]> {
+  const items = await supabase(
+    `/rest/v1/scope_items?select=id&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(normalizeSection(section))}&is_active=eq.true&order=sort_order.asc`,
+  );
+  return items.map((item: any) => String(item.id));
+}
+
+export async function recordLocalSectionReorder(projectId: string, section: string): Promise<void> {
+  const orderedIds = await currentSectionOrderIds(projectId, section);
+  const now = new Date();
+  await setSectionState(projectId, section, {
+    last_local_order_hash: orderHash(orderedIds),
+    last_local_ordered_at: now.toISOString(),
+    pending_local_sync_at: new Date(now.getTime() + SECTION_SYNC_DELAY_MS).toISOString(),
+  });
+}
+
+async function clearPendingNotionReorder(projectId: string, section: string, notionIds: string[]): Promise<void> {
+  const now = new Date().toISOString();
+  await setSectionState(projectId, section, {
+    last_notion_order_hash: orderHash(notionIds),
+    last_notion_ordered_at: now,
+    pending_notion_sync_at: null,
+    pending_notion_item_ids: null,
+  });
+}
+
+export async function recordNotionSectionReorder(projectId: string, section: string, orderedItemIds: string[]): Promise<void> {
+  const normalizedIds = orderedItemIds.map((id) => String(id)).filter(Boolean);
+  const currentIds = await currentSectionOrderIds(projectId, section);
+  if (arraysEqual(currentIds, normalizedIds)) {
+    await clearPendingNotionReorder(projectId, section, normalizedIds);
+    return;
+  }
+
+  const now = new Date();
+  await setSectionState(projectId, section, {
+    last_notion_order_hash: orderHash(normalizedIds),
+    last_notion_ordered_at: now.toISOString(),
+    pending_notion_sync_at: new Date(now.getTime() + SECTION_SYNC_DELAY_MS).toISOString(),
+    pending_notion_item_ids: normalizedIds,
+  });
+}
+
+export async function applySectionOrder(projectId: string, section: string, orderedItemIds: string[]): Promise<any[]> {
+  return supabase("/rest/v1/rpc/scope_apply_section_order", {
+    method: "POST",
+    body: JSON.stringify({
+      p_scope_project_id: projectId,
+      p_section: normalizeSection(section),
+      p_item_ids: orderedItemIds,
+    }),
+  });
 }
 
 function notionRichTextForScopeItem(item: any): Array<Record<string, unknown>> {
@@ -355,8 +445,19 @@ async function saveProject(project: Record<string, unknown>): Promise<any> {
 
 async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Promise<{ inserted: number; updated: number; deactivated: number }> {
   const existing = await supabase(`/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}`);
+  const activeExisting = existing.filter((item: any) => item.is_active);
   const byBlock = new Map(existing.filter((item: any) => item.notion_block_id).map((item: any) => [stripNotionId(item.notion_block_id), item]));
   const byText = new Map(existing.map((item: any) => [`${item.section}\n${item.item_text}`, item]));
+  const currentOrderBySection = new Map<string, string[]>();
+  const nextSortBySection = new Map<string, number>();
+  for (const item of activeExisting.sort((left: any, right: any) => Number(left.sort_order || 0) - Number(right.sort_order || 0))) {
+    const section = normalizeSection(item.section);
+    const sectionIds = currentOrderBySection.get(section) || [];
+    sectionIds.push(String(item.id));
+    currentOrderBySection.set(section, sectionIds);
+    nextSortBySection.set(section, Math.max(nextSortBySection.get(section) || 0, Number(item.sort_order || 0)));
+  }
+  const notionOrderBySection = new Map<string, string[]>();
   const seenIds = new Set<string>();
   let inserted = 0;
   let updated = 0;
@@ -364,13 +465,14 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
 
   for (const item of notionItems) {
     const blockKey = stripNotionId(item.blockId);
-    const textKey = `${item.section}\n${item.itemText}`;
+    const section = normalizeSection(item.section);
+    const textKey = `${section}\n${item.itemText}`;
     const current = byBlock.get(blockKey) || byText.get(textKey);
     const payload: Record<string, unknown> = {
       scope_project_id: projectId,
-      section: item.section,
+      section,
       item_text: item.itemText,
-      sort_order: item.sortOrder,
+      sort_order: current?.sort_order ?? ((nextSortBySection.get(section) || 0) + 10),
       source: current?.source || "notion",
       notion_block_id: item.blockId,
       notion_parent_block_id: item.parentBlockId,
@@ -392,6 +494,9 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
         body: JSON.stringify(payload),
       });
       seenIds.add(current.id);
+      const notionSectionIds = notionOrderBySection.get(section) || [];
+      notionSectionIds.push(String(current.id));
+      notionOrderBySection.set(section, notionSectionIds);
       updated += 1;
     } else {
       const rows = await supabase("/rest/v1/scope_items?select=id", {
@@ -399,7 +504,17 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
         headers: { Prefer: "return=representation" },
         body: JSON.stringify([payload]),
       });
-      if (rows[0]?.id) seenIds.add(rows[0].id);
+      if (rows[0]?.id) {
+        const insertedId = String(rows[0].id);
+        seenIds.add(insertedId);
+        nextSortBySection.set(section, Number(payload.sort_order || 0));
+        const currentSectionIds = currentOrderBySection.get(section) || [];
+        currentSectionIds.push(insertedId);
+        currentOrderBySection.set(section, currentSectionIds);
+        const notionSectionIds = notionOrderBySection.get(section) || [];
+        notionSectionIds.push(insertedId);
+        notionOrderBySection.set(section, notionSectionIds);
+      }
       inserted += 1;
     }
   }
@@ -421,6 +536,15 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
         last_pulled_from_notion_at: now,
       }),
     });
+  }
+
+  for (const [section, notionIds] of notionOrderBySection.entries()) {
+    const currentIds = (currentOrderBySection.get(section) || []).filter((id) => !stale.some((item: any) => String(item.id) === id));
+    if (arraysEqual(currentIds, notionIds)) {
+      await clearPendingNotionReorder(projectId, section, notionIds);
+    } else {
+      await recordNotionSectionReorder(projectId, section, notionIds);
+    }
   }
 
   return { inserted, updated, deactivated: stale.length };
@@ -672,6 +796,90 @@ export async function syncSectionOrderToNotion(projectId: string, section: strin
   const refreshedPage = await notion(`/pages/${encodeURIComponent(project.notion_page_id)}`);
   await syncPage(refreshedPage);
   return true;
+}
+
+export async function flushDueSectionSyncs(projectId?: string): Promise<{ processed: number; outbound: number; inbound: number }> {
+  const now = new Date();
+  const states = await supabase(
+    `/rest/v1/scope_section_sync_state?select=*${projectId ? `&scope_project_id=eq.${encodeURIComponent(projectId)}` : ""}`,
+  );
+
+  let processed = 0;
+  let outbound = 0;
+  let inbound = 0;
+
+  for (const state of states) {
+    const localAt = state.last_local_ordered_at ? new Date(state.last_local_ordered_at) : null;
+    const notionAt = state.last_notion_ordered_at ? new Date(state.last_notion_ordered_at) : null;
+    const localDue = state.pending_local_sync_at && new Date(state.pending_local_sync_at) <= now;
+    const notionDue = state.pending_notion_sync_at && new Date(state.pending_notion_sync_at) <= now;
+
+    if (!localDue && !notionDue) continue;
+
+    let choice: "local" | "notion" | null = null;
+    if (localDue && notionDue) {
+      choice = !notionAt || (localAt && localAt >= notionAt) ? "local" : "notion";
+    } else if (localDue) {
+      if (!notionAt || (localAt && localAt >= notionAt)) choice = "local";
+    } else if (notionDue) {
+      if (!localAt || (notionAt && notionAt > localAt)) choice = "notion";
+    }
+
+    if (choice === "local") {
+      try {
+        const pushed = await syncSectionOrderToNotion(state.scope_project_id, state.section);
+        if (pushed) {
+          await setSectionState(state.scope_project_id, state.section, {
+            pending_local_sync_at: null,
+            last_outbound_synced_at: new Date().toISOString(),
+            ...(notionAt && localAt && notionAt <= localAt
+              ? {
+                pending_notion_sync_at: null,
+                pending_notion_item_ids: null,
+              }
+              : {}),
+          });
+          processed += 1;
+          outbound += 1;
+        }
+      } catch (error) {
+        console.error("Failed to flush outbound section order", state.scope_project_id, state.section, error);
+      }
+      continue;
+    }
+
+    if (choice === "notion") {
+      const notionIds = Array.isArray(state.pending_notion_item_ids)
+        ? state.pending_notion_item_ids.map((id: unknown) => String(id || "")).filter(Boolean)
+        : [];
+      if (!notionIds.length) {
+        await setSectionState(state.scope_project_id, state.section, {
+          pending_notion_sync_at: null,
+        });
+        continue;
+      }
+
+      try {
+        await applySectionOrder(state.scope_project_id, state.section, notionIds);
+        await setSectionState(state.scope_project_id, state.section, {
+          pending_notion_sync_at: null,
+          pending_notion_item_ids: null,
+          last_inbound_applied_at: new Date().toISOString(),
+          ...(localAt && notionAt && localAt <= notionAt
+            ? {
+              pending_local_sync_at: null,
+            }
+            : {}),
+        });
+        processed += 1;
+        inbound += 1;
+      } catch (error) {
+        console.error("Failed to flush inbound section order", state.scope_project_id, state.section, error);
+      }
+    }
+  }
+
+  return { processed, outbound, inbound };
 }
 
 export async function backfillProjectItemsToNotion(projectId: string): Promise<{
