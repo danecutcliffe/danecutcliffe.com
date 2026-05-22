@@ -1,4 +1,5 @@
 import {
+  backfillProjectItemsToNotion,
   json,
   requireAdmin,
   syncDatabase,
@@ -14,6 +15,16 @@ Deno.serve(async (request) => {
     await requireAdmin(accessToken);
 
     const body = await request.json().catch(() => ({}));
+    if (body.action === "repair-orphans") {
+      const scopeProjectId = String(body.scopeProjectId || "");
+      if (!scopeProjectId) {
+        return json(400, { error: "Scope project is required." });
+      }
+
+      const result = await backfillProjectItemsToNotion(scopeProjectId);
+      return json(200, result);
+    }
+
     const jobSiteId = body.jobSiteId;
     const notionDatabaseUrl = body.notionDatabaseUrl;
     if (!jobSiteId || !notionDatabaseUrl) {

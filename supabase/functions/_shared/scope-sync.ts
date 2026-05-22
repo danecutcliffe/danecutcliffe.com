@@ -47,6 +47,38 @@ function stripOnSitePrefix(value: string): string {
   return value.startsWith(ON_SITE_NOTION_PREFIX) ? value.slice(ON_SITE_NOTION_PREFIX.length).trim() : value;
 }
 
+function notionRichTextForScopeItem(item: any): Array<Record<string, unknown>> {
+  const isEmployeeItem = item?.source === "employee";
+  return [{
+    type: "text",
+    text: {
+      content: isEmployeeItem ? `${ON_SITE_NOTION_PREFIX}${item.item_text}` : String(item.item_text || ""),
+    },
+    ...(isEmployeeItem
+      ? {
+        annotations: {
+          italic: true,
+          color: "orange_background",
+        },
+      }
+      : {}),
+  }];
+}
+
+function notionToDoBlockForScopeItem(item: any): Record<string, unknown> {
+  const isEmployeeItem = item?.source === "employee";
+  const checked = Boolean(item?.completed_at || item?.notion_checked);
+  return {
+    object: "block",
+    type: "to_do",
+    to_do: {
+      ...(isEmployeeItem ? { color: "orange_background" } : {}),
+      rich_text: notionRichTextForScopeItem(item),
+      checked,
+    },
+  };
+}
+
 export async function notion(path: string, options: RequestInit = {}): Promise<any> {
   if (!NOTION_TOKEN) throw new Error("NOTION_API_KEY is not configured in Supabase.");
   const response = await fetch(`https://api.notion.com/v1${path}`, {
@@ -373,7 +405,6 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
   }
 
   const stale = existing.filter((item: any) => (
-    item.source === "notion" &&
     item.notion_block_id &&
     !seenIds.has(item.id)
   ));
@@ -381,7 +412,14 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
     await supabase(`/rest/v1/scope_items?id=eq.${encodeURIComponent(item.id)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ is_active: false, sync_status: "notion-missing", last_pulled_from_notion_at: now }),
+      body: JSON.stringify({
+        is_active: false,
+        notion_checked: false,
+        completed_at: null,
+        completed_by: null,
+        sync_status: "notion-missing",
+        last_pulled_from_notion_at: now,
+      }),
     });
   }
 
@@ -549,6 +587,7 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
   const projects = await supabase(`/rest/v1/scope_projects?select=*&id=eq.${encodeURIComponent(item.scope_project_id)}&limit=1`);
   const project = projects[0];
   if (!project?.notion_page_id) return false;
+  const checked = Boolean(item?.completed_at || item?.notion_checked);
 
   const siblings = await supabase(`/rest/v1/scope_items?select=notion_parent_block_id&scope_project_id=eq.${encodeURIComponent(item.scope_project_id)}&section=eq.${encodeURIComponent(item.section)}&notion_parent_block_id=not.is.null&limit=1`);
   let parentBlockId = siblings[0]?.notion_parent_block_id || null;
@@ -560,21 +599,7 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
   const response = await notion(`/blocks/${encodeURIComponent(parentBlockId)}/children`, {
     method: "PATCH",
     body: JSON.stringify({
-      children: [{
-        object: "block",
-        type: "to_do",
-        to_do: {
-          rich_text: [{
-            type: "text",
-            text: { content: `${ON_SITE_NOTION_PREFIX}${item.item_text}` },
-            annotations: {
-              italic: true,
-              color: "orange_background",
-            },
-          }],
-          checked: false,
-        },
-      }],
+      children: [notionToDoBlockForScopeItem(item)],
     }),
   });
   const block = response.results?.[0];
@@ -585,10 +610,92 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
     body: JSON.stringify({
       notion_block_id: block.id,
       notion_parent_block_id: parentBlockId === project.notion_page_id ? null : parentBlockId,
-      notion_checked: false,
+      notion_checked: checked,
       last_pushed_to_notion_at: new Date().toISOString(),
       sync_status: "notion-pushed",
     }),
   });
   return true;
+}
+
+export async function syncSectionOrderToNotion(projectId: string, section: string): Promise<boolean> {
+  const projects = await supabase(`/rest/v1/scope_projects?select=*&id=eq.${encodeURIComponent(projectId)}&limit=1`);
+  const project = projects[0];
+  if (!project?.notion_page_id) return false;
+
+  const items = await supabase(
+    `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(section)}&is_active=eq.true&order=sort_order.asc`,
+  );
+  if (!items.length) return true;
+
+  let parentBlockId = items.find((item: any) => item.notion_parent_block_id)?.notion_parent_block_id || null;
+  if (!parentBlockId) {
+    const notionItems = await pageBlocksToItems(project.notion_page_id);
+    parentBlockId = notionItems.find((item) => item.section === section && item.parentBlockId)?.parentBlockId || null;
+  }
+  const targetParentId = parentBlockId || project.notion_page_id;
+  const oldBlockIds = items.map((item: any) => String(item.notion_block_id || "")).filter(Boolean);
+
+  const response = await notion(`/blocks/${encodeURIComponent(targetParentId)}/children`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      position: { type: "start" },
+      children: items.map((item: any) => notionToDoBlockForScopeItem(item)),
+    }),
+  });
+
+  const newBlocks = response.results || [];
+  const pushedAt = new Date().toISOString();
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const block = newBlocks[index];
+    if (!block?.id) continue;
+    await supabase(`/rest/v1/scope_items?id=eq.${encodeURIComponent(item.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        notion_block_id: block.id,
+        notion_parent_block_id: targetParentId === project.notion_page_id ? null : targetParentId,
+        notion_checked: Boolean(item.completed_at || item.notion_checked),
+        last_pushed_to_notion_at: pushedAt,
+        sync_status: "notion-pushed",
+      }),
+    });
+  }
+
+  for (const blockId of oldBlockIds) {
+    if (newBlocks.some((block: any) => block.id === blockId)) continue;
+    await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" }).catch(() => null);
+  }
+
+  const refreshedPage = await notion(`/pages/${encodeURIComponent(project.notion_page_id)}`);
+  await syncPage(refreshedPage);
+  return true;
+}
+
+export async function backfillProjectItemsToNotion(projectId: string): Promise<{
+  repaired: number;
+  failed: number;
+  failedItems: string[];
+}> {
+  const orphanItems = await supabase(
+    `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&source=eq.employee&is_active=eq.true&notion_block_id=is.null&order=sort_order.asc`,
+  );
+
+  let repaired = 0;
+  let failed = 0;
+  const failedItems: string[] = [];
+
+  for (const item of orphanItems) {
+    const pushed = await pushNewItemToNotion(item);
+    if (pushed) {
+      repaired += 1;
+    } else {
+      failed += 1;
+      failedItems.push(String(item.item_text || item.id || "Unknown item"));
+    }
+  }
+
+  return { repaired, failed, failedItems };
 }

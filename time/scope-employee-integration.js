@@ -14,6 +14,15 @@
     isLoading: false,
     isCheckingMount: false,
     hasLoaded: false,
+    isSavingReorder: false,
+    drag: null,
+    root: null,
+    config: {
+      forcedJobCode: "",
+      allowIdleView: false,
+      forceMount: false,
+    },
+    usingForcedJobCode: false,
   };
 
   const els = {};
@@ -32,9 +41,7 @@
       }
 
       .scope-employee-topbar,
-      .scope-employee-card-head,
-      .scope-employee-section-toggle,
-      .scope-employee-row {
+      .scope-employee-section-toggle {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -106,12 +113,6 @@
         padding: 0 1rem;
         font: inherit;
         font-weight: 900;
-      }
-
-      .scope-employee-button.secondary {
-        border: 1px solid var(--color-border, #44403c);
-        background: transparent;
-        color: var(--color-muted-strong, #d6d3d1);
       }
 
       .scope-employee-button:disabled {
@@ -214,19 +215,20 @@
 
       .scope-employee-item {
         display: grid;
-        grid-template-columns: 2rem minmax(0, 1fr);
+        grid-template-columns: 2.1rem 2rem minmax(0, 1fr);
         gap: 0.625rem;
         align-items: start;
         border: 1px solid var(--color-app-border-subtle, rgba(255, 255, 255, 0.08));
         border-radius: 0.5rem;
         background: var(--color-card-alt, #1c1917);
         padding: 0.75rem;
+        transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
       }
 
       .scope-employee-item input {
         width: 1.5rem;
         height: 1.5rem;
-        margin: 0;
+        margin: 0.15rem 0 0;
         accent-color: var(--color-accent, #da7756);
       }
 
@@ -246,6 +248,46 @@
         color: var(--color-muted, #a8a29e);
         font-size: 0.75rem;
         font-weight: 800;
+      }
+
+      .scope-employee-handle {
+        display: grid;
+        place-items: center;
+        width: 2rem;
+        min-height: 2rem;
+        border: 1px solid var(--color-border, #44403c);
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--color-muted, #a8a29e);
+        font-size: 1rem;
+        font-weight: 900;
+        line-height: 1;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .scope-employee-handle:disabled {
+        opacity: 0.45;
+      }
+
+      .scope-employee-item-placeholder {
+        border-style: dashed;
+        border-color: rgba(218, 119, 86, 0.55);
+        background: rgba(218, 119, 86, 0.08);
+      }
+
+      .scope-employee-item-floating {
+        position: fixed;
+        z-index: 9999;
+        pointer-events: none;
+        box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
+        border-color: rgba(218, 119, 86, 0.65);
+        transform: scale(1.02);
+      }
+
+      .scope-employee-item-reorder-locked {
+        opacity: 0.7;
       }
 
       .scope-employee-field {
@@ -296,14 +338,20 @@
     try {
       const saved = JSON.parse(localStorage.getItem(key));
       return { key, saved, session: saved?.currentSession || saved?.session || saved };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   function saveStoredSession(authStore, session) {
     if (!authStore?.key || !session) return;
     const saved = authStore.saved || {};
-    if (saved.currentSession || saved.session) { saved.currentSession = session; saved.session = session; }
-    else { Object.assign(saved, session); }
+    if (saved.currentSession || saved.session) {
+      saved.currentSession = session;
+      saved.session = session;
+    } else {
+      Object.assign(saved, session);
+    }
     localStorage.setItem(authStore.key, JSON.stringify(saved));
     authStore.saved = saved;
     authStore.session = session;
@@ -358,7 +406,9 @@
         return "Your Time Clock sign-in expired. Sign in again.";
       }
       return parsed.message || parsed.error || message;
-    } catch { return message; }
+    } catch {
+      return message;
+    }
   }
 
   async function loadProfile() {
@@ -371,11 +421,42 @@
     return state.profile;
   }
 
+  function getRootConfig(root) {
+    return {
+      forcedJobCode: String(root?.dataset?.scopeJobCode || "").trim().toUpperCase(),
+      allowIdleView: root?.dataset?.scopeAllowIdleView === "true",
+      forceMount: root?.dataset?.scopeForceMount === "true" || root?.hasAttribute("data-scope-employee-root"),
+    };
+  }
+
+  async function resolveProjectForJobCode(jobCode) {
+    if (!jobCode) return null;
+    const jobRows = await request(`/rest/v1/job_codes?select=id,code&code=eq.${encodeURIComponent(jobCode)}&is_active=eq.true&limit=1`);
+    const resolvedJob = jobRows[0] || null;
+    if (!resolvedJob?.id) return null;
+    const projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${resolvedJob.id}&limit=1`);
+    return projectRows[0] || null;
+  }
+
+  function hasMatchingOpenPunch() {
+    return Boolean(state.openEntry?.job_code_id && state.project?.job_code_id && state.openEntry.job_code_id === state.project.job_code_id);
+  }
+
+  function canMutateScope() {
+    return Boolean(state.profile?.is_active && state.project?.id && hasMatchingOpenPunch() && !state.isSavingReorder);
+  }
+
+  function userDisplayName() {
+    if (!state.profile) return "Not signed in";
+    return `${state.profile.first_name || ""} ${state.profile.last_name || ""}`.trim();
+  }
+
   async function refreshScopeData() {
     const profile = await loadProfile();
     state.openEntry = null;
     state.project = null;
     state.items = [];
+    state.usingForcedJobCode = false;
 
     if (!profile || !profile.is_active) {
       state.hasLoaded = true;
@@ -385,13 +466,16 @@
     const openRows = await request(`/rest/v1/time_entries?select=id,job_code_id,clock_in,event_type&user_id=eq.${state.session.user.id}&event_type=eq.work&clock_out=is.null&order=clock_in.desc&limit=1`);
     state.openEntry = openRows[0] || null;
 
-    if (!state.openEntry?.job_code_id) {
-      state.hasLoaded = true;
-      return;
+    if (state.openEntry?.job_code_id) {
+      const projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
+      state.project = projectRows[0] || null;
     }
 
-    const projectRows = await request(`/rest/v1/scope_projects?select=*&is_active=eq.true&job_code_id=eq.${state.openEntry.job_code_id}&limit=1`);
-    state.project = projectRows[0] || null;
+    if (!state.project && !state.openEntry && state.config.allowIdleView && state.config.forcedJobCode) {
+      state.project = await resolveProjectForJobCode(state.config.forcedJobCode);
+      state.usingForcedJobCode = Boolean(state.project);
+    }
+
     if (!state.project) {
       state.hasLoaded = true;
       return;
@@ -414,18 +498,15 @@
     }
   }
 
-  /* ── Mount into React placeholder ────────────────────── */
-
   function mount(root) {
     if (state.isMounted) return;
+    state.root = root;
+    state.config = getRootConfig(root);
     state.isMounted = true;
     installStyles();
     buildPanel(root);
-    if (state.hasLoaded) {
-      render();
-    } else {
-      showLoading();
-    }
+    if (state.hasLoaded) render();
+    else showLoading();
     load().catch((error) => {
       showError(error.message);
       showNoScope("Scope could not be loaded.");
@@ -433,6 +514,8 @@
   }
 
   function unmount() {
+    if (state.drag) finishReorder(true);
+    state.root = null;
     state.isMounted = false;
     Object.keys(els).forEach((key) => { els[key] = null; });
   }
@@ -572,13 +655,46 @@
     }, new Map());
   }
 
+  function renderFormState() {
+    if (!els.form || !els.formStatus) return;
+    const canMutate = canMutateScope();
+    const disabled = !state.project || !canMutate;
+    Array.from(els.form.elements).forEach((field) => {
+      field.disabled = disabled;
+    });
+
+    if (!state.project) {
+      els.formStatus.textContent = "No scope is available to update yet.";
+      return;
+    }
+
+    if (canMutate) {
+      els.formStatus.textContent = "New items are saved to this scope and synced to Notion.";
+      return;
+    }
+
+    if (state.usingForcedJobCode && state.config.forcedJobCode) {
+      els.formStatus.textContent = `Clock into ${state.config.forcedJobCode} to add or reorder scope items.`;
+      return;
+    }
+
+    els.formStatus.textContent = "Clock into this job to update scope items.";
+  }
+
   function render() {
     if (!state.isMounted) return;
     showLoadedShell();
     const completed = state.items.filter((item) => item.completed_at).length;
     els.progress.textContent = `${completed} / ${state.items.length} complete`;
-    els.profile.textContent = state.profile ? `${state.profile.first_name} ${state.profile.last_name}` : "Not signed in";
-    els.job.textContent = state.openEntry ? "Clocked into matching job" : "No active punch";
+    els.profile.textContent = userDisplayName();
+
+    if (state.usingForcedJobCode && state.config.forcedJobCode && !hasMatchingOpenPunch()) {
+      els.job.textContent = `${state.config.forcedJobCode} mirror`;
+    } else if (hasMatchingOpenPunch()) {
+      els.job.textContent = "Clocked into matching job";
+    } else {
+      els.job.textContent = "No active punch";
+    }
 
     if (!state.project) {
       showNoScope(state.openEntry ? "No scope available at this time." : "Clock into a scoped job to see its scope of work.");
@@ -588,7 +704,9 @@
     els.addCard.classList.remove("scope-employee-hidden");
     els.eyebrow.textContent = state.project.unit_name || "Scope";
     els.title.textContent = state.project.property_name || "Active scope";
-    els.status.textContent = "Scope loaded from your active job code.";
+    els.status.textContent = state.usingForcedJobCode && state.config.forcedJobCode && !hasMatchingOpenPunch()
+      ? `Live mirror of ${state.config.forcedJobCode}. Clock into this job to update items.`
+      : "Scope loaded from your active job code.";
 
     const groups = groupItems(state.items);
     els.section.replaceChildren(...Array.from(groups.keys()).map((section) => {
@@ -597,6 +715,8 @@
       option.textContent = section;
       return option;
     }));
+
+    renderFormState();
 
     const fragment = document.createDocumentFragment();
     groups.forEach((items, section) => {
@@ -628,13 +748,30 @@
 
       const list = document.createElement("div");
       list.className = "scope-employee-items";
+      list.dataset.section = section;
+
+      const reorderEnabled = canMutateScope() && items.length > 1;
+
       items.forEach((item) => {
-        const row = document.createElement("label");
-        row.className = `scope-employee-item${item.completed_at ? " done" : ""}`;
+        const row = document.createElement("div");
+        row.className = `scope-employee-item${item.completed_at ? " done" : ""}${state.isSavingReorder ? " scope-employee-item-reorder-locked" : ""}`;
+        row.dataset.itemId = item.id;
+        row.dataset.section = section;
+
+        const handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = "scope-employee-handle";
+        handle.textContent = "≡";
+        handle.ariaLabel = reorderEnabled ? `Reorder ${item.item_text}` : "Reorder unavailable";
+        handle.disabled = !reorderEnabled;
+        handle.addEventListener("pointerdown", (event) => {
+          beginReorder(event, section, item.id, row, list);
+        });
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = Boolean(item.completed_at);
+        checkbox.disabled = !canMutateScope();
         checkbox.addEventListener("change", () => toggleItem(item.id, checkbox.checked));
 
         const body = document.createElement("div");
@@ -650,7 +787,7 @@
           body.append(source);
         }
 
-        row.append(checkbox, body);
+        row.append(handle, checkbox, body);
         list.append(row);
       });
 
@@ -678,15 +815,13 @@
         return;
       }
 
-      if (!state.openEntry?.job_code_id) {
-        showNoScope("Clock into a scoped job to see its scope of work.");
-        render();
-        return;
-      }
-
       if (!state.project) {
-        showNoScope("No scope available at this time.");
-        render();
+        if (state.openEntry?.job_code_id) showNoScope("No scope available at this time.");
+        else if (state.config.allowIdleView && state.config.forcedJobCode) {
+          showNoScope(`No live scope is linked to ${state.config.forcedJobCode} yet.`);
+        } else {
+          showNoScope("Clock into a scoped job to see its scope of work.");
+        }
         return;
       }
 
@@ -712,6 +847,169 @@
     } catch (error) {
       await load().catch(() => {});
       showError(error.message);
+    }
+  }
+
+  function getSectionOrderIds(section, sourceItems = state.items) {
+    return sourceItems.filter((item) => item.section === section).map((item) => item.id);
+  }
+
+  function applySectionOrder(section, orderedIds) {
+    const grouped = groupItems(state.items);
+    const original = grouped.get(section) || [];
+    const byId = new Map(original.map((item) => [item.id, item]));
+    grouped.set(section, orderedIds.map((id, index) => ({
+      ...byId.get(id),
+      sort_order: (index + 1) * 10,
+    })).filter(Boolean));
+
+    const rebuilt = [];
+    for (const [groupName, groupItemsList] of grouped.entries()) {
+      if (groupName === section) rebuilt.push(...(grouped.get(section) || []));
+      else rebuilt.push(...groupItemsList);
+    }
+    state.items = rebuilt;
+  }
+
+  function beginReorder(event, section, itemId, row, list) {
+    if (!canMutateScope() || state.isSavingReorder || state.drag) return;
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+
+    const rect = row.getBoundingClientRect();
+    const placeholder = document.createElement("div");
+    placeholder.className = "scope-employee-item scope-employee-item-placeholder";
+    placeholder.style.height = `${rect.height}px`;
+    placeholder.dataset.itemId = itemId;
+
+    const startOrderIds = Array.from(list.querySelectorAll(".scope-employee-item")).map((item) => item.dataset.itemId);
+
+    list.insertBefore(placeholder, row);
+    row.classList.add("scope-employee-item-floating");
+    row.style.width = `${rect.width}px`;
+    row.style.left = `${rect.left}px`;
+    row.style.top = `${rect.top}px`;
+    document.body.appendChild(row);
+
+    state.drag = {
+      pointerId: event.pointerId,
+      section,
+      itemId,
+      row,
+      list,
+      placeholder,
+      offsetY: event.clientY - rect.top,
+      left: rect.left,
+      startOrderIds,
+    };
+
+    window.addEventListener("pointermove", onDragMove, { passive: false });
+    window.addEventListener("pointerup", onDragEnd, { passive: false });
+    window.addEventListener("pointercancel", onDragCancel, { passive: false });
+    updateDragPosition(event.clientY);
+  }
+
+  function updateDragPosition(clientY) {
+    if (!state.drag) return;
+    state.drag.row.style.left = `${state.drag.left}px`;
+    state.drag.row.style.top = `${clientY - state.drag.offsetY}px`;
+  }
+
+  function repositionPlaceholder(clientY) {
+    if (!state.drag) return;
+    const { list, placeholder } = state.drag;
+    const siblings = Array.from(list.querySelectorAll(".scope-employee-item"))
+      .filter((item) => item !== placeholder);
+    const target = siblings.find((item) => clientY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
+    if (target) list.insertBefore(placeholder, target);
+    else list.appendChild(placeholder);
+  }
+
+  function onDragMove(event) {
+    if (!state.drag || event.pointerId !== state.drag.pointerId) return;
+    event.preventDefault();
+    updateDragPosition(event.clientY);
+    repositionPlaceholder(event.clientY);
+  }
+
+  function clearDragListeners() {
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", onDragEnd);
+    window.removeEventListener("pointercancel", onDragCancel);
+  }
+
+  function finishReorder(cancelled = false) {
+    if (!state.drag) return;
+    const { row, list, placeholder, section, startOrderIds } = state.drag;
+    clearDragListeners();
+
+    row.classList.remove("scope-employee-item-floating");
+    row.style.width = "";
+    row.style.left = "";
+    row.style.top = "";
+    list.replaceChild(row, placeholder);
+
+    const orderedIds = Array.from(list.querySelectorAll(".scope-employee-item")).map((item) => item.dataset.itemId);
+    state.drag = null;
+
+    if (cancelled) {
+      render();
+      return;
+    }
+
+    if (JSON.stringify(startOrderIds) !== JSON.stringify(orderedIds)) {
+      saveReorder(section, orderedIds).catch((error) => {
+        showError(error.message);
+      });
+      return;
+    }
+
+    render();
+  }
+
+  function onDragEnd(event) {
+    if (!state.drag || event.pointerId !== state.drag.pointerId) return;
+    event.preventDefault();
+    finishReorder(false);
+  }
+
+  function onDragCancel(event) {
+    if (!state.drag || event.pointerId !== state.drag.pointerId) return;
+    event.preventDefault();
+    finishReorder(true);
+  }
+
+  async function saveReorder(section, orderedIds) {
+    if (!state.project) return;
+    clearError();
+    const previousItems = state.items.map((item) => ({ ...item }));
+    state.isSavingReorder = true;
+    applySectionOrder(section, orderedIds);
+    render();
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-scope-action`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          action: "reorder",
+          scopeProjectId: state.project.id,
+          section,
+          itemIds: orderedIds,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Unable to save the new scope order.");
+      }
+      await load();
+    } catch (error) {
+      state.items = previousItems;
+      render();
+      throw error;
+    } finally {
+      state.isSavingReorder = false;
+      render();
     }
   }
 
@@ -741,10 +1039,12 @@
     await load();
   }
 
-  /* ── Watch for React placeholder ─────────────────────── */
+  function getMountRoot() {
+    return document.getElementById("scope-content-root") || document.querySelector("[data-scope-employee-root]");
+  }
 
   async function reconcileMount() {
-    const root = document.getElementById("scope-content-root");
+    const root = getMountRoot();
     if (!root) {
       if (state.isMounted) unmount();
       return;
@@ -753,11 +1053,22 @@
 
     state.isCheckingMount = true;
     try {
+      const config = getRootConfig(root);
+      if (config.forceMount) {
+        mount(root);
+        return;
+      }
+
       const profile = await loadProfile().catch(() => null);
       if (profile && profile.role !== "admin") mount(root);
     } finally {
       state.isCheckingMount = false;
     }
+  }
+
+  function refreshVisibleScope() {
+    if (!state.isMounted || document.hidden) return;
+    load().catch((error) => showError(error.message));
   }
 
   const observer = new MutationObserver(() => {
@@ -769,4 +1080,7 @@
     reconcileMount();
     prefetchScopeData();
   });
+
+  window.addEventListener("focus", refreshVisibleScope);
+  document.addEventListener("visibilitychange", refreshVisibleScope);
 })();

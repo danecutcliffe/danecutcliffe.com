@@ -2,6 +2,7 @@ import {
   json,
   pushItemToggleToNotion,
   pushNewItemToNotion,
+  syncSectionOrderToNotion,
   supabase,
   supabaseAsUser,
 } from "../_shared/scope-sync.ts";
@@ -50,6 +51,26 @@ Deno.serve(async (request) => {
       });
       const pushedToNotion = await pushNewItemToNotion(item);
       return json(200, { item, pushedToNotion });
+    }
+
+    if (body.action === "reorder") {
+      const scopeProjectId = String(body.scopeProjectId || "");
+      const section = String(body.section || "");
+      const itemIds = Array.isArray(body.itemIds) ? body.itemIds.map((value) => String(value || "")).filter(Boolean) : [];
+      if (!scopeProjectId || !section || !itemIds.length) {
+        return json(400, { error: "Scope project, section, and reordered items are required." });
+      }
+
+      const items = await supabaseAsUser("/rest/v1/rpc/scope_reorder_items", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          p_scope_project_id: scopeProjectId,
+          p_section: section,
+          p_item_ids: itemIds,
+        }),
+      });
+      const pushedToNotion = await syncSectionOrderToNotion(scopeProjectId, section);
+      return json(200, { items, pushedToNotion });
     }
 
     return json(400, { error: "Unknown scope action." });
