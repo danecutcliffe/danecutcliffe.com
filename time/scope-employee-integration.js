@@ -9,6 +9,7 @@
     openEntry: null,
     project: null,
     items: [],
+    sections: [],
     sectionOrder: [],
     sectionOrderProjectId: "",
     collapsedSections: new Set(),
@@ -460,11 +461,26 @@
     return `${state.profile.first_name || ""} ${state.profile.last_name || ""}`.trim();
   }
 
+  function normalizeItemIdentity(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
+  }
+
+  function dedupeScopeItems(items) {
+    const seen = new Set();
+    return items.filter((item) => {
+      const key = `${item.section || "Scope"}\n${normalizeItemIdentity(item.item_text)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   async function refreshScopeData() {
     const profile = await loadProfile();
     state.openEntry = null;
     state.project = null;
     state.items = [];
+    state.sections = [];
     state.usingForcedJobCode = false;
 
     if (!profile || !profile.is_active) {
@@ -490,7 +506,12 @@
       return;
     }
 
-    state.items = await request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`);
+    const [sections, items] = await Promise.all([
+      request(`/rest/v1/scope_sections?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=sort_order.asc`).catch(() => []),
+      request(`/rest/v1/scope_items?select=*&scope_project_id=eq.${state.project.id}&is_active=eq.true&order=section.asc,sort_order.asc,created_at.asc`),
+    ]);
+    state.sections = sections;
+    state.items = dedupeScopeItems(items);
     state.hasLoaded = true;
   }
 
@@ -676,7 +697,13 @@
 
   function syncSectionUiState(groups) {
     const projectId = state.project?.id || "";
-    const sectionNames = Array.from(groups.keys());
+    const knownSections = state.sections
+      .map((section) => section.section)
+      .filter((section) => groups.has(section));
+    const sectionNames = [
+      ...knownSections,
+      ...Array.from(groups.keys()).filter((section) => !knownSections.includes(section)),
+    ];
     if (state.sectionOrderProjectId !== projectId) {
       state.sectionOrderProjectId = projectId;
       state.sectionOrder = [...sectionNames];

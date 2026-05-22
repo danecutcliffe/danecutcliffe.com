@@ -1,6 +1,7 @@
 import {
   backfillProjectItemsToNotion,
   json,
+  repairScopeSection,
   requireAdmin,
   syncDatabase,
 } from "../_shared/scope-sync.ts";
@@ -22,6 +23,17 @@ Deno.serve(async (request) => {
       }
 
       const result = await backfillProjectItemsToNotion(scopeProjectId);
+      return json(200, result);
+    }
+
+    if (body.action === "repair-section") {
+      const scopeProjectId = String(body.scopeProjectId || "");
+      const section = body.section == null ? undefined : String(body.section || "");
+      if (!scopeProjectId) {
+        return json(400, { error: "Scope project is required." });
+      }
+
+      const result = await repairScopeSection(scopeProjectId, section || undefined);
       return json(200, result);
     }
 

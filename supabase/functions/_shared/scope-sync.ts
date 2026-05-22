@@ -53,6 +53,17 @@ function normalizeSection(value: unknown): string {
   return text || "Added on site";
 }
 
+function normalizeScopeItemText(value: unknown): string {
+  return stripOnSitePrefix(String(value || ""))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim();
+}
+
+function scopeItemIdentityKey(section: unknown, itemText: unknown): string {
+  return `${normalizeSection(section).toLowerCase()}\n${normalizeScopeItemText(itemText)}`;
+}
+
 function orderHash(ids: string[]): string {
   return ids.map((id) => String(id || "")).join("|");
 }
@@ -63,6 +74,18 @@ function arraysEqual(left: string[], right: string[]): boolean {
     if (String(left[index]) !== String(right[index])) return false;
   }
   return true;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = String(value || "");
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
 }
 
 async function upsertSectionState(payload: Record<string, unknown>): Promise<any> {
@@ -110,7 +133,7 @@ async function clearPendingNotionReorder(projectId: string, section: string, not
 }
 
 export async function recordNotionSectionReorder(projectId: string, section: string, orderedItemIds: string[]): Promise<void> {
-  const normalizedIds = orderedItemIds.map((id) => String(id)).filter(Boolean);
+  const normalizedIds = uniqueStrings(orderedItemIds.map((id) => String(id)).filter(Boolean));
   const currentIds = await currentSectionOrderIds(projectId, section);
   if (arraysEqual(currentIds, normalizedIds)) {
     await clearPendingNotionReorder(projectId, section, normalizedIds);
@@ -360,6 +383,48 @@ function isScopeContentBlock(block: any): boolean {
   return ["to_do", "bulleted_list_item", "numbered_list_item", "paragraph"].includes(String(block?.type || ""));
 }
 
+async function syncSections(projectId: string, notionItems: NotionScopeItem[]): Promise<void> {
+  const sectionOrder = new Map<string, { section: string; sortOrder: number; notionBlockId: string | null }>();
+  for (const item of notionItems) {
+    const section = normalizeSection(item.section);
+    if (!sectionOrder.has(section)) {
+      sectionOrder.set(section, {
+        section,
+        sortOrder: (sectionOrder.size + 1) * 10,
+        notionBlockId: item.parentBlockId,
+      });
+    }
+  }
+
+  const seenSections = new Set(sectionOrder.keys());
+  for (const section of sectionOrder.values()) {
+    await supabase("/rest/v1/scope_sections?on_conflict=scope_project_id,section&select=*", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify([{
+        scope_project_id: projectId,
+        section: section.section,
+        sort_order: section.sortOrder,
+        notion_block_id: section.notionBlockId,
+        is_active: true,
+      }]),
+    });
+  }
+
+  const existing = await supabase(`/rest/v1/scope_sections?select=section&scope_project_id=eq.${encodeURIComponent(projectId)}&is_active=eq.true`);
+  for (const row of existing) {
+    if (seenSections.has(normalizeSection(row.section))) continue;
+    await supabase(
+      `/rest/v1/scope_sections?scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(normalizeSection(row.section))}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ is_active: false }),
+      },
+    );
+  }
+}
+
 export async function pageBlocksToItems(pageId: string): Promise<NotionScopeItem[]> {
   const items: NotionScopeItem[] = [];
   let sortOrder = 10;
@@ -447,12 +512,21 @@ async function saveProject(project: Record<string, unknown>): Promise<any> {
   return rows[0];
 }
 
-async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Promise<{ inserted: number; updated: number; deactivated: number }> {
+async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Promise<{
+  inserted: number;
+  updated: number;
+  deactivated: number;
+  duplicateSections: string[];
+}> {
   const dedupedNotionItems: NotionScopeItem[] = [];
   const seenNotionKeys = new Set<string>();
+  const duplicateSections = new Set<string>();
   for (const item of notionItems) {
-    const dedupeKey = `${normalizeSection(item.section)}\n${stripOnSitePrefix(item.itemText)}`;
-    if (seenNotionKeys.has(dedupeKey)) continue;
+    const dedupeKey = scopeItemIdentityKey(item.section, item.itemText);
+    if (seenNotionKeys.has(dedupeKey)) {
+      duplicateSections.add(normalizeSection(item.section));
+      continue;
+    }
     seenNotionKeys.add(dedupeKey);
     dedupedNotionItems.push(item);
   }
@@ -460,7 +534,15 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
   const existing = await supabase(`/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}`);
   const activeExisting = existing.filter((item: any) => item.is_active);
   const byBlock = new Map(existing.filter((item: any) => item.notion_block_id).map((item: any) => [stripNotionId(item.notion_block_id), item]));
-  const byText = new Map(existing.map((item: any) => [`${item.section}\n${item.item_text}`, item]));
+  const byIdentity = new Map<string, any>();
+  for (const item of [...activeExisting, ...existing.filter((item: any) => !item.is_active)].sort((left: any, right: any) => {
+    const sortDelta = Number(left.sort_order || 0) - Number(right.sort_order || 0);
+    if (sortDelta !== 0) return sortDelta;
+    return String(left.created_at || "").localeCompare(String(right.created_at || ""));
+  })) {
+    const key = scopeItemIdentityKey(item.section, item.item_text);
+    if (!byIdentity.has(key)) byIdentity.set(key, item);
+  }
   const currentOrderBySection = new Map<string, string[]>();
   const nextSortBySection = new Map<string, number>();
   for (const item of activeExisting.sort((left: any, right: any) => Number(left.sort_order || 0) - Number(right.sort_order || 0))) {
@@ -479,8 +561,14 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
   for (const item of dedupedNotionItems) {
     const blockKey = stripNotionId(item.blockId);
     const section = normalizeSection(item.section);
-    const textKey = `${section}\n${item.itemText}`;
-    const current = byBlock.get(blockKey) || byText.get(textKey);
+    const identityKey = scopeItemIdentityKey(section, item.itemText);
+    const blockMatch = byBlock.get(blockKey);
+    const identityMatch = byIdentity.get(identityKey);
+    const current = blockMatch && !seenIds.has(String(blockMatch.id))
+      ? blockMatch
+      : identityMatch && !seenIds.has(String(identityMatch.id))
+        ? identityMatch
+        : null;
     const payload: Record<string, unknown> = {
       scope_project_id: projectId,
       section,
@@ -552,15 +640,60 @@ async function syncItems(projectId: string, notionItems: NotionScopeItem[]): Pro
   }
 
   for (const [section, notionIds] of notionOrderBySection.entries()) {
-    const currentIds = (currentOrderBySection.get(section) || []).filter((id) => !stale.some((item: any) => String(item.id) === id));
-    if (arraysEqual(currentIds, notionIds)) {
-      await clearPendingNotionReorder(projectId, section, notionIds);
+    const uniqueNotionIds = uniqueStrings(notionIds);
+    const currentIds = uniqueStrings((currentOrderBySection.get(section) || []).filter((id) => !stale.some((item: any) => String(item.id) === id)));
+    if (arraysEqual(currentIds, uniqueNotionIds)) {
+      await clearPendingNotionReorder(projectId, section, uniqueNotionIds);
     } else {
-      await recordNotionSectionReorder(projectId, section, notionIds);
+      await recordNotionSectionReorder(projectId, section, uniqueNotionIds);
     }
   }
 
-  return { inserted, updated, deactivated: stale.length };
+  return {
+    inserted,
+    updated,
+    deactivated: stale.length,
+    duplicateSections: Array.from(duplicateSections),
+  };
+}
+
+async function dedupeActiveScopeItems(projectId: string, section?: string): Promise<{ deactivated: number; sections: string[] }> {
+  const filter = section ? `&section=eq.${encodeURIComponent(normalizeSection(section))}` : "";
+  const items = await supabase(
+    `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&is_active=eq.true${filter}&order=sort_order.asc,created_at.asc`,
+  );
+  const seen = new Map<string, any>();
+  const duplicates: any[] = [];
+  const touchedSections = new Set<string>();
+
+  for (const item of items) {
+    const key = scopeItemIdentityKey(item.section, item.item_text);
+    touchedSections.add(normalizeSection(item.section));
+    if (!seen.has(key)) {
+      seen.set(key, item);
+      continue;
+    }
+    duplicates.push(item);
+  }
+
+  for (const duplicate of duplicates) {
+    await supabase(`/rest/v1/scope_items?id=eq.${encodeURIComponent(duplicate.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        is_active: false,
+        notion_checked: false,
+        completed_at: null,
+        completed_by: null,
+        sync_status: "duplicate-deactivated",
+      }),
+    });
+  }
+
+  return {
+    deactivated: duplicates.length,
+    sections: Array.from(touchedSections),
+  };
 }
 
 export async function syncPage(page: any, mapping?: any): Promise<any | null> {
@@ -613,8 +746,29 @@ export async function syncPage(page: any, mapping?: any): Promise<any | null> {
   });
 
   const items = await pageBlocksToItems(page.id);
+  await syncSections(project.id, items);
   const summary = await syncItems(project.id, items);
-  return { project, rawJobCode, jobCode, itemSummary: summary };
+  const repairedDuplicateSections: string[] = [];
+  const duplicateRepairErrors: string[] = [];
+  for (const section of summary.duplicateSections || []) {
+    try {
+      const pushed = await syncSectionOrderToNotion(project.id, section, { resyncPage: false });
+      if (pushed) repairedDuplicateSections.push(section);
+    } catch (error) {
+      duplicateRepairErrors.push(`${section}: ${error instanceof Error ? error.message : "repair failed"}`);
+    }
+  }
+
+  return {
+    project,
+    rawJobCode,
+    jobCode,
+    itemSummary: {
+      ...summary,
+      repairedDuplicateSections,
+      duplicateRepairErrors,
+    },
+  };
 }
 
 export async function syncDatabase(jobSiteId: string, notionDatabaseUrl: string, providedDataSourceId?: string): Promise<any> {
@@ -660,6 +814,8 @@ export async function syncDatabase(jobSiteId: string, notionDatabaseUrl: string,
       projectId: result?.project?.id,
       insertedItems: result?.itemSummary?.inserted || 0,
       updatedItems: result?.itemSummary?.updated || 0,
+      duplicateSections: result?.itemSummary?.duplicateSections || [],
+      repairedDuplicateSections: result?.itemSummary?.repairedDuplicateSections || [],
     });
   }
 
@@ -755,11 +911,16 @@ export async function pushNewItemToNotion(item: any): Promise<boolean> {
   return true;
 }
 
-export async function syncSectionOrderToNotion(projectId: string, section: string): Promise<boolean> {
+export async function syncSectionOrderToNotion(
+  projectId: string,
+  section: string,
+  options: { resyncPage?: boolean } = {},
+): Promise<boolean> {
   const projects = await supabase(`/rest/v1/scope_projects?select=*&id=eq.${encodeURIComponent(projectId)}&limit=1`);
   const project = projects[0];
   if (!project?.notion_page_id) return false;
 
+  await dedupeActiveScopeItems(projectId, section);
   const items = await supabase(
     `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(section)}&is_active=eq.true&order=sort_order.asc`,
   );
@@ -810,9 +971,30 @@ export async function syncSectionOrderToNotion(projectId: string, section: strin
     await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" }).catch(() => null);
   }
 
-  const refreshedPage = await notion(`/pages/${encodeURIComponent(project.notion_page_id)}`);
-  await syncPage(refreshedPage);
+  if (options.resyncPage !== false) {
+    const refreshedPage = await notion(`/pages/${encodeURIComponent(project.notion_page_id)}`);
+    await syncPage(refreshedPage);
+  }
   return true;
+}
+
+export async function repairScopeSection(projectId: string, section?: string): Promise<{
+  deactivatedDuplicates: number;
+  repairedSections: string[];
+}> {
+  const dedupe = await dedupeActiveScopeItems(projectId, section);
+  const sections = section ? [normalizeSection(section)] : dedupe.sections;
+  const repairedSections: string[] = [];
+
+  for (const targetSection of sections) {
+    const pushed = await syncSectionOrderToNotion(projectId, targetSection);
+    if (pushed) repairedSections.push(targetSection);
+  }
+
+  return {
+    deactivatedDuplicates: dedupe.deactivated,
+    repairedSections,
+  };
 }
 
 export async function flushDueSectionSyncs(projectId?: string): Promise<{ processed: number; outbound: number; inbound: number }> {
