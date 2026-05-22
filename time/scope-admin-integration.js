@@ -13,6 +13,7 @@
     isMounted: false,
     isLoading: false,
     isCheckingMount: false,
+    checkedProfileUserId: "",
     syncResult: null,
   };
 
@@ -25,8 +26,12 @@
     style.textContent = `
       .scope-admin-shell {
         width: 100%;
-        max-width: 56rem;
+        max-width: none;
         margin: 0 auto;
+      }
+
+      .scope-admin-settings-root {
+        margin-top: 1.5rem;
       }
 
       .scope-admin-topbar,
@@ -206,6 +211,16 @@
       .scope-admin-hidden {
         display: none !important;
       }
+
+      [data-admin-hidden-scope-tab="true"] {
+        display: none !important;
+      }
+
+      @media (max-width: 767px) {
+        [data-mobile-hidden-reports-tab="true"] {
+          display: none !important;
+        }
+      }
     `;
     document.head.append(style);
   }
@@ -306,12 +321,33 @@
   async function checkAdminProfile() {
     state.authStore = getStoredAuth();
     state.session = state.authStore?.session || null;
-    if (!state.session?.access_token || !state.session?.user?.id) return null;
+    if (!state.session?.access_token || !state.session?.user?.id) {
+      state.profile = null;
+      state.checkedProfileUserId = "";
+      return null;
+    }
     if (sessionNeedsRefresh(state.session)) state.session = await refreshSession(state.authStore);
     const rows = await request(`/rest/v1/profiles?select=id,first_name,last_name,role,is_active&id=eq.${state.session.user.id}&limit=1`);
     const profile = rows[0] || null;
     if (profile?.is_active && profile.role === "admin") { state.profile = profile; return profile; }
+    state.profile = null;
     return null;
+  }
+
+  async function ensureAdminProfile() {
+    const authStore = getStoredAuth();
+    const userId = authStore?.session?.user?.id || "";
+    if (!authStore?.session?.access_token || !userId) {
+      state.profile = null;
+      state.checkedProfileUserId = "";
+      return null;
+    }
+    if (state.checkedProfileUserId === userId) return state.profile;
+    state.checkedProfileUserId = userId;
+    return checkAdminProfile().catch(() => {
+      state.checkedProfileUserId = "";
+      return null;
+    });
   }
 
   async function loadData() {
@@ -352,14 +388,6 @@
     const shell = document.createElement("div");
     shell.className = "scope-admin-shell";
     shell.innerHTML = `
-      <header class="scope-admin-topbar">
-        <div>
-          <p class="scope-admin-kicker">Admin</p>
-          <h1 class="scope-admin-title">Scope</h1>
-          <p class="scope-admin-subtitle">Choose a property, paste the Notion scope database link, and the app will match rows automatically where Notion's Job Code equals the Time app job code.</p>
-        </div>
-      </header>
-      <div id="scope-admin-message" class="scope-admin-notice scope-admin-hidden"></div>
       <div class="scope-admin-layout">
         <section class="scope-admin-card">
           <div class="scope-admin-card-head">
@@ -382,27 +410,7 @@
               <button class="scope-admin-button" type="submit" id="scope-connect-button">Connect / Refresh from Notion</button>
             </div>
           </form>
-        </section>
-        <section class="scope-admin-card">
-          <div>
-            <p class="scope-admin-kicker">Detected Matches</p>
-            <h2 class="scope-admin-title" style="font-size: 1.35rem;">What the app found</h2>
-          </div>
-          <div class="scope-admin-list" id="scope-match-list"></div>
-        </section>
-        <section class="scope-admin-card">
-          <div>
-            <p class="scope-admin-kicker">Current Links</p>
-            <h2 class="scope-admin-title" style="font-size: 1.35rem;">Active scope projects</h2>
-          </div>
-          <div class="scope-admin-list" id="scope-project-list"></div>
-        </section>
-        <section class="scope-admin-card">
-          <div>
-            <p class="scope-admin-kicker">Review</p>
-            <h2 class="scope-admin-title" style="font-size: 1.35rem;">Needs attention</h2>
-          </div>
-          <div class="scope-admin-list" id="scope-review-list"></div>
+          <div id="scope-admin-message" class="scope-admin-notice scope-admin-hidden"></div>
         </section>
       </div>
     `;
@@ -459,9 +467,9 @@
     els.databaseUrl.value = mapping?.notion_database_url || "";
     els.mappingPill.textContent = mapping ? "Connected" : "Not connected";
     els.mappingPill.classList.toggle("good", Boolean(mapping));
-    renderMatches();
-    renderProjects();
-    renderReview();
+    if (els.matchList) renderMatches();
+    if (els.projectList) renderProjects();
+    if (els.reviewList) renderReview();
   }
 
   function renderMatches() {
@@ -553,10 +561,40 @@
     }
   }
 
+  function markNavButton(label, dataName) {
+    Array.from(document.querySelectorAll("button")).forEach((button) => {
+      const text = button.textContent.replace(/\s+/g, " ").trim();
+      if (text === label) button.dataset[dataName] = "true";
+    });
+  }
+
+  function updateNavigationVisibility() {
+    if (state.profile?.role !== "admin") return;
+    markNavButton("Scope", "adminHiddenScopeTab");
+    markNavButton("Reports", "mobileHiddenReportsTab");
+  }
+
+  function findSettingsMountRoot() {
+    if (document.getElementById("scope-content-root")) return null;
+    const jobCodesSection = document.getElementById("job-codes");
+    if (!jobCodesSection) return null;
+    let root = document.getElementById("scope-settings-content-root");
+    if (!root) {
+      root = document.createElement("div");
+      root.id = "scope-settings-content-root";
+      root.className = "scope-admin-settings-root scroll-mt-20";
+      jobCodesSection.insertAdjacentElement("afterend", root);
+    }
+    return root;
+  }
+
   /* ── Watch for React placeholder ─────────────────────── */
 
   async function reconcileMount() {
-    const root = document.getElementById("scope-content-root");
+    installStyles();
+    if (!state.isCheckingMount) await ensureAdminProfile();
+    updateNavigationVisibility();
+    const root = document.getElementById("scope-content-root") || findSettingsMountRoot();
     if (!root) {
       if (state.isMounted) unmount();
       return;
@@ -565,7 +603,8 @@
 
     state.isCheckingMount = true;
     try {
-      const profile = await checkAdminProfile().catch(() => null);
+      const profile = state.profile || await checkAdminProfile().catch(() => null);
+      updateNavigationVisibility();
       if (profile?.role === "admin") mount(root);
     } finally {
       state.isCheckingMount = false;

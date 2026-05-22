@@ -577,8 +577,6 @@
           <h2 class="scope-employee-title" id="scope-employee-title" style="font-size: 1.5rem;">Checking active job</h2>
         </div>
         <div class="scope-employee-pills">
-          <span class="scope-employee-pill" id="scope-employee-profile">Checking sign-in</span>
-          <span class="scope-employee-pill" id="scope-employee-job">Checking current job</span>
           <span class="scope-employee-pill good" id="scope-employee-progress">0 / 0 complete</span>
         </div>
         <p class="scope-employee-status" id="scope-employee-status">Reading your active Time Clock session.</p>
@@ -622,8 +620,6 @@
     els.listCard = shell.querySelector("#scope-employee-list-card");
     els.eyebrow = shell.querySelector("#scope-employee-eyebrow");
     els.title = shell.querySelector("#scope-employee-title");
-    els.profile = shell.querySelector("#scope-employee-profile");
-    els.job = shell.querySelector("#scope-employee-job");
     els.progress = shell.querySelector("#scope-employee-progress");
     els.status = shell.querySelector("#scope-employee-status");
     els.error = shell.querySelector("#scope-employee-error");
@@ -754,15 +750,6 @@
     showLoadedShell();
     const completed = state.items.filter((item) => item.completed_at).length;
     els.progress.textContent = `${completed} / ${state.items.length} complete`;
-    els.profile.textContent = userDisplayName();
-
-    if (state.usingForcedJobCode && state.config.forcedJobCode && !hasMatchingOpenPunch()) {
-      els.job.textContent = `${state.config.forcedJobCode} mirror`;
-    } else if (hasMatchingOpenPunch()) {
-      els.job.textContent = "Clocked into matching job";
-    } else {
-      els.job.textContent = "No active punch";
-    }
 
     if (!state.project) {
       showNoScope(state.openEntry ? "No scope available at this time." : "Clock into a scoped job to see its scope of work.");
@@ -770,8 +757,8 @@
     }
 
     els.addCard.classList.remove("scope-employee-hidden");
-    els.eyebrow.textContent = state.project.unit_name || "Scope";
-    els.title.textContent = state.project.property_name || "Active scope";
+    els.eyebrow.textContent = state.project.property_name || "Scope";
+    els.title.textContent = state.project.unit_name || state.project.property_name || "Active scope";
     els.status.textContent = state.usingForcedJobCode && state.config.forcedJobCode && !hasMatchingOpenPunch()
       ? `Live mirror of ${state.config.forcedJobCode}. Clock into this job to update items.`
       : "Scope loaded from your active job code.";
