@@ -7,6 +7,11 @@ import {
   supabaseAsUser,
 } from "../_shared/scope-sync.ts";
 
+const edgeRuntime = (globalThis as Record<string, any>).EdgeRuntime;
+const waitUntil = edgeRuntime && typeof edgeRuntime.waitUntil === "function"
+  ? edgeRuntime.waitUntil.bind(edgeRuntime)
+  : null;
+
 async function readItem(itemId: string): Promise<any> {
   const rows = await supabase(`/rest/v1/scope_items?select=*&id=eq.${encodeURIComponent(itemId)}&limit=1`);
   return rows[0] || null;
@@ -69,8 +74,30 @@ Deno.serve(async (request) => {
           p_item_ids: itemIds,
         }),
       });
-      const pushedToNotion = await syncSectionOrderToNotion(scopeProjectId, section);
-      return json(200, { items, pushedToNotion });
+
+      if (waitUntil) {
+        waitUntil((async () => {
+          try {
+            await syncSectionOrderToNotion(scopeProjectId, section);
+          } catch (error) {
+            console.error("Background Notion reorder sync failed", error);
+          }
+        })());
+        return json(200, {
+          items,
+          pushedToNotion: false,
+          notionSyncQueued: true,
+        });
+      }
+
+      let pushedToNotion = false;
+      let notionSyncError = "";
+      try {
+        pushedToNotion = await syncSectionOrderToNotion(scopeProjectId, section);
+      } catch (error) {
+        notionSyncError = error instanceof Error ? error.message : "Notion sync failed.";
+      }
+      return json(200, { items, pushedToNotion, notionSyncError });
     }
 
     return json(400, { error: "Unknown scope action." });

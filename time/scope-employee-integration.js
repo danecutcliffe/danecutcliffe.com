@@ -292,10 +292,6 @@
         cursor: grabbing;
       }
 
-      .scope-employee-item-reorder-locked {
-        opacity: 0.7;
-      }
-
       .scope-employee-field {
         display: grid;
         gap: 0.375rem;
@@ -452,7 +448,6 @@
     return Boolean(
       state.profile?.is_active &&
       state.project?.id &&
-      !state.isSavingReorder &&
       (state.profile?.role === "admin" || hasMatchingOpenPunch())
     );
   }
@@ -761,11 +756,11 @@
       list.className = "scope-employee-items";
       list.dataset.section = section;
 
-      const reorderEnabled = canMutateScope() && items.length > 1;
+      const reorderEnabled = canMutateScope() && items.length > 1 && !state.isSavingReorder;
 
       items.forEach((item) => {
         const row = document.createElement("div");
-        row.className = `scope-employee-item${item.completed_at ? " done" : ""}${state.isSavingReorder ? " scope-employee-item-reorder-locked" : ""}`;
+        row.className = `scope-employee-item${item.completed_at ? " done" : ""}`;
         row.dataset.itemId = item.id;
         row.dataset.section = section;
 
@@ -1016,11 +1011,22 @@
           itemIds: orderedIds,
         }),
       });
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Unable to save the new scope order.");
       }
-      await load();
+
+      if (Array.isArray(payload.items) && payload.items.length) {
+        applySectionOrder(section, payload.items.map((item) => item.id));
+      }
+
+      if (payload.notionSyncError) {
+        showError(`Order saved in Time Clock. Notion sync still needs a retry: ${payload.notionSyncError}`);
+      }
+
+      setTimeout(() => {
+        load().catch((error) => showError(error.message));
+      }, payload.notionSyncQueued ? 2200 : 800);
     } catch (error) {
       state.items = previousItems;
       render();

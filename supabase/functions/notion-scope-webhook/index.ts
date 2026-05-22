@@ -102,7 +102,14 @@ async function processWebhook(payload: any): Promise<string> {
 
   if (type.startsWith("page.")) {
     const page = await notion(`/pages/${encodeURIComponent(entityId)}`);
-    const result = await syncPage(page);
+    let result = await syncPage(page);
+
+    if (type === "page.content_updated") {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const refreshedPage = await notion(`/pages/${encodeURIComponent(entityId)}`);
+      result = await syncPage(refreshedPage);
+    }
+
     return result
       ? `Synced page ${result.project?.unit_name || result.project?.title || stripNotionId(entityId)}.`
       : `Ignored page ${stripNotionId(entityId)} because it is not linked to a Time app scope.`;
