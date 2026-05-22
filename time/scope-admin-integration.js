@@ -538,7 +538,12 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Scope sync failed.");
       state.syncResult = payload;
-      setMessage("notice", `Synced ${payload.summary.matched} scope match${payload.summary.matched === 1 ? "" : "es"} from Notion.`);
+      const repairedSections = (payload.matched || [])
+        .flatMap((match) => (match.repairedDuplicateSections || []).map((section) => `${match.title}: ${section}`));
+      const repairNote = repairedSections.length
+        ? ` Repaired duplicate Notion section${repairedSections.length === 1 ? "" : "s"}: ${repairedSections.join(", ")}.`
+        : "";
+      setMessage("notice", `Synced ${payload.summary.matched} scope match${payload.summary.matched === 1 ? "" : "es"} from Notion.${repairNote}`);
       await loadData();
       state.syncResult = payload;
       renderPanel();
