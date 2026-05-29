@@ -308,8 +308,8 @@ function LabourCostPropertyCard({
                     {job.employees.map((employee) => (
                       <div key={`${job.jobCodeId ?? job.jobCodeLabel}-${employee.profileId}`} className="flex items-baseline gap-2 text-sm">
                         <span className="min-w-0 truncate font-semibold text-muted-strong">{employee.employeeName}</span>
-                        <span className="mb-1 min-w-6 flex-1 border-b border-dotted border-muted-light" aria-hidden="true" />
-                        <span className="shrink-0 font-bold text-ink">{money(employee.grossPay)}</span>
+                        <span className="mb-1 min-w-6 flex-1 border-b-2 border-dotted border-muted-light" aria-hidden="true" />
+                        <span className="shrink-0 font-bold text-ink">{money(employee.loadedCost)}</span>
                       </div>
                     ))}
                   </div>
