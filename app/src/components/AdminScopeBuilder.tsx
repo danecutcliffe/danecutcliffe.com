@@ -437,7 +437,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                 />
               )}
               <section
-                className={`rounded-md border border-app-border bg-card shadow-soft transition ${draggedSectionId === section.id ? 'opacity-40' : ''}`}
+                className={`rounded-md border border-app-border bg-card shadow-soft transition ${draggedSectionId === section.id ? 'opacity-75' : ''}`}
                 draggable
                 onDragStart={() => setDraggedSectionId(section.id)}
                 onDragOver={(event) => onSectionDragOver(event, section.id)}
@@ -492,7 +492,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                         />
                       )}
                       <div
-                        className={`grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-app-border-subtle bg-card-alt p-3 transition ${draggedItem?.id === item.id ? 'opacity-40' : ''}`}
+                        className={`grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-app-border-subtle bg-card-alt p-3 transition ${draggedItem?.id === item.id ? 'opacity-75' : ''}`}
                         draggable
                         onDragStart={() => setDraggedItem({ id: item.id, sectionId: section.id })}
                         onDragOver={(event) => onItemDragOver(event, section.id, item.id)}
@@ -601,15 +601,19 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
 function DropPlaceholder({ kind, onDragOver, onDrop }: { kind: 'section' | 'item'; onDragOver: (event: DragEvent<HTMLDivElement>) => void; onDrop: (event: DragEvent<HTMLDivElement>) => void }) {
   return (
     <div
-      className={`${kind === 'section' ? 'min-h-20 shadow-soft' : 'min-h-14'} rounded-md border border-dashed`}
+      className={`${kind === 'section' ? 'min-h-20 shadow-soft' : 'min-h-14'} grid place-items-center rounded-md border-2 border-dashed text-xs font-black uppercase tracking-[0.16em]`}
       style={{
-        borderColor: 'rgba(218, 119, 86, 0.65)',
-        background: 'rgba(218, 119, 86, 0.08)',
+        borderColor: 'rgba(218, 119, 86, 0.95)',
+        background: 'rgba(218, 119, 86, 0.18)',
+        boxShadow: 'inset 0 0 0 1px rgba(218, 119, 86, 0.28), 0 0 0 1px rgba(218, 119, 86, 0.18)',
+        color: 'rgba(255, 190, 166, 0.95)',
       }}
       aria-hidden="true"
       onDragOver={onDragOver}
       onDrop={onDrop}
-    />
+    >
+      {kind === 'section' ? 'Drop section here' : 'Drop item here'}
+    </div>
   );
 }
 

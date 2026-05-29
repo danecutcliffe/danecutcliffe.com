@@ -74,12 +74,11 @@ export function AppShell({ activeTab, currentProfile, isLoading, onTabChange, on
   const canUseScopes = currentRole === 'admin' || currentProfile?.canAccessScopes !== false;
   const tabs = currentProfile?.isActive ? (currentRole === 'admin' ? adminTabs : employeeTabs.filter((tab) => tab.id !== 'scope' || canUseScopes)) : [];
   const mobileTabs = tabs.filter((tab) => !(currentRole === 'admin' && tab.id === 'reports'));
-  const isScopeBuilder = activeTab === 'scope-builder';
 
   return (
     <div className="min-h-screen bg-paper text-ink">
       <header className="sticky top-0 z-10 border-b border-app-border bg-paper backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--color-paper)_95%,transparent)]">
-        <div className={`${isScopeBuilder ? 'w-full max-w-none' : 'mx-auto max-w-6xl'} flex items-center justify-between gap-3 px-4 py-3`}>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-accent text-white">
               <AlarmClock size={20} aria-hidden="true" />
@@ -109,7 +108,7 @@ export function AppShell({ activeTab, currentProfile, isLoading, onTabChange, on
       </header>
 
       {tabs.length > 0 ? (
-        <div className={`${isScopeBuilder ? 'w-full max-w-none lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-5' : 'mx-auto max-w-6xl lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6'} lg:grid`}>
+        <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
           {/* Desktop sidebar */}
           <nav className="sticky top-16 hidden self-start pt-6 lg:block" aria-label="Main navigation">
             <ul className="space-y-0.5">
