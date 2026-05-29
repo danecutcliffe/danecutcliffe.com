@@ -274,9 +274,9 @@ function LabourCostPropertyCard({
         <div className="border-t border-app-border-subtle px-4 py-3">
           <div className="space-y-2">
             {property.jobs.map((job) => (
-              <div key={`${property.propertyId}-${job.jobCodeId ?? job.jobCodeLabel}`} className="rounded-md border border-app-border bg-card">
+              <div key={`${property.propertyId}-${job.jobCodeId ?? job.jobCodeLabel}`} className="overflow-hidden rounded-md border border-app-border bg-card">
                 <button
-                  className="flex w-full flex-wrap items-start justify-between gap-3 p-3 text-left"
+                  className="flex w-full flex-wrap items-start justify-between gap-3 rounded-t-md p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                   type="button"
                   aria-expanded={openJobKeys[job.jobCodeId ?? job.jobCodeLabel] ?? false}
                   onClick={() => {
@@ -298,11 +298,13 @@ function LabourCostPropertyCard({
                     <p className="text-xs font-semibold text-muted">{money(job.grossPay)} gross payroll</p>
                   </div>
                 </button>
-                <div className="mx-3 h-2 overflow-hidden rounded-full bg-badge-neutral">
-                  <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${barWidth(job.loadedCost, property.loadedCost)}%` }} />
+                <div className="px-3 pb-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-badge-neutral">
+                    <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${barWidth(job.loadedCost, property.loadedCost)}%` }} />
+                  </div>
                 </div>
                 {openJobKeys[job.jobCodeId ?? job.jobCodeLabel] && (
-                  <div className="mx-3 mt-3 space-y-2 border-t border-app-border-subtle py-3">
+                  <div className="mx-3 space-y-2 border-t border-app-border-subtle py-3">
                     {job.employees.map((employee) => (
                       <div key={`${job.jobCodeId ?? job.jobCodeLabel}-${employee.profileId}`} className="flex items-baseline gap-2 text-sm">
                         <span className="min-w-0 truncate font-semibold text-muted-strong">{employee.employeeName}</span>
