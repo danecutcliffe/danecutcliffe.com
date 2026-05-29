@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
 import type { JobCode, JobSite, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection } from '../domain/types';
 import type { AdminTimeClockService } from '../services/TimeClockService';
 
@@ -12,6 +12,9 @@ interface AdminScopeBuilderProps {
 
 type DraftSection = ScopeBuilderSection;
 type DraftItem = ScopeBuilderItem;
+type DropPosition = 'before' | 'after';
+type SectionDropTarget = { id: string; position: DropPosition };
+type ItemDropTarget = { sectionId: string; id: string; position: DropPosition };
 
 const makeDraftId = (prefix: string) => `draft-${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const sortByOrder = <T extends { sortOrder: number }>(items: T[]) => [...items].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -33,6 +36,8 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
   const [newItemTextBySection, setNewItemTextBySection] = useState<Record<string, string>>({});
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<{ id: string; sectionId: string } | null>(null);
+  const [sectionDropTarget, setSectionDropTarget] = useState<SectionDropTarget | null>(null);
+  const [itemDropTarget, setItemDropTarget] = useState<ItemDropTarget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -187,55 +192,73 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
     markDirty();
   }
 
-  function moveSection(sectionId: string, direction: -1 | 1) {
-    const current = orderedSections;
-    const index = current.findIndex((section) => section.id === sectionId);
-    const targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return;
-    const next = [...current];
-    const [section] = next.splice(index, 1);
-    next.splice(targetIndex, 0, section);
-    setSections((existing) => mergeSectionOrder(existing, next));
-    markDirty();
+  function dropPosition(event: DragEvent<HTMLElement>): DropPosition {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
   }
 
-  function moveItem(itemId: string, sectionId: string, direction: -1 | 1) {
-    const current = sectionItemSort(items.filter((item) => item.sectionId === sectionId && item.isActive));
-    const index = current.findIndex((item) => item.id === itemId);
-    const targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return;
-    const next = [...current];
-    const [item] = next.splice(index, 1);
-    next.splice(targetIndex, 0, item);
-    setItems((existing) => mergeItemOrder(existing, next, sectionId));
-    markDirty();
-  }
-
-  function onSectionDrop(targetSectionId: string) {
-    if (!draggedSectionId || draggedSectionId === targetSectionId) return;
-    const current = orderedSections;
-    const fromIndex = current.findIndex((section) => section.id === draggedSectionId);
-    const toIndex = current.findIndex((section) => section.id === targetSectionId);
-    if (fromIndex < 0 || toIndex < 0) return;
-    const next = [...current];
-    const [section] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, section);
-    setSections((existing) => mergeSectionOrder(existing, next));
+  function clearDragState() {
     setDraggedSectionId(null);
+    setDraggedItem(null);
+    setSectionDropTarget(null);
+    setItemDropTarget(null);
+  }
+
+  function onSectionDragOver(event: DragEvent<HTMLElement>, targetSectionId: string, forcedPosition?: DropPosition) {
+    if (!draggedSectionId || draggedSectionId === targetSectionId) return;
+    event.preventDefault();
+    setSectionDropTarget({ id: targetSectionId, position: forcedPosition || dropPosition(event) });
+  }
+
+  function onSectionDrop(event: DragEvent<HTMLElement>, targetSectionId: string, forcedPosition?: DropPosition) {
+    event.preventDefault();
+    if (!draggedSectionId || draggedSectionId === targetSectionId) {
+      clearDragState();
+      return;
+    }
+    const position = forcedPosition || sectionDropTarget?.position || dropPosition(event);
+    const current = orderedSections;
+    const draggedSection = current.find((section) => section.id === draggedSectionId);
+    const withoutDragged = current.filter((section) => section.id !== draggedSectionId);
+    const targetIndex = withoutDragged.findIndex((section) => section.id === targetSectionId);
+    if (!draggedSection || targetIndex < 0) {
+      clearDragState();
+      return;
+    }
+    const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
+    const next = [...withoutDragged];
+    next.splice(insertIndex, 0, draggedSection);
+    setSections((existing) => mergeSectionOrder(existing, next));
+    clearDragState();
     markDirty();
   }
 
-  function onItemDrop(sectionId: string, targetItemId: string) {
+  function onItemDragOver(event: DragEvent<HTMLElement>, sectionId: string, targetItemId: string, forcedPosition?: DropPosition) {
     if (!draggedItem || draggedItem.sectionId !== sectionId || draggedItem.id === targetItemId) return;
+    event.preventDefault();
+    setItemDropTarget({ sectionId, id: targetItemId, position: forcedPosition || dropPosition(event) });
+  }
+
+  function onItemDrop(event: DragEvent<HTMLElement>, sectionId: string, targetItemId: string, forcedPosition?: DropPosition) {
+    event.preventDefault();
+    if (!draggedItem || draggedItem.sectionId !== sectionId || draggedItem.id === targetItemId) {
+      clearDragState();
+      return;
+    }
+    const position = forcedPosition || itemDropTarget?.position || dropPosition(event);
     const current = sectionItemSort(items.filter((item) => item.sectionId === sectionId && item.isActive));
-    const fromIndex = current.findIndex((item) => item.id === draggedItem.id);
-    const toIndex = current.findIndex((item) => item.id === targetItemId);
-    if (fromIndex < 0 || toIndex < 0) return;
-    const next = [...current];
-    const [item] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, item);
+    const dragged = current.find((item) => item.id === draggedItem.id);
+    const withoutDragged = current.filter((item) => item.id !== draggedItem.id);
+    const targetIndex = withoutDragged.findIndex((item) => item.id === targetItemId);
+    if (!dragged || targetIndex < 0) {
+      clearDragState();
+      return;
+    }
+    const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
+    const next = [...withoutDragged];
+    next.splice(insertIndex, 0, dragged);
     setItems((existing) => mergeItemOrder(existing, next, sectionId));
-    setDraggedItem(null);
+    clearDragState();
     markDirty();
   }
 
@@ -306,7 +329,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
       {error && <div className="rounded-md border border-error-border bg-error-bg p-3 text-sm font-bold text-error-text">{error}</div>}
       {message && <div className="rounded-md border border-success-border bg-success-bg p-3 text-sm font-bold text-success">{message}</div>}
 
-      <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="space-y-3 self-start rounded-md border border-app-border bg-card p-4 shadow-soft lg:sticky lg:top-24">
           <label className="block text-sm font-bold text-muted-strong">
             Property
@@ -397,19 +420,29 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
             </div>
           )}
 
-          {orderedSections.map((section, sectionIndex) => {
+          {orderedSections.map((section) => {
             const isCollapsed = collapsedSectionIds.has(section.id);
             const sectionItems = sectionItemSort(items.filter((item) => item.sectionId === section.id && item.isActive));
             const completeCount = sectionItems.filter((item) => item.isComplete).length;
+            const showSectionBefore = draggedSectionId && sectionDropTarget?.id === section.id && sectionDropTarget.position === 'before';
+            const showSectionAfter = draggedSectionId && sectionDropTarget?.id === section.id && sectionDropTarget.position === 'after';
 
             return (
+              <Fragment key={section.id}>
+              {showSectionBefore && (
+                <DropPlaceholder
+                  kind="section"
+                  onDragOver={(event) => onSectionDragOver(event, section.id, 'before')}
+                  onDrop={(event) => onSectionDrop(event, section.id, 'before')}
+                />
+              )}
               <section
-                className="rounded-md border border-app-border bg-card shadow-soft"
-                key={section.id}
+                className={`rounded-md border border-app-border bg-card shadow-soft transition ${draggedSectionId === section.id ? 'opacity-40' : ''}`}
                 draggable
                 onDragStart={() => setDraggedSectionId(section.id)}
-                onDragOver={(event: DragEvent) => event.preventDefault()}
-                onDrop={() => onSectionDrop(section.id)}
+                onDragOver={(event) => onSectionDragOver(event, section.id)}
+                onDrop={(event) => onSectionDrop(event, section.id)}
+                onDragEnd={clearDragState}
               >
                 <div className="flex items-center gap-2 border-b border-app-border-subtle p-3">
                   <GripVertical size={18} className="shrink-0 cursor-grab text-muted-light" aria-hidden="true" />
@@ -436,10 +469,6 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                   <span className="hidden rounded-full bg-badge-neutral px-2.5 py-1 text-xs font-black text-badge-neutral-text sm:inline-flex">
                     {completeCount} / {sectionItems.length}
                   </span>
-                  <div className="hidden gap-1 sm:flex">
-                    <IconButton label="Move section up" disabled={sectionIndex === 0} onClick={() => moveSection(section.id, -1)}><ArrowUp size={15} /></IconButton>
-                    <IconButton label="Move section down" disabled={sectionIndex === orderedSections.length - 1} onClick={() => moveSection(section.id, 1)}><ArrowDown size={15} /></IconButton>
-                  </div>
                   <IconButton label="Remove section" onClick={() => {
                     setSections((current) => current.filter((candidate) => candidate.id !== section.id));
                     setItems((current) => current.filter((item) => item.sectionId !== section.id));
@@ -449,19 +478,31 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
 
                 {!isCollapsed && (
                   <div className="space-y-2 p-3">
-                    {sectionItems.map((item, itemIndex) => (
+                    {sectionItems.map((item) => {
+                      const showItemBefore = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'before';
+                      const showItemAfter = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'after';
+
+                      return (
+                      <Fragment key={item.id}>
+                      {showItemBefore && (
+                        <DropPlaceholder
+                          kind="item"
+                          onDragOver={(event) => onItemDragOver(event, section.id, item.id, 'before')}
+                          onDrop={(event) => onItemDrop(event, section.id, item.id, 'before')}
+                        />
+                      )}
                       <div
-                        className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-app-border-subtle bg-card-alt p-2"
-                        key={item.id}
+                        className={`grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-app-border-subtle bg-card-alt p-3 transition ${draggedItem?.id === item.id ? 'opacity-40' : ''}`}
                         draggable
                         onDragStart={() => setDraggedItem({ id: item.id, sectionId: section.id })}
-                        onDragOver={(event: DragEvent) => event.preventDefault()}
-                        onDrop={() => onItemDrop(section.id, item.id)}
+                        onDragOver={(event) => onItemDragOver(event, section.id, item.id)}
+                        onDrop={(event) => onItemDrop(event, section.id, item.id)}
+                        onDragEnd={clearDragState}
                       >
-                        <GripVertical size={17} className="cursor-grab text-muted-light" aria-hidden="true" />
-                        <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2">
+                        <GripVertical size={17} className="mt-3 cursor-grab text-muted-light" aria-hidden="true" />
+                        <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2">
                           <input
-                            className="h-5 w-5 accent-accent"
+                            className="mt-2 h-5 w-5 accent-accent"
                             type="checkbox"
                             checked={item.isComplete}
                             onChange={(event) => updateItem(item.id, { isComplete: event.target.checked })}
@@ -474,18 +515,25 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                           />
                         </div>
                         <div className="flex gap-1">
-                          <IconButton label="Move item up" disabled={itemIndex === 0} onClick={() => moveItem(item.id, section.id, -1)}><ArrowUp size={15} /></IconButton>
-                          <IconButton label="Move item down" disabled={itemIndex === sectionItems.length - 1} onClick={() => moveItem(item.id, section.id, 1)}><ArrowDown size={15} /></IconButton>
                           <IconButton label="Remove item" onClick={() => {
                             setItems((current) => current.filter((candidate) => candidate.id !== item.id));
                             markDirty();
                           }}><Trash2 size={15} /></IconButton>
                         </div>
                       </div>
-                    ))}
+                      {showItemAfter && (
+                        <DropPlaceholder
+                          kind="item"
+                          onDragOver={(event) => onItemDragOver(event, section.id, item.id, 'after')}
+                          onDrop={(event) => onItemDrop(event, section.id, item.id, 'after')}
+                        />
+                      )}
+                      </Fragment>
+                      );
+                    })}
 
                     <form
-                      className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-2 rounded-md border border-dashed border-input-border bg-card-alt p-2"
+                      className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 rounded-md border border-dashed border-input-border bg-card-alt p-2"
                       onSubmit={(event) => {
                         event.preventDefault();
                         addItem(section.id);
@@ -504,6 +552,14 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                   </div>
                 )}
               </section>
+              {showSectionAfter && (
+                <DropPlaceholder
+                  kind="section"
+                  onDragOver={(event) => onSectionDragOver(event, section.id, 'after')}
+                  onDrop={(event) => onSectionDrop(event, section.id, 'after')}
+                />
+              )}
+              </Fragment>
             );
           })}
 
@@ -539,6 +595,21 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
         </button>
       </div>
     </section>
+  );
+}
+
+function DropPlaceholder({ kind, onDragOver, onDrop }: { kind: 'section' | 'item'; onDragOver: (event: DragEvent<HTMLDivElement>) => void; onDrop: (event: DragEvent<HTMLDivElement>) => void }) {
+  return (
+    <div
+      className={`${kind === 'section' ? 'min-h-20 shadow-soft' : 'min-h-14'} rounded-md border border-dashed`}
+      style={{
+        borderColor: 'rgba(218, 119, 86, 0.65)',
+        background: 'rgba(218, 119, 86, 0.08)',
+      }}
+      aria-hidden="true"
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    />
   );
 }
 
