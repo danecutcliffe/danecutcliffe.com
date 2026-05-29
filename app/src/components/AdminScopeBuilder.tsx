@@ -344,7 +344,19 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
       </div>
 
       {error && <div className="rounded-md border border-error-border bg-error-bg p-3 text-sm font-bold text-error-text">{error}</div>}
-      {message && <div className="rounded-md border border-success-border bg-success-bg p-3 text-sm font-bold text-success">{message}</div>}
+      {message && (
+        <div
+          data-scope-builder-message="saved"
+          className="rounded-md border p-3 text-sm font-bold"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-accent) 55%, transparent)',
+            background: 'color-mix(in srgb, var(--color-accent) 14%, var(--color-card))',
+            color: 'var(--color-accent)',
+          }}
+        >
+          {message}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="space-y-3 self-start rounded-md border border-app-border bg-card p-4 shadow-soft lg:sticky lg:top-24">
@@ -483,7 +495,10 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                     value={section.title}
                     onChange={(event) => updateSection(section.id, { title: event.target.value })}
                   />
-                  <span className="hidden rounded-full bg-badge-neutral px-2.5 py-1 text-xs font-black text-badge-neutral-text sm:inline-flex">
+                  <span
+                    className="hidden rounded-full px-2.5 py-1 text-xs font-black text-white sm:inline-flex"
+                    style={{ background: 'var(--color-accent)' }}
+                  >
                     {completeCount} / {sectionItems.length}
                   </span>
                   <IconButton label="Remove section" onClick={() => {
@@ -494,7 +509,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                 </div>
 
                 {!isCollapsed && (
-                  <div className="space-y-2 p-3">
+                  <div className="space-y-1.5 p-2.5">
                     {sectionItems.map((item) => {
                       const showItemBefore = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'before';
                       const showItemAfter = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'after';
@@ -509,30 +524,30 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                         />
                       )}
                       <div
-                        className={`grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-app-border-subtle bg-card-alt p-3 transition ${draggedItem?.id === item.id ? 'opacity-75' : ''}`}
+                        className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md border border-app-border-subtle bg-card-alt px-2 py-1.5 transition ${item.isComplete ? 'opacity-75' : ''} ${draggedItem?.id === item.id ? 'opacity-75' : ''}`}
                         draggable
                         onDragStart={() => setDraggedItem({ id: item.id, sectionId: section.id })}
                         onDragOver={(event) => onItemDragOver(event, section.id, item.id)}
                         onDrop={(event) => onItemDrop(event, section.id, item.id)}
                         onDragEnd={clearDragState}
                       >
-                        <GripVertical size={17} className="mt-3 cursor-grab text-muted-light" aria-hidden="true" />
-                        <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2">
+                        <GripVertical size={16} className="mt-1.5 cursor-grab text-muted-light" aria-hidden="true" />
+                        <div className="grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-1.5">
                           <input
-                            className="mt-2 h-5 w-5 accent-accent"
+                            className="mt-1 h-4 w-4 accent-accent"
                             type="checkbox"
                             checked={item.isComplete}
                             onChange={(event) => updateItem(item.id, { isComplete: event.target.checked })}
                             aria-label="Complete line item"
                           />
-                          <textarea
-                            className="min-h-10 min-w-0 resize-y rounded-md border border-transparent bg-transparent px-2 py-2 text-sm font-semibold leading-5 text-ink focus:border-input-border focus:bg-input-bg"
+                          <AutoSizeLineItemTextarea
+                            isComplete={item.isComplete}
                             value={item.itemText}
-                            onChange={(event) => updateItem(item.id, { itemText: event.target.value })}
+                            onChange={(itemText) => updateItem(item.id, { itemText })}
                           />
                         </div>
                         <div className="flex gap-1">
-                          <IconButton label="Remove item" onClick={() => {
+                          <IconButton compact label="Remove item" onClick={() => {
                             setItems((current) => current.filter((candidate) => candidate.id !== item.id));
                             markDirty();
                           }}><Trash2 size={15} /></IconButton>
@@ -550,17 +565,17 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                     })}
 
                     <form
-                      className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 rounded-md border border-dashed border-input-border bg-card-alt p-2"
+                      className="grid grid-cols-[2rem_minmax(0,1fr)] gap-1.5 rounded-md border border-dashed border-input-border bg-card-alt p-1.5"
                       onSubmit={(event) => {
                         event.preventDefault();
                         addItem(section.id);
                       }}
                     >
-                      <button className="grid h-10 w-10 place-items-center rounded-md bg-accent text-white disabled:opacity-50" type="submit" disabled={!newItemTextBySection[section.id]?.trim()}>
-                        <Plus size={18} aria-hidden="true" />
+                      <button className="grid h-8 w-8 place-items-center rounded-md bg-accent text-white disabled:opacity-50" type="submit" disabled={!newItemTextBySection[section.id]?.trim()}>
+                        <Plus size={16} aria-hidden="true" />
                       </button>
                       <input
-                        className="min-h-10 min-w-0 rounded-md border border-input-border bg-input-bg px-3 text-sm font-semibold text-ink"
+                        className="min-h-8 min-w-0 rounded-md border border-input-border bg-input-bg px-2 text-sm font-semibold text-ink"
                         placeholder="Add line item"
                         value={newItemTextBySection[section.id] || ''}
                         onChange={(event) => setNewItemTextBySection((current) => ({ ...current, [section.id]: event.target.value }))}
@@ -636,10 +651,32 @@ function DropPlaceholder({ kind, onDragOver, onDrop }: { kind: 'section' | 'item
   );
 }
 
-function IconButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+function AutoSizeLineItemTextarea({ isComplete, value, onChange }: { isComplete: boolean; value: string; onChange: (value: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = '0px';
+    textarea.style.height = `${Math.max(32, textarea.scrollHeight)}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      aria-label="Scope line item"
+      className={`min-h-8 min-w-0 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold leading-5 focus:border-input-border focus:bg-input-bg ${isComplete ? 'text-muted line-through' : 'text-ink'}`}
+      rows={1}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+function IconButton({ label, disabled, compact, onClick, children }: { label: string; disabled?: boolean; compact?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
-      className="grid h-9 w-9 place-items-center rounded-md border border-input-border bg-card text-muted-strong transition hover:bg-card-alt disabled:opacity-35"
+      className={`${compact ? 'h-8 w-8' : 'h-9 w-9'} grid place-items-center rounded-md border border-input-border bg-card text-muted-strong transition hover:bg-card-alt disabled:opacity-35`}
       type="button"
       disabled={disabled}
       onClick={onClick}
