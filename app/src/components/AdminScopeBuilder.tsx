@@ -496,8 +496,8 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                     onChange={(event) => updateSection(section.id, { title: event.target.value })}
                   />
                   <span
-                    className="hidden rounded-full px-2.5 py-1 text-xs font-black text-white sm:inline-flex"
-                    style={{ background: 'var(--color-accent)' }}
+                    className={`hidden rounded-full px-2.5 py-1 text-xs font-black sm:inline-flex ${completeCount > 0 ? 'text-white' : 'bg-badge-neutral text-badge-neutral-text'}`}
+                    style={completeCount > 0 ? { background: 'var(--color-accent)' } : undefined}
                   >
                     {completeCount} / {sectionItems.length}
                   </span>
@@ -513,6 +513,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                     {sectionItems.map((item) => {
                       const showItemBefore = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'before';
                       const showItemAfter = draggedItem?.sectionId === section.id && itemDropTarget?.sectionId === section.id && itemDropTarget.id === item.id && itemDropTarget.position === 'after';
+                      const isDraggedItem = draggedItem?.id === item.id;
 
                       return (
                       <Fragment key={item.id}>
@@ -524,22 +525,27 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                         />
                       )}
                       <div
-                        className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md border border-app-border-subtle bg-card-alt px-2 py-1.5 transition ${item.isComplete ? 'opacity-75' : ''} ${draggedItem?.id === item.id ? 'opacity-75' : ''}`}
+                        className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md border border-app-border-subtle bg-card-alt px-2 py-1.5 transition ${isDraggedItem ? 'opacity-0' : item.isComplete ? 'opacity-75' : ''}`}
+                        aria-hidden={isDraggedItem ? 'true' : undefined}
                         draggable
                         onDragStart={() => setDraggedItem({ id: item.id, sectionId: section.id })}
                         onDragOver={(event) => onItemDragOver(event, section.id, item.id)}
                         onDrop={(event) => onItemDrop(event, section.id, item.id)}
                         onDragEnd={clearDragState}
                       >
-                        <GripVertical size={16} className="mt-1.5 cursor-grab text-muted-light" aria-hidden="true" />
+                        <span className="flex h-7 items-center">
+                          <GripVertical size={16} className="cursor-grab text-muted-light" aria-hidden="true" />
+                        </span>
                         <div className="grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-1.5">
-                          <input
-                            className="mt-1 h-4 w-4 accent-accent"
-                            type="checkbox"
-                            checked={item.isComplete}
-                            onChange={(event) => updateItem(item.id, { isComplete: event.target.checked })}
-                            aria-label="Complete line item"
-                          />
+                          <span className="flex h-7 items-center">
+                            <input
+                              className="h-4 w-4 accent-accent"
+                              type="checkbox"
+                              checked={item.isComplete}
+                              onChange={(event) => updateItem(item.id, { isComplete: event.target.checked })}
+                              aria-label="Complete line item"
+                            />
+                          </span>
                           <AutoSizeLineItemTextarea
                             isComplete={item.isComplete}
                             value={item.itemText}
