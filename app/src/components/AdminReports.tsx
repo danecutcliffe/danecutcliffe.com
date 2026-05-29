@@ -253,7 +253,7 @@ function LabourCostPropertyCard({
             <h3 className="text-lg font-bold">{property.propertyName}</h3>
             <span className="rounded-full bg-badge-neutral px-2 py-1 text-xs font-bold text-muted">{property.jobs.length} job code{property.jobs.length === 1 ? '' : 's'}</span>
           </div>
-          <p className="mt-1 text-sm text-muted">{property.payableHours.toFixed(2)} payable hours · {property.workHours.toFixed(2)} worked hours</p>
+          <p className="mt-1 text-sm text-muted">{property.payableHours.toFixed(2)} payable hours</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
@@ -291,7 +291,7 @@ function LabourCostPropertyCard({
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-muted">{job.payableHours.toFixed(2)} payable hours · {job.workHours.toFixed(2)} worked hours</p>
+                    <p className="mt-1 text-sm text-muted">{job.payableHours.toFixed(2)} payable hours</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold">{money(job.loadedCost)}</p>
