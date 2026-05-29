@@ -205,6 +205,17 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
     setItemDropTarget(null);
   }
 
+  useEffect(() => {
+    if (!draggedSectionId && !draggedItem) return;
+
+    window.addEventListener('dragend', clearDragState);
+    window.addEventListener('drop', clearDragState);
+    return () => {
+      window.removeEventListener('dragend', clearDragState);
+      window.removeEventListener('drop', clearDragState);
+    };
+  });
+
   function onSectionDragOver(event: DragEvent<HTMLElement>, targetSectionId: string, forcedPosition?: DropPosition) {
     if (!draggedSectionId || draggedSectionId === targetSectionId) return;
     event.preventDefault();
@@ -238,6 +249,12 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
     if (!draggedItem || draggedItem.sectionId !== sectionId || draggedItem.id === targetItemId) return;
     event.preventDefault();
     setItemDropTarget({ sectionId, id: targetItemId, position: forcedPosition || dropPosition(event) });
+  }
+
+  function onItemDragStart(event: DragEvent<HTMLElement>, item: DraftItem) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.id);
+    requestAnimationFrame(() => setDraggedItem({ id: item.id, sectionId: item.sectionId }));
   }
 
   function onItemDrop(event: DragEvent<HTMLElement>, sectionId: string, targetItemId: string, forcedPosition?: DropPosition) {
@@ -525,10 +542,10 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
                         />
                       )}
                       <div
-                        className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md border border-app-border-subtle bg-card-alt px-2 py-1.5 transition ${isDraggedItem ? 'opacity-0' : item.isComplete ? 'opacity-75' : ''}`}
+                        className={`${isDraggedItem ? 'hidden' : 'grid'} grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md border border-app-border-subtle bg-card-alt px-2 py-1.5 transition ${!isDraggedItem && item.isComplete ? 'opacity-75' : ''}`}
                         aria-hidden={isDraggedItem ? 'true' : undefined}
                         draggable
-                        onDragStart={() => setDraggedItem({ id: item.id, sectionId: section.id })}
+                        onDragStart={(event) => onItemDragStart(event, item)}
                         onDragOver={(event) => onItemDragOver(event, section.id, item.id)}
                         onDrop={(event) => onItemDrop(event, section.id, item.id)}
                         onDragEnd={clearDragState}
