@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
 import { ChevronDown, ChevronRight, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
 import type { JobCode, JobSite, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection } from '../domain/types';
@@ -43,6 +43,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
   const [isDirty, setIsDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const saveInFlightRef = useRef(false);
 
   const activeJobSites = useMemo(() => jobSites.filter((site) => site.isActive && !site.isArchived), [jobSites]);
   const activeJobCodes = useMemo(() => jobCodes.filter((job) => job.isActive && !job.isArchived), [jobCodes]);
@@ -263,7 +264,8 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
   }
 
   async function saveChanges() {
-    if (!canSave) return;
+    if (!canSave || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setIsSaving(true);
     setError('');
     setMessage('');
@@ -297,9 +299,22 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save beta scope.');
     } finally {
+      saveInFlightRef.current = false;
       setIsSaving(false);
     }
   }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
+      if (!isSaveShortcut) return;
+      event.preventDefault();
+      if (!event.repeat) void saveChanges();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   const emptyState = !sections.length;
 
@@ -320,6 +335,8 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
           type="button"
           disabled={!canSave}
           onClick={saveChanges}
+          title="Save Changes (Command-S / Ctrl-S)"
+          aria-keyshortcuts="Meta+S Control+S"
         >
           <Save size={16} aria-hidden="true" />
           {isSaving ? 'Saving...' : 'Save Changes'}
@@ -589,6 +606,8 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
           type="button"
           disabled={!canSave}
           onClick={saveChanges}
+          title="Save Changes (Command-S / Ctrl-S)"
+          aria-keyshortcuts="Meta+S Control+S"
         >
           <Save size={16} aria-hidden="true" />
           {isSaving ? 'Saving...' : 'Save Changes'}
