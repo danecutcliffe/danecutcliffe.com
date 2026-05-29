@@ -179,7 +179,6 @@ function ViewModeSwitch({ value, onChange }: { value: AdminTimesheetView; onChan
 
   return (
     <div className="view-mode-switch" aria-label="Timesheet view">
-      <span className="view-mode-label">View</span>
       <div className="view-mode-options">
         {options.map((option) => {
           const isActive = value === option.value;

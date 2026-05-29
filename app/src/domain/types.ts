@@ -1,4 +1,5 @@
 export type AppRole = 'employee' | 'admin';
+export type WorkerType = 'employee' | 'contractor';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 export type TimeEventType = 'work' | 'break';
 export type GpsStatus = 'captured' | 'missing' | 'unsupported' | 'denied';
@@ -9,6 +10,8 @@ export interface Profile {
   firstName: string;
   lastName: string;
   role: AppRole;
+  workerType: WorkerType;
+  contractorHstApplicable: boolean;
   hourlyRate: number;
   paidBreaks: boolean;
   paidBreakMinutes: number;

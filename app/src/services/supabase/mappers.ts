@@ -6,6 +6,8 @@ export interface ProfileRow {
   first_name: string;
   last_name: string;
   role: Profile['role'];
+  worker_type?: Profile['workerType'] | null;
+  contractor_hst_applicable?: boolean | null;
   hourly_rate: number | string;
   paid_breaks: boolean;
   paid_break_minutes: number | string;
@@ -120,6 +122,8 @@ export const mapProfile = (row: ProfileRow): Profile => ({
   firstName: row.first_name,
   lastName: row.last_name,
   role: row.role,
+  workerType: row.worker_type === 'contractor' ? 'contractor' : 'employee',
+  contractorHstApplicable: row.contractor_hst_applicable ?? false,
   hourlyRate: Number(row.hourly_rate),
   paidBreaks: row.paid_breaks,
   paidBreakMinutes: Number(row.paid_break_minutes ?? 30),

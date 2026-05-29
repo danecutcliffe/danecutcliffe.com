@@ -123,7 +123,7 @@ export interface AdminTimeClockService extends TimeClockService {
 
   updateProfile(params: {
     profileId: string;
-    patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>>;
+    patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>>;
   }): Promise<Profile>;
 
   deleteProfile?(params: {
@@ -140,6 +140,8 @@ export interface AdminTimeClockService extends TimeClockService {
     firstName: string;
     lastName: string;
     role: Profile['role'];
+    workerType: Profile['workerType'];
+    contractorHstApplicable: boolean;
     hourlyRate: number;
     paidBreaks: boolean;
     paidBreakMinutes: number;

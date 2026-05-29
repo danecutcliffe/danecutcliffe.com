@@ -20,6 +20,8 @@ let profiles: Profile[] = [
     firstName: 'Jamie',
     lastName: 'Carpenter',
     role: 'employee',
+    workerType: 'employee',
+    contractorHstApplicable: false,
     hourlyRate: 24,
     paidBreaks: false,
     paidBreakMinutes: 30,
@@ -33,6 +35,8 @@ let profiles: Profile[] = [
     firstName: 'Dane',
     lastName: 'Cutcliffe',
     role: 'admin',
+    workerType: 'employee',
+    contractorHstApplicable: false,
     hourlyRate: 0,
     paidBreaks: false,
     paidBreakMinutes: 30,
@@ -46,6 +50,8 @@ let profiles: Profile[] = [
     firstName: 'Morgan',
     lastName: 'Painter',
     role: 'employee',
+    workerType: 'employee',
+    contractorHstApplicable: false,
     hourlyRate: 22.5,
     paidBreaks: true,
     paidBreakMinutes: 30,
@@ -652,7 +658,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     logAudit({ userId: currentProfileId, action: 'signup_rejected', targetTable: 'profiles', targetId: profile.id, oldValues: { ...profile }, newValues: null });
   },
 
-  async createProfile({ email, firstName, lastName, role, hourlyRate, paidBreaks, paidBreakMinutes, canAccessScopes, isActive }) {
+  async createProfile({ email, firstName, lastName, role, workerType, contractorHstApplicable, hourlyRate, paidBreaks, paidBreakMinutes, canAccessScopes, isActive }) {
     await delay();
     if (!email.trim()) throw new Error('Email is required.');
     if (!firstName.trim() || !lastName.trim()) throw new Error('First and last name are required.');
@@ -665,6 +671,8 @@ export const mockTimeClockService: AdminTimeClockService = {
       firstName,
       lastName,
       role,
+      workerType,
+      contractorHstApplicable,
       hourlyRate,
       paidBreaks,
       paidBreakMinutes,

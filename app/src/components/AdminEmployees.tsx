@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Archive, ChevronDown, ChevronUp, ExternalLink, MapPin, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
-import type { AppRole, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
+import type { AppRole, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, WorkerType } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { geocodeAddress } from '../utils/geocoding';
@@ -455,11 +455,13 @@ function EmployeeRow({
   hasTimeHistory: boolean;
   isCurrentProfile: boolean;
   onDelete: () => void;
-  onSave: (patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive'>>) => void;
+  onSave: (patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive'>>) => void;
 }) {
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
   const [role, setRole] = useState<AppRole>(profile.role === 'admin' ? 'admin' : 'employee');
+  const [workerType, setWorkerType] = useState<WorkerType>(profile.workerType);
+  const [contractorHstApplicable, setContractorHstApplicable] = useState(profile.contractorHstApplicable);
   const [rate, setRate] = useState(profile.hourlyRate.toString());
   const [paidBreaks, setPaidBreaks] = useState(profile.paidBreaks);
   const [paidBreakMinutes, setPaidBreakMinutes] = useState(profile.paidBreakMinutes.toString());
@@ -468,7 +470,9 @@ function EmployeeRow({
   const [isExpanded, setIsExpanded] = useState(false);
   const rateNumber = Number(rate);
   const paidBreakMinutesNumber = Math.max(0, Math.min(240, Number(paidBreakMinutes)));
-  const hasChanges = firstName !== profile.firstName || lastName !== profile.lastName || role !== profile.role || rateNumber !== profile.hourlyRate || paidBreaks !== profile.paidBreaks || paidBreakMinutesNumber !== profile.paidBreakMinutes || canAccessScopes !== profile.canAccessScopes || canPunch !== profile.isActive;
+  const nextContractorHstApplicable = workerType === 'contractor' ? contractorHstApplicable : false;
+  const hasChanges = firstName !== profile.firstName || lastName !== profile.lastName || role !== profile.role || workerType !== profile.workerType || nextContractorHstApplicable !== profile.contractorHstApplicable || rateNumber !== profile.hourlyRate || paidBreaks !== profile.paidBreaks || paidBreakMinutesNumber !== profile.paidBreakMinutes || canAccessScopes !== profile.canAccessScopes || canPunch !== profile.isActive;
+  const summaryWorkerLabel = profile.role === 'admin' ? 'Admin' : profile.workerType === 'contractor' ? 'Contractor' : 'Employee';
 
   return (
     <div className="rounded-md border border-app-border">
@@ -480,7 +484,13 @@ function EmployeeRow({
             {isCurrentProfile && <span className="text-xs font-semibold text-muted-light">you</span>}
           </div>
           <p className="mt-0.5 text-sm text-muted">
-            <span className="capitalize">{profile.role}</span>
+            <span>{summaryWorkerLabel}</span>
+            {profile.workerType === 'contractor' && profile.contractorHstApplicable && (
+              <>
+                <span className="mx-1.5 text-muted-light">·</span>
+                <span>HST</span>
+              </>
+            )}
             <span className="mx-1.5 text-muted-light">·</span>
             ${profile.hourlyRate.toFixed(2)}/hr
             {!profile.isActive && (
@@ -529,12 +539,25 @@ function EmployeeRow({
               </select>
             </label>
             <label className="block text-sm font-semibold text-muted">
+              Worker type
+              <select className="mt-1.5 min-h-11 w-full rounded-md border border-input-border bg-card px-3 text-base text-ink" value={workerType} onChange={(event) => setWorkerType(event.target.value as WorkerType)}>
+                <option value="employee">Employee</option><option value="contractor">Contractor</option>
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-muted">
               Hourly rate
               <div className="mt-1.5 flex min-h-11 items-center rounded-md border border-input-border bg-card">
                 <span className="pl-3 pr-1 text-sm font-bold text-muted-light">$</span>
                 <input className="min-h-10 w-full rounded-r-md border-0 px-2 text-base text-ink outline-none" type="number" min="0" step="0.5" value={rate} onChange={(event) => setRate(event.target.value)} />
               </div>
             </label>
+            <div className="text-sm font-semibold text-muted">
+              <span>Contractor HST</span>
+              <div className="mt-1.5 flex min-h-11 items-center rounded-md border border-input-border bg-card px-3">
+                <ToggleSwitch label="" checked={workerType === 'contractor' && contractorHstApplicable} onChange={setContractorHstApplicable} disabled={isBusy || workerType !== 'contractor'} />
+              </div>
+              {workerType !== 'contractor' && <p className="mt-1 text-xs font-semibold text-muted-light">Only applies to contractors.</p>}
+            </div>
             <div className="text-sm font-semibold text-muted">
               <span>Paid lunch</span>
               <div className="mt-1.5 flex min-h-11 items-center rounded-md border border-input-border bg-card px-3">
@@ -574,7 +597,7 @@ function EmployeeRow({
               className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted sm:flex-none"
               type="button"
               disabled={isBusy || !hasChanges || !firstName.trim() || !lastName.trim() || Number.isNaN(rateNumber) || Number.isNaN(paidBreakMinutesNumber)}
-              onClick={() => onSave({ firstName: firstName.trim(), lastName: lastName.trim(), role, hourlyRate: rateNumber, paidBreaks, paidBreakMinutes: paidBreakMinutesNumber, canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: canPunch })}
+              onClick={() => onSave({ firstName: firstName.trim(), lastName: lastName.trim(), role, workerType, contractorHstApplicable: nextContractorHstApplicable, hourlyRate: rateNumber, paidBreaks, paidBreakMinutes: paidBreakMinutesNumber, canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: canPunch })}
             >
               <Save size={15} aria-hidden="true" />
               Save Changes
@@ -974,11 +997,13 @@ function AddJobCodeDialog({ isBusy, jobSites, onCancel, onSave }: { isBusy: bool
   );
 }
 
-function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean; mode: 'mock' | 'supabase'; onCancel: () => void; onSave: (values: { authUserId?: string; email: string; firstName: string; lastName: string; role: AppRole; hourlyRate: number; paidBreaks: boolean; paidBreakMinutes: number; canAccessScopes: boolean; isActive: boolean }) => void }) {
+function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean; mode: 'mock' | 'supabase'; onCancel: () => void; onSave: (values: { authUserId?: string; email: string; firstName: string; lastName: string; role: AppRole; workerType: WorkerType; contractorHstApplicable: boolean; hourlyRate: number; paidBreaks: boolean; paidBreakMinutes: number; canAccessScopes: boolean; isActive: boolean }) => void }) {
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState<AppRole>('employee');
+  const [workerType, setWorkerType] = useState<WorkerType>('employee');
+  const [contractorHstApplicable, setContractorHstApplicable] = useState(false);
   const [rate, setRate] = useState('0');
   const [paidBreaks, setPaidBreaks] = useState(false);
   const [paidBreakMinutes, setPaidBreakMinutes] = useState('30');
@@ -1015,10 +1040,19 @@ function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean
               <option value="employee">Employee</option><option value="admin">Admin</option>
             </select>
           </label>
+          <label className="block text-sm font-semibold text-muted" htmlFor="employee-worker-type">
+            Worker type
+            <select id="employee-worker-type" className="mt-2 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={workerType} onChange={(event) => setWorkerType(event.target.value as WorkerType)}>
+              <option value="employee">Employee</option><option value="contractor">Contractor</option>
+            </select>
+          </label>
           <label className="block text-sm font-semibold text-muted" htmlFor="employee-rate">
             Hourly rate
             <input id="employee-rate" className="mt-2 min-h-12 w-full rounded-md border border-input-border px-3" type="number" min="0" step="0.5" value={rate} onChange={(event) => setRate(event.target.value)} />
           </label>
+          <div className="rounded-md border border-app-border px-3 py-2">
+            <ToggleSwitch label="Contractor HST" checked={workerType === 'contractor' && contractorHstApplicable} onChange={setContractorHstApplicable} disabled={isBusy || workerType !== 'contractor'} />
+          </div>
           <div className="rounded-md border border-app-border px-3 py-2 sm:col-span-2">
             <ToggleSwitch label="Paid Lunch" checked={paidBreaks} onChange={setPaidBreaks} disabled={isBusy} />
           </div>
@@ -1044,7 +1078,7 @@ function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" onClick={onCancel}>Cancel</button>
-          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !canSave} onClick={() => onSave({ email, firstName, lastName, role, hourlyRate: Number(rate), paidBreaks, paidBreakMinutes: Math.max(0, Math.min(240, Number(paidBreakMinutes))), canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: true })}>
+          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !canSave} onClick={() => onSave({ email, firstName, lastName, role, workerType, contractorHstApplicable: workerType === 'contractor' ? contractorHstApplicable : false, hourlyRate: Number(rate), paidBreaks, paidBreakMinutes: Math.max(0, Math.min(240, Number(paidBreakMinutes))), canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: true })}>
             Save Employee
           </button>
         </div>

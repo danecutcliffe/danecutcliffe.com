@@ -384,12 +384,14 @@ class SupabaseTimeClockService implements AdminTimeClockService {
     if (error) throw new Error(error.message);
   }
 
-  async updateProfile({ profileId, patch }: { profileId: string; patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>> }) {
+  async updateProfile({ profileId, patch }: { profileId: string; patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>> }) {
     await this.assertAdmin();
     const update: Record<string, string | number | boolean> = {};
     if (patch.firstName !== undefined) update.first_name = patch.firstName;
     if (patch.lastName !== undefined) update.last_name = patch.lastName;
     if (patch.role !== undefined) update.role = patch.role;
+    if (patch.workerType !== undefined) update.worker_type = patch.workerType;
+    if (patch.contractorHstApplicable !== undefined) update.contractor_hst_applicable = patch.contractorHstApplicable;
     if (patch.hourlyRate !== undefined) update.hourly_rate = patch.hourlyRate;
     if (patch.paidBreaks !== undefined) update.paid_breaks = patch.paidBreaks;
     if (patch.paidBreakMinutes !== undefined) update.paid_break_minutes = patch.paidBreakMinutes;
@@ -431,13 +433,15 @@ class SupabaseTimeClockService implements AdminTimeClockService {
     if (error) throw new Error(error.message);
   }
 
-  async createProfile({ email, firstName, lastName, role, hourlyRate, paidBreaks, paidBreakMinutes, canAccessScopes }: { authUserId?: string; email: string; firstName: string; lastName: string; role: Profile['role']; hourlyRate: number; paidBreaks: boolean; paidBreakMinutes: number; canAccessScopes: boolean; isActive: boolean }) {
+  async createProfile({ email, firstName, lastName, role, workerType, contractorHstApplicable, hourlyRate, paidBreaks, paidBreakMinutes, canAccessScopes }: { authUserId?: string; email: string; firstName: string; lastName: string; role: Profile['role']; workerType: Profile['workerType']; contractorHstApplicable: boolean; hourlyRate: number; paidBreaks: boolean; paidBreakMinutes: number; canAccessScopes: boolean; isActive: boolean }) {
     await this.assertAdmin();
     const { data, error } = await this.client.rpc('admin_create_employee', {
       p_email: email.trim(),
       p_first_name: firstName.trim(),
       p_last_name: lastName.trim(),
       p_role: role,
+      p_worker_type: workerType,
+      p_contractor_hst_applicable: contractorHstApplicable,
       p_hourly_rate: hourlyRate,
       p_paid_breaks: paidBreaks,
       p_paid_break_minutes: paidBreakMinutes,

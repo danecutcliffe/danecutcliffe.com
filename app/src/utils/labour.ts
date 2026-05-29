@@ -1,6 +1,13 @@
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
-import { jobDisplayName, jobSiteById } from './jobs';
+import { jobSiteById } from './jobs';
 import { addDaysToDateKey, calculateTimesheetSummary, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
+
+export interface LabourCostEmployeeBreakdown {
+  profileId: string;
+  employeeName: string;
+  grossPay: number;
+  loadedCost: number;
+}
 
 export interface LabourCostJobBreakdown {
   jobCodeId: string | null;
@@ -9,6 +16,7 @@ export interface LabourCostJobBreakdown {
   loadedCost: number;
   payableHours: number;
   workHours: number;
+  employees: LabourCostEmployeeBreakdown[];
 }
 
 export interface LabourCostPropertyBreakdown {
@@ -46,7 +54,17 @@ interface BuildLabourCostBreakdownAcrossPayPeriodsParams extends BuildLabourCost
   payPeriodSettings: PayPeriodSettings;
 }
 
-interface JobAggregate extends LabourCostJobBreakdown {}
+interface EmployeeAggregate extends LabourCostEmployeeBreakdown {}
+
+interface JobAggregate {
+  jobCodeId: string | null;
+  jobCodeLabel: string;
+  grossPay: number;
+  loadedCost: number;
+  payableHours: number;
+  workHours: number;
+  employees: Map<string, EmployeeAggregate>;
+}
 
 interface PropertyAggregate {
   propertyId: string;
@@ -102,9 +120,12 @@ export function buildLabourCostBreakdown({
       paidBreaks: profile.paidBreaks,
       paidBreakMinutes: profile.paidBreakMinutes,
     });
+    const workerCostMultiplier = labourCostMultiplierForProfile(profile, multiplier);
+    const includedGrossPay = summary.grossPay * (includedWorkHours / totalWorkHours);
 
     employeeCount += 1;
-    grossPay += summary.grossPay * (includedWorkHours / totalWorkHours);
+    grossPay += includedGrossPay;
+    loadedCost += includedGrossPay * workerCostMultiplier;
     payableHours += summary.netWorkHours * (includedWorkHours / totalWorkHours);
     overtimeHours += summary.overtimeHours * (includedWorkHours / totalWorkHours);
 
@@ -127,8 +148,9 @@ export function buildLabourCostBreakdown({
       const propertyName = site?.name ?? NO_PROPERTY_NAME;
       const jobShare = jobWorkHours / totalWorkHours;
       const jobGrossPay = summary.grossPay * jobShare;
-      const jobLoadedCost = jobGrossPay * multiplier;
+      const jobLoadedCost = jobGrossPay * workerCostMultiplier;
       const jobPayableHours = summary.netWorkHours * jobShare;
+      const employeeName = profileDisplayName(profile);
 
       let property = propertyMap.get(propertyId);
       if (!property) {
@@ -155,20 +177,22 @@ export function buildLabourCostBreakdown({
         currentJob.loadedCost += jobLoadedCost;
         currentJob.payableHours += jobPayableHours;
         currentJob.workHours += jobWorkHours;
+        addEmployeeContribution(currentJob.employees, profile.id, employeeName, jobGrossPay, jobLoadedCost);
       } else {
+        const employees = new Map<string, EmployeeAggregate>();
+        addEmployeeContribution(employees, profile.id, employeeName, jobGrossPay, jobLoadedCost);
         property.jobs.set(jobKey, {
           jobCodeId,
-          jobCodeLabel: jobDisplayName(job, site),
+          jobCodeLabel: jobReportLabel(job),
           grossPay: jobGrossPay,
           loadedCost: jobLoadedCost,
           payableHours: jobPayableHours,
           workHours: jobWorkHours,
+          employees,
         });
       }
     });
   });
-
-  loadedCost = grossPay * multiplier;
 
   const properties = Array.from(propertyMap.values())
     .map<LabourCostPropertyBreakdown>((property) => ({
@@ -178,7 +202,12 @@ export function buildLabourCostBreakdown({
       loadedCost: property.loadedCost,
       payableHours: property.payableHours,
       workHours: property.workHours,
-      jobs: Array.from(property.jobs.values()).sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
+      jobs: Array.from(property.jobs.values())
+        .map((job) => ({
+          ...job,
+          employees: Array.from(job.employees.values()).sort((a, b) => b.grossPay - a.grossPay || a.employeeName.localeCompare(b.employeeName)),
+        }))
+        .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
     }))
     .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.propertyName.localeCompare(b.propertyName));
 
@@ -281,8 +310,14 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
           job.loadedCost += sourceJob.loadedCost;
           job.payableHours += sourceJob.payableHours;
           job.workHours += sourceJob.workHours;
+          sourceJob.employees.forEach((employee) => {
+            addEmployeeContribution(job.employees, employee.profileId, employee.employeeName, employee.grossPay, employee.loadedCost);
+          });
         } else {
-          property.jobs.set(jobKey, { ...sourceJob });
+          property.jobs.set(jobKey, {
+            ...sourceJob,
+            employees: new Map(sourceJob.employees.map((employee) => [employee.profileId, { ...employee }])),
+          });
         }
       });
     });
@@ -296,7 +331,12 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
       loadedCost: property.loadedCost,
       payableHours: property.payableHours,
       workHours: property.workHours,
-      jobs: Array.from(property.jobs.values()).sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
+      jobs: Array.from(property.jobs.values())
+        .map((job) => ({
+          ...job,
+          employees: Array.from(job.employees.values()).sort((a, b) => b.grossPay - a.grossPay || a.employeeName.localeCompare(b.employeeName)),
+        }))
+        .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
     }))
     .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.propertyName.localeCompare(b.propertyName));
 
@@ -330,4 +370,34 @@ function countEmployeesWithIncludedWork(entries: TimeEntry[], profiles: Profile[
 
 function sumEntryHours(entries: TimeEntry[], now: Date) {
   return entries.reduce((total, entry) => total + getEntryDurationHours(entry, now), 0);
+}
+
+function labourCostMultiplierForProfile(profile: Profile, employeeMultiplier: number) {
+  if (profile.workerType === 'contractor') return profile.contractorHstApplicable ? 1.15 : 1;
+  return employeeMultiplier;
+}
+
+function profileDisplayName(profile: Profile) {
+  return `${profile.firstName} ${profile.lastName}`.trim() || profile.email;
+}
+
+function jobReportLabel(job: JobCode | null | undefined) {
+  if (!job) return 'No job code';
+  return job.code ? `${job.code} ${job.name}` : job.name;
+}
+
+function addEmployeeContribution(
+  employees: Map<string, EmployeeAggregate>,
+  profileId: string,
+  employeeName: string,
+  grossPay: number,
+  loadedCost: number,
+) {
+  const current = employees.get(profileId);
+  if (current) {
+    current.grossPay += grossPay;
+    current.loadedCost += loadedCost;
+  } else {
+    employees.set(profileId, { profileId, employeeName, grossPay, loadedCost });
+  }
 }
