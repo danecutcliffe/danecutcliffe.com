@@ -1,0 +1,304 @@
+/*
+ * Static hosting override for Squarespace site
+ * Replaces dynamic JS-driven layout with pure CSS equivalents
+ *
+ * Font replacements:
+ *   abolition-soft (Typekit) → Bebas Neue (Google Fonts) — site title & tagline
+ *   katarine-web   (Typekit) → Barlow     (Google Fonts) — headings, nav, body text
+ */
+
+/* ===== FONT IMPORTS ===== */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&display=swap');
+
+/* ===== FONT: abolition-soft replacement (site title & tagline) ===== */
+/* abolition-soft is a condensed, all-caps display font by Fort Foundry.
+   Bebas Neue is a near-identical Google Fonts match — condensed, all-caps, industrial. */
+.site-title,
+.site-title a,
+.site-title-font,
+.mobile-site-title,
+.mobile-site-title a {
+  font-family: 'Bebas Neue', 'Arial Narrow', sans-serif !important;
+  text-transform: uppercase !important;
+  letter-spacing: .06em !important;
+  font-weight: 400 !important;
+  font-size: 16px !important;
+  line-height: 1.1em !important;
+}
+
+.site-tagline,
+.site-tagline-font,
+.mobile-site-tagline,
+.site-tagline a,
+.mobile-site-tagline a {
+  font-family: 'Bebas Neue', 'Arial Narrow', sans-serif !important;
+  text-transform: uppercase !important;
+  letter-spacing: .06em !important;
+  font-weight: 400 !important;
+  font-size: 16.5px !important;
+  line-height: 1.1em !important;
+  color: #a6a6a6 !important;
+  text-decoration: none !important;
+}
+
+.site-tagline a:hover,
+.mobile-site-tagline a:hover {
+  color: #a6a6a6 !important;
+}
+
+/* ===== FONT: katarine-web replacement (everything else) ===== */
+/* katarine-web is a clean humanist sans-serif used for headings, nav, body text.
+   Barlow is a close match from Google Fonts. */
+html, body {
+  font-family: 'Barlow', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+}
+
+h1, h2, h3, h4, h5, h6,
+.index-item-title,
+.index-item-title a,
+.index-item-title span,
+.index-item-title-text,
+.index-item-description,
+.page-title,
+.page-description,
+.project-slide-title,
+.nav-item a,
+.nav-item span,
+.site-navigation a,
+.site-navigation span,
+.primary-nav a,
+.mobile-nav a,
+.mobile-primary-nav-links a,
+.index-navigation a,
+.index-next-link,
+.index-next-link-label,
+.index-next-link-title,
+.index-item-navigation a,
+.sqs-html-content,
+.sqs-html-content p,
+.sqs-html-content strong {
+  font-family: 'Barlow', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+}
+
+/* Nav items: match katarine-web styling — standard capitalization (not all-caps) */
+.nav-item a,
+.nav-item a span,
+.site-navigation a,
+.site-navigation a span,
+.mobile-primary-nav-links a {
+  font-family: 'Barlow', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+  font-weight: 400 !important;
+  letter-spacing: .06em !important;
+  text-transform: none !important;
+}
+
+/* Remove Typekit loading animation — fonts are already available */
+html.wf-loading * {
+  animation: none !important;
+  color: inherit !important;
+}
+
+/* ===== GLOBAL: Force all images visible ===== */
+img.loading,
+img[data-load="false"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* ===== HOMEPAGE: Page banner ===== */
+.page-banner {
+  position: relative !important;
+  overflow: hidden;
+}
+
+.page-banner-image-wrapper {
+  position: relative !important;
+  height: auto !important;
+}
+
+.page-banner-image {
+  width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  object-fit: cover !important;
+}
+
+/* ===== HOMEPAGE: Portfolio index sections ===== */
+
+/* Each section is a block that flows naturally */
+.index-section {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Portfolio item — FIXED HEIGHT matching Squarespace "Large" = 70vh.
+   This ensures all items have the same height regardless of image dimensions.
+   Images are cropped via object-fit: cover to fill the container edge-to-edge. */
+article.index-item,
+.index-item {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 70vh !important;
+  overflow: hidden !important;
+  background-color: #000 !important;  /* Matches body bg while images load */
+}
+
+/* The <a> link wrapper — fills the full 70vh item */
+a.index-item-link,
+a.index-item-link.intrinsic {
+  display: block !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding-bottom: 0 !important;
+}
+
+/* The figure wrapper — fills the link */
+.index-item-image-wrapper,
+figure.index-item-image-wrapper {
+  position: absolute !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+}
+
+/* Portfolio thumbnail images — COVER the full container (cropped to fit) */
+img.index-item-image,
+img.js-index-item-image {
+  position: absolute !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+/* ===== HOMEPAGE: Text overlay on portfolio items ===== */
+/* The original site uses opacity: 0 → 1 on scroll (JS-driven).
+   Without JS, show titles always. No gradient overlay — transparent bg. */
+.index-item-text-wrapper {
+  position: absolute !important;
+  z-index: 2;
+  top: 4vw;
+  right: 4vw;
+  bottom: 4vw;
+  left: 4vw;
+  width: calc(100% - 8vw) !important;
+  height: calc(100% - 8vw) !important;
+  margin: auto !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-end !important;
+  align-items: flex-start !important;
+  pointer-events: none;
+  background: none !important;
+  opacity: 1 !important;
+  transition: none !important;
+}
+
+/* Make title links clickable */
+.index-item-text-wrapper a {
+  pointer-events: auto;
+}
+
+/* ===== PAGE BANNER ===== */
+/* All pages on this site have hide-collection-image on the banner container,
+   meaning the banner image was never meant to display. Hide the entire wrapper
+   to prevent empty space from banner height/margin/padding rules. */
+.page-banner-wrapper {
+  display: none !important;
+}
+
+/* ===== SUB-PAGES: Video embeds ===== */
+
+/* Vimeo/video intrinsic ratio containers (16:9) */
+.sqs-block-video .intrinsic,
+.embed-block .intrinsic,
+.video-block .intrinsic {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  padding-bottom: 56.25% !important; /* 16:9 */
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Embed block wrapper — override inline padding-bottom: 56.25% which doubles
+   the container height when combined with position: absolute + height: 100%.
+   The parent .intrinsic already handles the 16:9 aspect ratio. */
+.embed-block-wrapper {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding-bottom: 0 !important;
+}
+
+/* Vimeo iframes fill the container */
+.sqs-block-video .intrinsic iframe,
+.embed-block .intrinsic iframe,
+.video-block .intrinsic iframe,
+.embed-block-wrapper iframe,
+.sqs-video-wrapper iframe {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 2 !important;
+}
+
+/* sqs-video-wrapper fills its parent */
+.sqs-video-wrapper {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hide the video overlay thumbnail — the actual Vimeo iframe is now injected
+   and the Vimeo player shows its own thumbnail with play button */
+.sqs-video-overlay {
+  display: none !important;
+}
+
+/* ===== SUB-PAGES: Gallery/project images ===== */
+.image-block img,
+.sqs-block-image img,
+.design-layout-poster img,
+.sqs-gallery-block-stacked .sqs-gallery-design-stacked-slide img {
+  width: 100% !important;
+  height: auto !important;
+  display: block !important;
+}
+
+/* ===== BOTTOM NAV (Next: links) ===== */
+.index-next-link,
+.index-next-link-label,
+.index-next-link-title,
+.index-item-navigation a {
+  font-weight: 400 !important;
+  letter-spacing: 0.07em !important;
+}
+
+/* ===== IMAGE RENDERING OPTIMIZATION ===== */
+/* Hint browsers to use high-quality scaling for images displayed larger
+   than their native resolution (common on retina/HiDPI displays). */
+img {
+  image-rendering: auto;
+  -webkit-image-smoothing: high;
+}

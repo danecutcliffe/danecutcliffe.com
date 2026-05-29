@@ -1,0 +1,67 @@
+.time-day-panel {
+  position: relative;
+}
+
+.time-day-panel:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 1.5rem;
+  bottom: 0;
+  left: 1.5rem;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0.72;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-border) 68%, transparent),
+    color-mix(in srgb, var(--color-border) 68%, transparent),
+    transparent
+  );
+}
+
+@supports not (background: color-mix(in srgb, black, white)) {
+  .time-day-panel:not(:last-child)::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(168, 162, 158, 0.24),
+      rgba(168, 162, 158, 0.24),
+      transparent
+    );
+  }
+}
+
+@media (max-width: 1023px) {
+  #root > .min-h-screen {
+    min-height: 100dvh;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 {
+    position: fixed !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 50 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 > div {
+    display: flex !important;
+    width: 100%;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #root main.pb-28 {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

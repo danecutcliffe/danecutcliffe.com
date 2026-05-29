@@ -1,0 +1,261 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-paper: #f6f3ee;
+  --color-ink: #1a1a1a;
+  --color-accent: #0f766e;
+  --color-accent-hover: #0d6960;
+  --color-warning: #dc2626;
+  --color-card: #ffffff;
+  --color-card-alt: #fafaf9;
+  --color-border: #e7e5e4;
+  --color-border-subtle: #f5f5f4;
+  --color-muted: #78716c;
+  --color-muted-strong: #57534e;
+  --color-muted-light: #a8a29e;
+  --color-input-bg: #ffffff;
+  --color-input-border: #d6d3d1;
+  --color-focus-ring: rgba(15, 118, 110, 0.35);
+  --color-shadow: rgba(15, 23, 42, 0.08);
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #86efac;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #b91c1c;
+  --color-warn-bg: #fef2f2;
+  --color-warn-border: #fecaca;
+  --color-badge-neutral: #f5f5f4;
+  --color-badge-neutral-text: #57534e;
+  --color-success: #3a8a5c;
+  --color-badge-code: #1a1a1a;
+
+  color: var(--color-ink);
+  background: var(--color-paper);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #1c1917;
+    --color-ink: #e7e5e4;
+    --color-accent: #da7756;
+    --color-accent-hover: #c4684a;
+    --color-warning: #f87171;
+    --color-card: #292524;
+    --color-card-alt: #1c1917;
+    --color-border: #44403c;
+    --color-border-subtle: #292524;
+    --color-muted: #a8a29e;
+    --color-muted-strong: #d6d3d1;
+    --color-muted-light: #78716c;
+    --color-input-bg: #292524;
+    --color-input-border: #57534e;
+    --color-focus-ring: rgba(218, 119, 86, 0.4);
+    --color-shadow: rgba(0, 0, 0, 0.3);
+    --color-success-bg: #052e16;
+    --color-success-border: #166534;
+    --color-error-bg: #450a0a;
+    --color-error-border: #991b1b;
+    --color-error-text: #fca5a5;
+    --color-warn-bg: #450a0a;
+    --color-warn-border: #991b1b;
+    --color-badge-neutral: #44403c;
+    --color-badge-neutral-text: #d6d3d1;
+    --color-success: #7cb894;
+    --color-badge-code: #1a1a1a;
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-input-border);
+    color: var(--color-ink);
+    color-scheme: dark;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-muted-light);
+  }
+
+  option {
+    background-color: var(--color-card);
+    color: var(--color-ink);
+  }
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--color-paper);
+}
+
+button,
+select,
+input,
+textarea {
+  font: inherit;
+}
+
+/* Override WebKit autofill yellow background (iOS PWA / Safari) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-input-bg) inset;
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-ink);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.time-day-panel {
+  position: relative;
+}
+
+.time-day-panel:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 1.5rem;
+  bottom: 0;
+  left: 1.5rem;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0.72;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-border) 68%, transparent),
+    color-mix(in srgb, var(--color-border) 68%, transparent),
+    transparent
+  );
+}
+
+@supports not (background: color-mix(in srgb, black, white)) {
+  .time-day-panel:not(:last-child)::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(168, 162, 158, 0.24),
+      rgba(168, 162, 158, 0.24),
+      transparent
+    );
+  }
+}
+
+.timesheet-edit-button {
+  align-self: start;
+  min-height: 3rem;
+  min-width: 5.25rem;
+}
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-card-alt);
+  padding: 0.25rem;
+}
+
+.view-mode-label {
+  padding-left: 0.625rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.view-mode-options {
+  display: inline-flex;
+  gap: 0.125rem;
+}
+
+.view-mode-option {
+  min-height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.view-mode-option.is-active {
+  background: var(--color-badge-neutral);
+  color: var(--color-ink);
+  box-shadow: inset 0 0 0 1px var(--color-input-border);
+}
+
+@media (max-width: 639px) {
+  .timesheet-edit-button {
+    width: 100%;
+  }
+
+  .view-mode-switch {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .view-mode-options {
+    flex: 1 1 auto;
+  }
+
+  .view-mode-option {
+    flex: 1 1 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  #root > .min-h-screen {
+    min-height: 100dvh;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 {
+    position: fixed !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 50 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 > div {
+    display: flex !important;
+    width: 100%;
+  }
+
+  #root nav.fixed.inset-x-0.bottom-0.z-20 button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #root main.pb-28 {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

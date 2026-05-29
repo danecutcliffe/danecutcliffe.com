@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /time/
+
+Sitemap: https://danecutcliffe.com/sitemap.xml

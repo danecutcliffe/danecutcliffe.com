@@ -1,0 +1,10 @@
+.DS_Store
+app/.claude/
+app/.env
+app/.env.*
+!app/.env.example
+app/.vite/
+app/dist/
+app/node_modules/
+app/tsconfig.tsbuildinfo
+supabase/.temp/
