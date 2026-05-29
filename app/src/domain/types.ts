@@ -94,3 +94,45 @@ export interface GpsPoint {
   lng?: number;
   status: GpsStatus;
 }
+
+export type ScopeBuilderStatus = 'draft' | 'ready';
+
+export interface ScopeBuilderProject {
+  id: string;
+  jobSiteId: string;
+  jobCodeId: string;
+  title: string;
+  notes?: string | null;
+  status: ScopeBuilderStatus;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScopeBuilderSection {
+  id: string;
+  projectId: string;
+  title: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScopeBuilderItem {
+  id: string;
+  projectId: string;
+  sectionId: string;
+  itemText: string;
+  sortOrder: number;
+  isComplete: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScopeBuilderData {
+  project: ScopeBuilderProject;
+  sections: ScopeBuilderSection[];
+  items: ScopeBuilderItem[];
+}

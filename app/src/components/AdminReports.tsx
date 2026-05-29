@@ -3,7 +3,7 @@ import type { AuditLog, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry 
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { buildDetailedCsv, buildQboCsv, downloadCsv } from '../utils/csv';
 import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
-import { buildLabourCostBreakdown, type LabourCostPropertyBreakdown } from '../utils/labour';
+import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
 import {
   addDaysToDateKey,
   calculateTimesheetSummary,
@@ -20,13 +20,12 @@ interface AdminReportsProps {
   entries: TimeEntry[];
   auditLogs: AuditLog[];
   payPeriodSettings: PayPeriodSettings;
-  onOpenSettings?: () => void;
 }
 
 type ReportType = 'detailed' | 'hours' | 'jobs' | 'overtime';
 type PreviewType = 'detailed' | 'qbo';
 
-export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, onOpenSettings }: AdminReportsProps) {
+export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
   const [isLabourCostsOpen, setIsLabourCostsOpen] = useState(true);
@@ -58,26 +57,23 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const blockers = useMemo(() => buildExportBlockers(filteredEntries, profileById), [filteredEntries, profileById]);
   const summary = useMemo(() => calculatePayrollSummary(filteredEntries, employees), [employees, filteredEntries]);
   const labourBreakdown = useMemo(
-    () => buildLabourCostBreakdown({
-      entries: employeeScopedEntries,
+    () => buildLabourCostBreakdownAcrossPayPeriods({
+      entries,
       profiles,
       jobSites,
       jobCodes,
       laborCostMultiplier: payPeriodSettings.laborCostMultiplier,
-      selectedJobCodeId: jobCodeId || undefined,
+      payPeriodSettings,
     }),
-    [employeeScopedEntries, jobCodeId, jobCodes, jobSites, payPeriodSettings.laborCostMultiplier, profiles],
+    [entries, jobCodes, jobSites, payPeriodSettings, profiles],
   );
   const detailedCsv = buildDetailedCsv({ entries: filteredEntries, profiles, jobSites, jobCodes });
   const qboCsv = buildQboCsv({ entries: exportableEntries, profiles, jobSites, jobCodes });
   const detailedFilename = `time-detail-${periodStart}_to_${periodEnd}.csv`;
   const qboFilename = `qbo-time-${periodStart}_to_${periodEnd}.csv`;
-  const readiness = blockers.length === 0 && exportableEntries.length > 0 ? 'ready' : blockers.length > 0 ? 'blocked' : 'empty';
   const displayedPayableHours = jobCodeId ? labourBreakdown.payableHours : summary.netWorkHours;
   const displayedGrossPay = jobCodeId ? labourBreakdown.grossPay : summary.grossPay;
   const displayedOvertimeHours = jobCodeId ? labourBreakdown.overtimeHours : summary.overtimeHours;
-  const selectedEmployeeName = employeeId ? name(profileById.get(employeeId)) : '';
-  const selectedJobName = jobCodeId ? jobDisplayNameById(jobCodeId, jobById, siteById) : '';
   const maxPropertyLoadedCost = labourBreakdown.properties[0]?.loadedCost ?? 0;
 
   useEffect(() => {
@@ -103,15 +99,58 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
   return (
     <section className="space-y-4">
+      <div id="labour-costs" className="scroll-mt-20 rounded-md border border-app-border bg-card shadow-soft">
+        <button
+          className="flex w-full flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between"
+          type="button"
+          aria-expanded={isLabourCostsOpen}
+          onClick={() => setIsLabourCostsOpen(!isLabourCostsOpen)}
+        >
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold leading-tight">Labour cost by property</h2>
+            <p className="mt-1 text-sm text-muted">
+              {labourBreakdown.propertyCount} propert{labourBreakdown.propertyCount === 1 ? 'y' : 'ies'} · {labourBreakdown.jobCount} job code{labourBreakdown.jobCount === 1 ? '' : 's'} · {labourBreakdown.payableHours.toFixed(2)} payable hours
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 self-start sm:self-center">
+            <div className="text-left sm:text-right">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">Total loaded</p>
+              <p className="mt-1 text-2xl font-bold text-warning">{money(labourBreakdown.loadedCost)}</p>
+              <p className="text-xs font-semibold text-muted">{money(labourBreakdown.grossPay)} gross payroll</p>
+            </div>
+            <span className={`shrink-0 text-warning transition ${isLabourCostsOpen ? 'rotate-180' : ''}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+            </span>
+          </div>
+        </button>
+
+        {isLabourCostsOpen && (
+          <div className="border-t border-app-border-subtle p-4">
+            <div className="space-y-3">
+              {entries.length === 0 && <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm text-muted">No time entries have been recorded yet.</p>}
+              {entries.length > 0 && labourBreakdown.propertyCount === 0 && (
+                <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm text-muted">
+                  No work entries with property-linked job codes are available to allocate labour cost.
+                </p>
+              )}
+              {labourBreakdown.properties.map((property) => (
+                <LabourCostPropertyCard
+                  key={property.propertyId}
+                  property={property}
+                  maxLoadedCost={maxPropertyLoadedCost}
+                  isOpen={openPropertyIds[property.propertyId] ?? false}
+                  onToggle={() => setOpenPropertyIds((current) => ({ ...current, [property.propertyId]: !current[property.propertyId] }))}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div id="payroll-export" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${readinessClass(readiness)}`}>{readinessLabel(readiness)}</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{payPeriodSettings.lengthDays}-day period</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">QBO export</span>
-            </div>
-            <h2 className="mt-3 text-2xl font-bold leading-tight">Payroll export</h2>
+            <h2 className="text-2xl font-bold leading-tight">Payroll export</h2>
             <p className="mt-1 text-sm text-muted">{formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -163,79 +202,6 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           </select>
           <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white" type="button" onClick={() => showPreview('qbo')}>Preview QBO CSV</button>
         </div>
-      </div>
-
-      <div id="labour-costs" className="scroll-mt-20 rounded-md border border-warn-border bg-card shadow-soft">
-        <button
-          className="flex w-full items-center justify-between gap-3 p-4 text-left"
-          type="button"
-          aria-expanded={isLabourCostsOpen}
-          onClick={() => setIsLabourCostsOpen(!isLabourCostsOpen)}
-        >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-warn-bg px-3 py-1 text-xs font-bold text-warning">Labour costs</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">x{formatMultiplier(payPeriodSettings.laborCostMultiplier)} multiplier</span>
-              {employeeId && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{selectedEmployeeName}</span>}
-              {jobCodeId && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{selectedJobName}</span>}
-            </div>
-            <h2 className="mt-3 text-2xl font-bold leading-tight">Labour cost by property</h2>
-            <p className="mt-1 text-sm text-muted">Loaded labour cost rolls gross payroll up by the current settings multiplier for this pay period.</p>
-          </div>
-          <span className={`shrink-0 text-warning transition ${isLabourCostsOpen ? 'rotate-180' : ''}`}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-          </span>
-        </button>
-
-        {isLabourCostsOpen && (
-          <div className="border-t border-app-border-subtle p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <Metric
-                label="Loaded labour cost"
-                value={money(labourBreakdown.loadedCost)}
-                sublabel={`x${formatMultiplier(payPeriodSettings.laborCostMultiplier)} payroll burden`}
-                className="border border-warn-border bg-warn-bg"
-              />
-              <Metric label="Gross payroll" value={money(labourBreakdown.grossPay)} sublabel="Before multiplier" />
-              <Metric label="Payable hours" value={`${labourBreakdown.payableHours.toFixed(2)}h`} sublabel={`${labourBreakdown.overtimeHours.toFixed(2)}h overtime`} />
-              <Metric label="Properties" value={labourBreakdown.propertyCount.toString()} sublabel={`${labourBreakdown.jobCount} job codes`} />
-              <Metric label="Employees" value={labourBreakdown.employeeCount.toString()} sublabel={employeeId ? 'Filtered employee view' : 'Employees with work'} />
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-warn-border bg-warn-bg p-3">
-              <p className="flex-1 text-sm font-semibold text-muted-strong">
-                {labourContextCopy({
-                  multiplier: payPeriodSettings.laborCostMultiplier,
-                  selectedEmployeeName,
-                  selectedJobName,
-                })}
-              </p>
-              {onOpenSettings && (
-                <button className="min-h-10 rounded-md border border-warn-border bg-card px-3 text-sm font-bold text-warning" type="button" onClick={onOpenSettings}>
-                  Open Settings
-                </button>
-              )}
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {employeeScopedEntries.length === 0 && <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm text-muted">No time entries match the current pay period and filters.</p>}
-              {employeeScopedEntries.length > 0 && labourBreakdown.propertyCount === 0 && (
-                <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm text-muted">
-                  No work entries with property-linked job codes are available to allocate labour cost in this view.
-                </p>
-              )}
-              {labourBreakdown.properties.map((property) => (
-                <LabourCostPropertyCard
-                  key={property.propertyId}
-                  property={property}
-                  maxLoadedCost={maxPropertyLoadedCost}
-                  isOpen={openPropertyIds[property.propertyId] ?? false}
-                  onToggle={() => setOpenPropertyIds((current) => ({ ...current, [property.propertyId]: !current[property.propertyId] }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <div id="report-detail" className="scroll-mt-20 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -537,37 +503,4 @@ function formatMultiplier(value: number) {
 function barWidth(value: number, max: number) {
   if (max <= 0 || value <= 0) return 0;
   return Math.max(6, Math.min(100, (value / max) * 100));
-}
-
-function labourContextCopy({
-  multiplier,
-  selectedEmployeeName,
-  selectedJobName,
-}: {
-  multiplier: number;
-  selectedEmployeeName: string;
-  selectedJobName: string;
-}) {
-  if (selectedEmployeeName && selectedJobName) {
-    return `Showing ${selectedEmployeeName} on ${selectedJobName}. Gross payroll and loaded labour cost are allocated by work-hour share so breaks and overtime stay proportionate.`;
-  }
-  if (selectedJobName) {
-    return `Showing ${selectedJobName} only. Gross payroll and loaded labour cost are allocated by work-hour share so breaks and overtime stay proportionate.`;
-  }
-  if (selectedEmployeeName) {
-    return `Showing ${selectedEmployeeName} only. Loaded labour cost applies the current x${formatMultiplier(multiplier)} multiplier to this employee view.`;
-  }
-  return `Loaded labour cost applies the current x${formatMultiplier(multiplier)} multiplier to gross payroll for the selected pay period.`;
-}
-
-function readinessLabel(readiness: 'ready' | 'blocked' | 'empty') {
-  if (readiness === 'ready') return 'Ready to export';
-  if (readiness === 'blocked') return 'Needs review';
-  return 'No exportable time';
-}
-
-function readinessClass(readiness: 'ready' | 'blocked' | 'empty') {
-  if (readiness === 'ready') return 'bg-success-bg text-success';
-  if (readiness === 'blocked') return 'bg-error-bg text-error-text';
-  return 'bg-badge-neutral text-muted';
 }

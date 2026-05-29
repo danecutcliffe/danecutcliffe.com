@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { appConfig } from '../config/env';
-import type { GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
+import type { GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry } from '../domain/types';
 import { defaultPayPeriodSettings, normalizePayPeriodSettings } from '../hooks/usePayPeriodSettings';
 import { getBrowserPasskeySupport } from '../utils/passkeys';
 import { createSupabaseBrowserClient } from './supabase/client';
-import { mapAuditLog, mapJobCode, mapJobSite, mapProfile, mapTimeEntry, mapTimesheetApproval, type AuditLogRow, type JobCodeRow, type JobSiteRow, type ProfileRow, type TimeEntryRow, type TimesheetApprovalRow } from './supabase/mappers';
-import type { AdminTimeClockService, PasskeyInfo } from './TimeClockService';
+import { mapAuditLog, mapJobCode, mapJobSite, mapProfile, mapScopeBuilderData, mapScopeBuilderProject, mapTimeEntry, mapTimesheetApproval, type AuditLogRow, type JobCodeRow, type JobSiteRow, type ProfileRow, type ScopeBuilderItemRow, type ScopeBuilderProjectRow, type ScopeBuilderSectionRow, type TimeEntryRow, type TimesheetApprovalRow } from './supabase/mappers';
+import type { AdminTimeClockService, PasskeyInfo, ScopeBuilderSaveInput } from './TimeClockService';
 
 type SupabaseResponse<T> = {
   data: T | null;
@@ -25,6 +25,7 @@ const unwrap = <T>(response: SupabaseResponse<T>, fallbackMessage = 'Supabase re
 
 const capturedLat = (gps?: GpsPoint | null) => (gps?.status === 'captured' ? gps.lat ?? null : null);
 const capturedLng = (gps?: GpsPoint | null) => (gps?.status === 'captured' ? gps.lng ?? null : null);
+const isPersistedScopeBuilderId = (id: string | undefined) => Boolean(id && !id.startsWith('draft-'));
 
 class SupabaseTimeClockService implements AdminTimeClockService {
   readonly mode = 'supabase' as const;
@@ -551,6 +552,237 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
     if (error) throw new Error(error.message);
     return normalized;
+  }
+
+  async listScopeBuilderProjects(): Promise<ScopeBuilderProject[]> {
+    await this.assertAdmin();
+    const rows = unwrap(
+      await this.client
+        .from('scope_builder_projects')
+        .select('*')
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false }) as SupabaseResponse<ScopeBuilderProjectRow[]>,
+      'Unable to load beta scopes.',
+    );
+    return rows.map(mapScopeBuilderProject);
+  }
+
+  async getScopeBuilderProject({ projectId }: { projectId: string }): Promise<ScopeBuilderData> {
+    await this.assertAdmin();
+    const project = unwrap(
+      await this.client
+        .from('scope_builder_projects')
+        .select('*')
+        .eq('id', projectId)
+        .eq('is_active', true)
+        .single() as SupabaseResponse<ScopeBuilderProjectRow>,
+      'Unable to load beta scope.',
+    );
+    const [sectionRows, itemRows] = await Promise.all([
+      this.client
+        .from('scope_builder_sections')
+        .select('*')
+        .eq('scope_builder_project_id', projectId)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }) as PromiseLike<SupabaseResponse<ScopeBuilderSectionRow[]>>,
+      this.client
+        .from('scope_builder_items')
+        .select('*')
+        .eq('scope_builder_project_id', projectId)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }) as PromiseLike<SupabaseResponse<ScopeBuilderItemRow[]>>,
+    ]);
+    return mapScopeBuilderData(
+      project,
+      unwrap(await sectionRows, 'Unable to load beta scope sections.'),
+      unwrap(await itemRows, 'Unable to load beta scope line items.'),
+    );
+  }
+
+  async saveScopeBuilderProject({ project, sections, items }: ScopeBuilderSaveInput): Promise<ScopeBuilderData> {
+    const profile = await this.assertAdmin();
+    const title = project.title.trim();
+    if (!project.jobSiteId || !project.jobCodeId) throw new Error('Choose a property and job code before saving the beta scope.');
+    if (!title) throw new Error('Scope title is required.');
+
+    const linkedJob = unwrap(
+      await this.client
+        .from('job_codes')
+        .select('id,job_site_id')
+        .eq('id', project.jobCodeId)
+        .single() as SupabaseResponse<{ id: string; job_site_id: string | null }>,
+      'Unable to verify the selected job code.',
+    );
+    if (linkedJob.job_site_id !== project.jobSiteId) {
+      throw new Error('The selected job code does not belong to the selected property.');
+    }
+
+    const projectPayload = {
+      job_site_id: project.jobSiteId,
+      job_code_id: project.jobCodeId,
+      title,
+      notes: project.notes?.trim() || null,
+      status: project.status || 'draft',
+      is_active: true,
+      updated_by: profile.id,
+    };
+
+    let projectRow: ScopeBuilderProjectRow | null = null;
+    if (isPersistedScopeBuilderId(project.id)) {
+      projectRow = unwrap(
+        await this.client
+          .from('scope_builder_projects')
+          .update(projectPayload)
+          .eq('id', project.id)
+          .select('*')
+          .single() as SupabaseResponse<ScopeBuilderProjectRow>,
+        'Unable to save beta scope.',
+      );
+    } else {
+      const existing = await this.client
+        .from('scope_builder_projects')
+        .select('*')
+        .eq('job_code_id', project.jobCodeId)
+        .eq('is_active', true)
+        .maybeSingle() as SupabaseResponse<ScopeBuilderProjectRow>;
+
+      if (existing.error) throw new Error(existing.error.message);
+      if (existing.data) {
+        projectRow = unwrap(
+          await this.client
+            .from('scope_builder_projects')
+            .update(projectPayload)
+            .eq('id', existing.data.id)
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderProjectRow>,
+          'Unable to save beta scope.',
+        );
+      } else {
+        projectRow = unwrap(
+          await this.client
+            .from('scope_builder_projects')
+            .insert({ ...projectPayload, created_by: profile.id })
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderProjectRow>,
+          'Unable to create beta scope.',
+        );
+      }
+    }
+
+    const projectId = projectRow.id;
+    const existingSections = unwrap(
+      await this.client
+        .from('scope_builder_sections')
+        .select('*')
+        .eq('scope_builder_project_id', projectId)
+        .eq('is_active', true) as SupabaseResponse<ScopeBuilderSectionRow[]>,
+      'Unable to load beta scope sections.',
+    );
+    const existingSectionIds = new Set(existingSections.map((section) => section.id));
+    const activeSectionIds = new Set<string>();
+    const sectionIdMap = new Map<string, string>();
+
+    for (const [index, section] of sections.entries()) {
+      const sectionTitle = section.title.trim();
+      if (!sectionTitle) continue;
+      const payload = {
+        scope_builder_project_id: projectId,
+        title: sectionTitle,
+        sort_order: (index + 1) * 10,
+        is_active: true,
+        updated_by: profile.id,
+      };
+      const row = isPersistedScopeBuilderId(section.id) && existingSectionIds.has(section.id)
+        ? unwrap(
+          await this.client
+            .from('scope_builder_sections')
+            .update(payload)
+            .eq('id', section.id)
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderSectionRow>,
+          'Unable to save beta scope section.',
+        )
+        : unwrap(
+          await this.client
+            .from('scope_builder_sections')
+            .insert({ ...payload, created_by: profile.id })
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderSectionRow>,
+          'Unable to create beta scope section.',
+        );
+      activeSectionIds.add(row.id);
+      sectionIdMap.set(section.id, row.id);
+    }
+
+    const inactiveSectionIds = existingSections
+      .map((section) => section.id)
+      .filter((id) => !activeSectionIds.has(id));
+    if (inactiveSectionIds.length) {
+      const { error } = await this.client
+        .from('scope_builder_sections')
+        .update({ is_active: false, updated_by: profile.id })
+        .in('id', inactiveSectionIds);
+      if (error) throw new Error(error.message);
+    }
+
+    const existingItems = unwrap(
+      await this.client
+        .from('scope_builder_items')
+        .select('*')
+        .eq('scope_builder_project_id', projectId)
+        .eq('is_active', true) as SupabaseResponse<ScopeBuilderItemRow[]>,
+      'Unable to load beta scope line items.',
+    );
+    const existingItemIds = new Set(existingItems.map((item) => item.id));
+    const activeItemIds = new Set<string>();
+
+    for (const item of items) {
+      const itemText = item.itemText.trim();
+      const sectionId = sectionIdMap.get(item.sectionId) || item.sectionId;
+      if (!itemText || !activeSectionIds.has(sectionId)) continue;
+      const sectionItems = items.filter((candidate) => candidate.sectionId === item.sectionId && candidate.itemText.trim());
+      const payload = {
+        scope_builder_project_id: projectId,
+        scope_builder_section_id: sectionId,
+        item_text: itemText,
+        sort_order: (sectionItems.findIndex((candidate) => candidate.id === item.id) + 1) * 10,
+        is_complete: item.isComplete,
+        is_active: true,
+        updated_by: profile.id,
+      };
+      const row = isPersistedScopeBuilderId(item.id) && existingItemIds.has(item.id)
+        ? unwrap(
+          await this.client
+            .from('scope_builder_items')
+            .update(payload)
+            .eq('id', item.id)
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderItemRow>,
+          'Unable to save beta scope line item.',
+        )
+        : unwrap(
+          await this.client
+            .from('scope_builder_items')
+            .insert({ ...payload, created_by: profile.id })
+            .select('*')
+            .single() as SupabaseResponse<ScopeBuilderItemRow>,
+          'Unable to create beta scope line item.',
+        );
+      activeItemIds.add(row.id);
+    }
+
+    const inactiveItemIds = existingItems
+      .map((item) => item.id)
+      .filter((id) => !activeItemIds.has(id));
+    if (inactiveItemIds.length) {
+      const { error } = await this.client
+        .from('scope_builder_items')
+        .update({ is_active: false, updated_by: profile.id })
+        .in('id', inactiveItemIds);
+      if (error) throw new Error(error.message);
+    }
+
+    return this.getScopeBuilderProject({ projectId });
   }
 
   async createJobSite({ name, address, latitude, longitude, geofenceRadiusMeters = 250 }: { name: string; address?: string; latitude?: number | null; longitude?: number | null; geofenceRadiusMeters?: number }) {

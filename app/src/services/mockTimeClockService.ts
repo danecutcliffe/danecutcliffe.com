@@ -1,4 +1,4 @@
-import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
+import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
 import { defaultPayPeriodSettings, getPayPeriodForDate, normalizePayPeriodSettings } from '../hooks/usePayPeriodSettings';
 import { getAtlanticDateKey } from '../utils/time';
 import type { AdminTimeClockService, PasskeyInfo } from './TimeClockService';
@@ -141,6 +141,63 @@ let auditLogs: AuditLog[] = [
 let timesheetApprovals: TimesheetApproval[] = [];
 let payPeriodSettings: PayPeriodSettings = defaultPayPeriodSettings();
 let mockPasskeys: PasskeyInfo[] = [];
+let scopeBuilderProjects: ScopeBuilderProject[] = [
+  {
+    id: 'scope-builder-orlebar',
+    jobSiteId: 'site-orlebar',
+    jobCodeId: 'job-orlebar',
+    title: 'Interior renovation beta',
+    notes: 'Beta builder sandbox',
+    status: 'draft',
+    isActive: true,
+    createdAt: iso(new Date('2026-05-29T12:00:00Z')),
+    updatedAt: iso(new Date('2026-05-29T12:00:00Z')),
+  },
+];
+let scopeBuilderSections: ScopeBuilderSection[] = [
+  {
+    id: 'scope-builder-section-all-rooms',
+    projectId: 'scope-builder-orlebar',
+    title: 'All Rooms',
+    sortOrder: 10,
+    isActive: true,
+    createdAt: iso(new Date('2026-05-29T12:00:00Z')),
+    updatedAt: iso(new Date('2026-05-29T12:00:00Z')),
+  },
+  {
+    id: 'scope-builder-section-kitchen',
+    projectId: 'scope-builder-orlebar',
+    title: 'Kitchen',
+    sortOrder: 20,
+    isActive: true,
+    createdAt: iso(new Date('2026-05-29T12:00:00Z')),
+    updatedAt: iso(new Date('2026-05-29T12:00:00Z')),
+  },
+];
+let scopeBuilderItems: ScopeBuilderItem[] = [
+  {
+    id: 'scope-builder-item-demo-1',
+    projectId: 'scope-builder-orlebar',
+    sectionId: 'scope-builder-section-all-rooms',
+    itemText: 'Prep walls, ceilings, trims, doors and closets for paint.',
+    sortOrder: 10,
+    isComplete: false,
+    isActive: true,
+    createdAt: iso(new Date('2026-05-29T12:00:00Z')),
+    updatedAt: iso(new Date('2026-05-29T12:00:00Z')),
+  },
+  {
+    id: 'scope-builder-item-demo-2',
+    projectId: 'scope-builder-orlebar',
+    sectionId: 'scope-builder-section-kitchen',
+    itemText: 'Install new kitchen cabinets after flooring is installed.',
+    sortOrder: 10,
+    isComplete: false,
+    isActive: true,
+    createdAt: iso(new Date('2026-05-29T12:00:00Z')),
+    updatedAt: iso(new Date('2026-05-29T12:00:00Z')),
+  },
+];
 
 let timeEntries: TimeEntry[] = [
   {
@@ -249,6 +306,21 @@ const delay = async () => {
 
 const makeId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const cloneEntry = (entry: TimeEntry): TimeEntry => ({ ...entry });
+const cloneScopeBuilderData = (projectId: string): ScopeBuilderData => {
+  const project = scopeBuilderProjects.find((candidate) => candidate.id === projectId && candidate.isActive);
+  if (!project) throw new Error('Beta scope not found.');
+  return {
+    project: { ...project },
+    sections: scopeBuilderSections
+      .filter((section) => section.projectId === projectId && section.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((section) => ({ ...section })),
+    items: scopeBuilderItems
+      .filter((item) => item.projectId === projectId && item.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((item) => ({ ...item })),
+  };
+};
 
 const findEntry = (entryId: string) => {
   const entry = timeEntries.find((candidate) => candidate.id === entryId);
@@ -704,6 +776,137 @@ export const mockTimeClockService: AdminTimeClockService = {
     payPeriodSettings = normalizePayPeriodSettings(settings);
     logAudit({ userId: currentProfileId, action: 'pay_period_settings_updated', targetTable: 'app_settings', targetId: 'pay_period', oldValues, newValues: { ...payPeriodSettings } });
     return { ...payPeriodSettings };
+  },
+
+  async listScopeBuilderProjects() {
+    await delay();
+    return scopeBuilderProjects
+      .filter((project) => project.isActive)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((project) => ({ ...project }));
+  },
+
+  async getScopeBuilderProject({ projectId }) {
+    await delay();
+    return cloneScopeBuilderData(projectId);
+  },
+
+  async saveScopeBuilderProject({ project, sections, items }) {
+    await delay();
+    if (!project.jobSiteId || !project.jobCodeId) throw new Error('Choose a property and job code before saving the beta scope.');
+    if (!project.title.trim()) throw new Error('Scope title is required.');
+    const jobCode = jobCodes.find((candidate) => candidate.id === project.jobCodeId);
+    if (!jobCode || jobCode.jobSiteId !== project.jobSiteId) throw new Error('The selected job code does not belong to the selected property.');
+
+    const nowIso = new Date().toISOString();
+    let savedProject = project.id && !project.id.startsWith('draft-')
+      ? scopeBuilderProjects.find((candidate) => candidate.id === project.id)
+      : scopeBuilderProjects.find((candidate) => candidate.jobCodeId === project.jobCodeId && candidate.isActive);
+
+    if (!savedProject) {
+      savedProject = {
+        id: makeId('scope-builder'),
+        jobSiteId: project.jobSiteId,
+        jobCodeId: project.jobCodeId,
+        title: project.title.trim(),
+        notes: project.notes?.trim() || null,
+        status: project.status || 'draft',
+        isActive: true,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      scopeBuilderProjects = [...scopeBuilderProjects, savedProject];
+    } else {
+      Object.assign(savedProject, {
+        jobSiteId: project.jobSiteId,
+        jobCodeId: project.jobCodeId,
+        title: project.title.trim(),
+        notes: project.notes?.trim() || null,
+        status: project.status || 'draft',
+        isActive: true,
+        updatedAt: nowIso,
+      });
+    }
+
+    const projectId = savedProject.id;
+    const sectionIdMap = new Map<string, string>();
+    const activeSectionIds = new Set<string>();
+    sections.forEach((section, index) => {
+      const title = section.title.trim();
+      if (!title) return;
+      let savedSection = section.id && !section.id.startsWith('draft-')
+        ? scopeBuilderSections.find((candidate) => candidate.id === section.id && candidate.projectId === projectId)
+        : undefined;
+      if (!savedSection) {
+        savedSection = {
+          id: makeId('scope-builder-section'),
+          projectId,
+          title,
+          sortOrder: (index + 1) * 10,
+          isActive: true,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        scopeBuilderSections = [...scopeBuilderSections, savedSection];
+      } else {
+        Object.assign(savedSection, {
+          title,
+          sortOrder: (index + 1) * 10,
+          isActive: true,
+          updatedAt: nowIso,
+        });
+      }
+      sectionIdMap.set(section.id, savedSection.id);
+      activeSectionIds.add(savedSection.id);
+    });
+    scopeBuilderSections = scopeBuilderSections.map((section) => (
+      section.projectId === projectId && !activeSectionIds.has(section.id)
+        ? { ...section, isActive: false, updatedAt: nowIso }
+        : section
+    ));
+
+    const activeItemIds = new Set<string>();
+    items.forEach((item) => {
+      const itemText = item.itemText.trim();
+      const sectionId = sectionIdMap.get(item.sectionId) || item.sectionId;
+      if (!itemText || !activeSectionIds.has(sectionId)) return;
+      const sectionItems = items.filter((candidate) => candidate.sectionId === item.sectionId && candidate.itemText.trim());
+      let savedItem = item.id && !item.id.startsWith('draft-')
+        ? scopeBuilderItems.find((candidate) => candidate.id === item.id && candidate.projectId === projectId)
+        : undefined;
+      if (!savedItem) {
+        savedItem = {
+          id: makeId('scope-builder-item'),
+          projectId,
+          sectionId,
+          itemText,
+          sortOrder: (sectionItems.findIndex((candidate) => candidate.id === item.id) + 1) * 10,
+          isComplete: item.isComplete,
+          isActive: true,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        scopeBuilderItems = [...scopeBuilderItems, savedItem];
+      } else {
+        Object.assign(savedItem, {
+          sectionId,
+          itemText,
+          sortOrder: (sectionItems.findIndex((candidate) => candidate.id === item.id) + 1) * 10,
+          isComplete: item.isComplete,
+          isActive: true,
+          updatedAt: nowIso,
+        });
+      }
+      activeItemIds.add(savedItem.id);
+    });
+    scopeBuilderItems = scopeBuilderItems.map((item) => (
+      item.projectId === projectId && !activeItemIds.has(item.id)
+        ? { ...item, isActive: false, updatedAt: nowIso }
+        : item
+    ));
+
+    logAudit({ userId: currentProfileId, action: 'scope_builder_saved', targetTable: 'scope_builder_projects', targetId: projectId, oldValues: null, newValues: { projectId } });
+    return cloneScopeBuilderData(projectId);
   },
 
   async listAuditLogs(params) {

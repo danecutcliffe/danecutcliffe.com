@@ -933,10 +933,10 @@ export async function syncSectionOrderToNotion(
   }
   const targetParentId = parentBlockId || project.notion_page_id;
   const existingChildren = await queryBlockChildren(targetParentId);
-  const oldBlockIds = existingChildren
+  const oldBlockIds = uniqueStrings(existingChildren
     .filter((block: any) => isScopeContentBlock(block))
     .map((block: any) => String(block.id || ""))
-    .filter(Boolean);
+    .filter(Boolean));
 
   const response = await notion(`/blocks/${encodeURIComponent(targetParentId)}/children`, {
     method: "PATCH",
@@ -966,9 +966,31 @@ export async function syncSectionOrderToNotion(
     });
   }
 
+  const deleteErrors: string[] = [];
   for (const blockId of oldBlockIds) {
     if (newBlocks.some((block: any) => block.id === blockId)) continue;
-    await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" }).catch(() => null);
+    try {
+      await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" });
+    } catch (error) {
+      deleteErrors.push(`${blockId}: ${error instanceof Error ? error.message : "delete failed"}`);
+    }
+  }
+
+  if (oldBlockIds.length) {
+    // Verify cleanup so repeated repair attempts cannot silently stack duplicate blocks in Notion.
+    const refreshedChildren = await queryBlockChildren(targetParentId);
+    const lingeringBlockIds = uniqueStrings(refreshedChildren
+      .filter((block: any) => isScopeContentBlock(block))
+      .map((block: any) => String(block.id || ""))
+      .filter((blockId) => oldBlockIds.includes(blockId)));
+
+    if (deleteErrors.length || lingeringBlockIds.length) {
+      const problems = [
+        deleteErrors.length ? `delete errors: ${deleteErrors.join("; ")}` : "",
+        lingeringBlockIds.length ? `lingering blocks: ${lingeringBlockIds.join(", ")}` : "",
+      ].filter(Boolean).join(" | ");
+      throw new Error(`Notion section cleanup failed for "${section}". ${problems}`.trim());
+    }
   }
 
   if (options.resyncPage !== false) {

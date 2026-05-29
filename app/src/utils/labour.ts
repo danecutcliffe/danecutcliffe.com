@@ -1,6 +1,6 @@
-import type { JobCode, JobSite, Profile, TimeEntry } from '../domain/types';
+import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import { jobDisplayName, jobSiteById } from './jobs';
-import { calculateTimesheetSummary, getEntryDurationHours } from './time';
+import { addDaysToDateKey, calculateTimesheetSummary, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
 
 export interface LabourCostJobBreakdown {
   jobCodeId: string | null;
@@ -40,6 +40,10 @@ interface BuildLabourCostBreakdownParams {
   laborCostMultiplier: number;
   selectedJobCodeId?: string;
   now?: Date;
+}
+
+interface BuildLabourCostBreakdownAcrossPayPeriodsParams extends BuildLabourCostBreakdownParams {
+  payPeriodSettings: PayPeriodSettings;
 }
 
 interface JobAggregate extends LabourCostJobBreakdown {}
@@ -190,6 +194,20 @@ export function buildLabourCostBreakdown({
   };
 }
 
+export function buildLabourCostBreakdownAcrossPayPeriods({
+  payPeriodSettings,
+  ...params
+}: BuildLabourCostBreakdownAcrossPayPeriodsParams): LabourCostBreakdown {
+  const periods = groupEntriesByPayPeriod(params.entries, payPeriodSettings);
+  const breakdowns = Array.from(periods.values()).map((periodEntries) => buildLabourCostBreakdown({ ...params, entries: periodEntries }));
+  const merged = mergeLabourCostBreakdowns(breakdowns);
+
+  return {
+    ...merged,
+    employeeCount: countEmployeesWithIncludedWork(params.entries, params.profiles, params.selectedJobCodeId, params.now ?? new Date()),
+  };
+}
+
 function groupEntriesByUser(entries: TimeEntry[]) {
   return entries.reduce<Map<string, TimeEntry[]>>((groups, entry) => {
     const current = groups.get(entry.userId);
@@ -200,6 +218,114 @@ function groupEntriesByUser(entries: TimeEntry[]) {
     }
     return groups;
   }, new Map());
+}
+
+function groupEntriesByPayPeriod(entries: TimeEntry[], settings: PayPeriodSettings) {
+  const anchorStart = settings.anchorStart;
+  const lengthDays = Number.isFinite(settings.lengthDays) && settings.lengthDays >= 1 ? settings.lengthDays : 14;
+
+  return entries.reduce<Map<string, TimeEntry[]>>((groups, entry) => {
+    const entryDate = getAtlanticDateKey(entry.clockIn);
+    const periodOffset = Math.floor(dayDiff(anchorStart, entryDate) / lengthDays) * lengthDays;
+    const periodStart = addDaysToDateKey(anchorStart, periodOffset);
+    const current = groups.get(periodStart);
+    if (current) {
+      current.push(entry);
+    } else {
+      groups.set(periodStart, [entry]);
+    }
+    return groups;
+  }, new Map());
+}
+
+function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCostBreakdown {
+  const propertyMap = new Map<string, PropertyAggregate>();
+  let grossPay = 0;
+  let loadedCost = 0;
+  let payableHours = 0;
+  let overtimeHours = 0;
+  let employeeCount = 0;
+
+  breakdowns.forEach((breakdown) => {
+    grossPay += breakdown.grossPay;
+    loadedCost += breakdown.loadedCost;
+    payableHours += breakdown.payableHours;
+    overtimeHours += breakdown.overtimeHours;
+    employeeCount += breakdown.employeeCount;
+
+    breakdown.properties.forEach((sourceProperty) => {
+      let property = propertyMap.get(sourceProperty.propertyId);
+      if (!property) {
+        property = {
+          propertyId: sourceProperty.propertyId,
+          propertyName: sourceProperty.propertyName,
+          grossPay: 0,
+          loadedCost: 0,
+          payableHours: 0,
+          workHours: 0,
+          jobs: new Map<string, JobAggregate>(),
+        };
+        propertyMap.set(sourceProperty.propertyId, property);
+      }
+
+      property.grossPay += sourceProperty.grossPay;
+      property.loadedCost += sourceProperty.loadedCost;
+      property.payableHours += sourceProperty.payableHours;
+      property.workHours += sourceProperty.workHours;
+
+      sourceProperty.jobs.forEach((sourceJob) => {
+        const jobKey = `${sourceJob.jobCodeId ?? NO_JOB_KEY}|${sourceJob.jobCodeLabel}`;
+        const job = property.jobs.get(jobKey);
+        if (job) {
+          job.grossPay += sourceJob.grossPay;
+          job.loadedCost += sourceJob.loadedCost;
+          job.payableHours += sourceJob.payableHours;
+          job.workHours += sourceJob.workHours;
+        } else {
+          property.jobs.set(jobKey, { ...sourceJob });
+        }
+      });
+    });
+  });
+
+  const properties = Array.from(propertyMap.values())
+    .map<LabourCostPropertyBreakdown>((property) => ({
+      propertyId: property.propertyId,
+      propertyName: property.propertyName,
+      grossPay: property.grossPay,
+      loadedCost: property.loadedCost,
+      payableHours: property.payableHours,
+      workHours: property.workHours,
+      jobs: Array.from(property.jobs.values()).sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
+    }))
+    .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.propertyName.localeCompare(b.propertyName));
+
+  return {
+    grossPay,
+    loadedCost,
+    payableHours,
+    overtimeHours,
+    employeeCount,
+    propertyCount: properties.length,
+    jobCount: properties.reduce((total, property) => total + property.jobs.length, 0),
+    properties,
+  };
+}
+
+function countEmployeesWithIncludedWork(entries: TimeEntry[], profiles: Profile[], selectedJobCodeId: string | undefined, now: Date) {
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const employeeIds = new Set<string>();
+
+  entries.forEach((entry) => {
+    const profile = profileById.get(entry.userId);
+    if (profile?.role !== 'employee') return;
+    if (entry.eventType !== 'work') return;
+    if (selectedJobCodeId && entry.jobCodeId !== selectedJobCodeId) return;
+    if (getEntryDurationHours(entry, now) <= 0) return;
+    employeeIds.add(entry.userId);
+  });
+
+  return employeeIds.size;
 }
 
 function sumEntryHours(entries: TimeEntry[], now: Date) {

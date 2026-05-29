@@ -1,4 +1,4 @@
-import type { AuditLog, JobCode, JobSite, Profile, TimeEntry, TimesheetApproval } from '../../domain/types';
+import type { AuditLog, JobCode, JobSite, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../../domain/types';
 
 export interface ProfileRow {
   id: string;
@@ -80,6 +80,40 @@ export interface TimesheetApprovalRow {
   created_at: string;
 }
 
+export interface ScopeBuilderProjectRow {
+  id: string;
+  job_site_id: string;
+  job_code_id: string;
+  title: string;
+  notes: string | null;
+  status: ScopeBuilderProject['status'];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScopeBuilderSectionRow {
+  id: string;
+  scope_builder_project_id: string;
+  title: string;
+  sort_order: number | string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScopeBuilderItemRow {
+  id: string;
+  scope_builder_project_id: string;
+  scope_builder_section_id: string;
+  item_text: string;
+  sort_order: number | string;
+  is_complete: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const mapProfile = (row: ProfileRow): Profile => ({
   id: row.id,
   email: row.email,
@@ -158,4 +192,48 @@ export const mapTimesheetApproval = (row: TimesheetApprovalRow): TimesheetApprov
   approvedAt: row.approved_at,
   rejectionNote: row.rejection_note,
   createdAt: row.created_at,
+});
+
+export const mapScopeBuilderProject = (row: ScopeBuilderProjectRow): ScopeBuilderProject => ({
+  id: row.id,
+  jobSiteId: row.job_site_id,
+  jobCodeId: row.job_code_id,
+  title: row.title,
+  notes: row.notes,
+  status: row.status,
+  isActive: row.is_active,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const mapScopeBuilderSection = (row: ScopeBuilderSectionRow): ScopeBuilderSection => ({
+  id: row.id,
+  projectId: row.scope_builder_project_id,
+  title: row.title,
+  sortOrder: Number(row.sort_order),
+  isActive: row.is_active,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const mapScopeBuilderItem = (row: ScopeBuilderItemRow): ScopeBuilderItem => ({
+  id: row.id,
+  projectId: row.scope_builder_project_id,
+  sectionId: row.scope_builder_section_id,
+  itemText: row.item_text,
+  sortOrder: Number(row.sort_order),
+  isComplete: row.is_complete,
+  isActive: row.is_active,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const mapScopeBuilderData = (
+  project: ScopeBuilderProjectRow,
+  sections: ScopeBuilderSectionRow[],
+  items: ScopeBuilderItemRow[],
+): ScopeBuilderData => ({
+  project: mapScopeBuilderProject(project),
+  sections: sections.map(mapScopeBuilderSection),
+  items: items.map(mapScopeBuilderItem),
 });

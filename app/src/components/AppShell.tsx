@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AlarmClock, ChevronDown, LogOut } from 'lucide-react';
 import type { AppRole, Profile } from '../domain/types';
 
-export type AppTab = 'clock' | 'timesheets' | 'settings' | 'dashboard' | 'employees' | 'reports' | 'scope';
+export type AppTab = 'clock' | 'timesheets' | 'settings' | 'dashboard' | 'employees' | 'reports' | 'scope' | 'scope-builder';
 
 interface SubSection { id: string; label: string }
 
@@ -57,11 +57,14 @@ const adminTabs: TabDef[] = [
     { id: 'job-codes', label: 'Job Codes' },
   ]},
   { id: 'reports', label: 'Reports', sections: [
-    { id: 'payroll-export', label: 'Payroll Export' },
     { id: 'labour-costs', label: 'Labour Costs' },
+    { id: 'payroll-export', label: 'Payroll Export' },
     { id: 'report-detail', label: 'Reports' },
     { id: 'csv-exports', label: 'CSV Exports' },
     { id: 'audit-trail', label: 'Audit Trail' },
+  ]},
+  { id: 'scope-builder', label: 'Scope Builder', sections: [
+    { id: 'scope-builder', label: 'Builder' },
   ]},
   { id: 'scope', label: 'Scope' },
 ];

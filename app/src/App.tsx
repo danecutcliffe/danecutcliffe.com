@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminEmployees } from './components/AdminEmployees';
 import { AdminReports } from './components/AdminReports';
+import { AdminScopeBuilder } from './components/AdminScopeBuilder';
 import { AdminTimesheets } from './components/AdminTimesheets';
 import { AppShell, type AppTab } from './components/AppShell';
 import { AuthScreen } from './components/AuthScreen';
@@ -20,7 +21,7 @@ const employeeDefaultTab: AppTab = 'clock';
 const adminDefaultTab: AppTab = 'dashboard';
 const employeeTabs: AppTab[] = ['clock', 'timesheets', 'scope', 'settings'];
 const employeeTabsWithoutScope: AppTab[] = ['clock', 'timesheets', 'settings'];
-const adminTabs: AppTab[] = ['dashboard', 'timesheets', 'employees', 'reports', 'scope'];
+const adminTabs: AppTab[] = ['dashboard', 'timesheets', 'employees', 'reports', 'scope-builder', 'scope'];
 
 const hasScopeAccess = (profile: Profile | null) => profile?.role === 'admin' || profile?.canAccessScopes !== false;
 
@@ -149,7 +150,8 @@ export default function App() {
       {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
       {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
       {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} currentProfileId={profile.id} service={service} onPayPeriodSettingsChange={updatePayPeriodSettings} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} onOpenSettings={() => setActiveTab('employees')} />}
+      {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} />}
+      {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
 
       {profile && profile.isActive && hasScopeAccess(profile) && activeTab === 'scope' && <div id="scope-content-root" />}
     </AppShell>

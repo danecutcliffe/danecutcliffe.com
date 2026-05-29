@@ -1,4 +1,4 @@
-import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
+import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
 
 export interface PasskeySupport {
   isSupported: boolean;
@@ -11,6 +11,19 @@ export interface PasskeyInfo {
   friendlyName?: string;
   createdAt: string;
   lastUsedAt?: string;
+}
+
+export interface ScopeBuilderSaveInput {
+  project: {
+    id?: string;
+    jobSiteId: string;
+    jobCodeId: string;
+    title: string;
+    notes?: string | null;
+    status?: ScopeBuilderProject['status'];
+  };
+  sections: Array<Pick<ScopeBuilderSection, 'id' | 'title' | 'sortOrder'>>;
+  items: Array<Pick<ScopeBuilderItem, 'id' | 'sectionId' | 'itemText' | 'sortOrder' | 'isComplete'>>;
 }
 
 export interface TimeClockService {
@@ -179,4 +192,12 @@ export interface AdminTimeClockService extends TimeClockService {
     settings: PayPeriodSettings;
     adminPassword: string;
   }): Promise<PayPeriodSettings>;
+
+  listScopeBuilderProjects(): Promise<ScopeBuilderProject[]>;
+
+  getScopeBuilderProject(params: {
+    projectId: string;
+  }): Promise<ScopeBuilderData>;
+
+  saveScopeBuilderProject(params: ScopeBuilderSaveInput): Promise<ScopeBuilderData>;
 }
