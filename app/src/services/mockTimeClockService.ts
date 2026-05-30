@@ -1,4 +1,4 @@
-import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
+import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
 import { defaultPayPeriodSettings, getPayPeriodForDate, normalizePayPeriodSettings } from '../hooks/usePayPeriodSettings';
 import { getAtlanticDateKey } from '../utils/time';
 import type { AdminTimeClockService, PasskeyInfo } from './TimeClockService';
@@ -146,6 +146,14 @@ let auditLogs: AuditLog[] = [
 
 let timesheetApprovals: TimesheetApproval[] = [];
 let payPeriodSettings: PayPeriodSettings = defaultPayPeriodSettings();
+let payrollGrossUpMultipliers: PayrollGrossUpMultiplier[] = [
+  {
+    id: 'gross-up-baseline',
+    effectiveDate: payPeriodSettings.anchorStart,
+    multiplier: payPeriodSettings.laborCostMultiplier ?? 1.25,
+    createdAt: new Date().toISOString(),
+  },
+];
 let mockPasskeys: PasskeyInfo[] = [];
 let scopeBuilderProjects: ScopeBuilderProject[] = [
   {
@@ -784,6 +792,38 @@ export const mockTimeClockService: AdminTimeClockService = {
     payPeriodSettings = normalizePayPeriodSettings(settings);
     logAudit({ userId: currentProfileId, action: 'pay_period_settings_updated', targetTable: 'app_settings', targetId: 'pay_period', oldValues, newValues: { ...payPeriodSettings } });
     return { ...payPeriodSettings };
+  },
+
+  async listPayrollGrossUpMultipliers() {
+    await delay();
+    return payrollGrossUpMultipliers
+      .slice()
+      .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
+      .map((entry) => ({ ...entry }));
+  },
+
+  async upsertPayrollGrossUpMultiplier({ effectiveDate, multiplier, adminPassword }) {
+    await delay();
+    if (!adminPassword) throw new Error('Admin password is required.');
+    if (!effectiveDate) throw new Error('An effective date is required.');
+    if (!Number.isFinite(multiplier) || multiplier < 1) throw new Error('Enter a multiplier of 1.00 or higher.');
+    const existing = payrollGrossUpMultipliers.find((entry) => entry.effectiveDate === effectiveDate);
+    if (existing) {
+      existing.multiplier = multiplier;
+    } else {
+      payrollGrossUpMultipliers.push({
+        id: `gross-up-${effectiveDate}`,
+        effectiveDate,
+        multiplier,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  },
+
+  async deletePayrollGrossUpMultiplier({ id, adminPassword }) {
+    await delay();
+    if (!adminPassword) throw new Error('Admin password is required.');
+    payrollGrossUpMultipliers = payrollGrossUpMultipliers.filter((entry) => entry.id !== id);
   },
 
   async listScopeBuilderProjects() {

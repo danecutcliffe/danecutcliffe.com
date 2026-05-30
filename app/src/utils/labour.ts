@@ -2,6 +2,11 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { jobSiteById } from './jobs';
 import { addDaysToDateKey, calculateTimesheetSummary, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
 
+export interface GrossUpScheduleEntry {
+  effectiveDate: string;
+  multiplier: number;
+}
+
 export interface LabourCostEmployeeBreakdown {
   profileId: string;
   employeeName: string;
@@ -45,7 +50,7 @@ interface BuildLabourCostBreakdownParams {
   profiles: Profile[];
   jobSites: JobSite[];
   jobCodes: JobCode[];
-  laborCostMultiplier: number;
+  grossUpSchedule: GrossUpScheduleEntry[];
   selectedJobCodeId?: string;
   now?: Date;
 }
@@ -85,7 +90,7 @@ export function buildLabourCostBreakdown({
   profiles,
   jobSites,
   jobCodes,
-  laborCostMultiplier,
+  grossUpSchedule,
   selectedJobCodeId,
   now = new Date(),
 }: BuildLabourCostBreakdownParams): LabourCostBreakdown {
@@ -94,7 +99,6 @@ export function buildLabourCostBreakdown({
   const siteById = jobSiteById(jobSites);
   const entriesByUser = groupEntriesByUser(entries);
   const propertyMap = new Map<string, PropertyAggregate>();
-  const multiplier = Number.isFinite(laborCostMultiplier) && laborCostMultiplier >= 1 ? laborCostMultiplier : 1.25;
 
   let grossPay = 0;
   let loadedCost = 0;
@@ -120,7 +124,7 @@ export function buildLabourCostBreakdown({
       paidBreaks: profile.paidBreaks,
       paidBreakMinutes: profile.paidBreakMinutes,
     });
-    const workerCostMultiplier = labourCostMultiplierForProfile(profile, multiplier);
+    const workerCostMultiplier = weightedWorkerMultiplier(includedWorkEntries, profile, grossUpSchedule, now);
     const includedGrossPay = summary.grossPay * (includedWorkHours / totalWorkHours);
 
     employeeCount += 1;
@@ -129,26 +133,29 @@ export function buildLabourCostBreakdown({
     payableHours += summary.netWorkHours * (includedWorkHours / totalWorkHours);
     overtimeHours += summary.overtimeHours * (includedWorkHours / totalWorkHours);
 
-    const jobHours = new Map<string, { jobCodeId: string | null; workHours: number }>();
+    const jobHours = new Map<string, { jobCodeId: string | null; workHours: number; weightedMultSum: number }>();
     includedWorkEntries.forEach((entry) => {
       const key = entry.jobCodeId ?? NO_JOB_KEY;
       const current = jobHours.get(key);
       const hours = getEntryDurationHours(entry, now);
+      const entryMultiplier = labourCostMultiplierForProfile(profile, multiplierForDate(grossUpSchedule, getAtlanticDateKey(entry.clockIn)));
       if (current) {
         current.workHours += hours;
+        current.weightedMultSum += hours * entryMultiplier;
       } else {
-        jobHours.set(key, { jobCodeId: entry.jobCodeId, workHours: hours });
+        jobHours.set(key, { jobCodeId: entry.jobCodeId, workHours: hours, weightedMultSum: hours * entryMultiplier });
       }
     });
 
-    jobHours.forEach(({ jobCodeId, workHours: jobWorkHours }, jobKey) => {
+    jobHours.forEach(({ jobCodeId, workHours: jobWorkHours, weightedMultSum }, jobKey) => {
       const job = jobCodeId ? jobById.get(jobCodeId) ?? null : null;
       const site = job?.jobSiteId ? siteById.get(job.jobSiteId) ?? null : null;
       const propertyId = site?.id ?? NO_PROPERTY_ID;
       const propertyName = site?.name ?? NO_PROPERTY_NAME;
       const jobShare = jobWorkHours / totalWorkHours;
       const jobGrossPay = summary.grossPay * jobShare;
-      const jobLoadedCost = jobGrossPay * workerCostMultiplier;
+      const jobWeightedMultiplier = jobWorkHours > 0 ? weightedMultSum / jobWorkHours : workerCostMultiplier;
+      const jobLoadedCost = jobGrossPay * jobWeightedMultiplier;
       const jobPayableHours = summary.netWorkHours * jobShare;
       const employeeName = profileDisplayName(profile);
 
@@ -375,6 +382,36 @@ function sumEntryHours(entries: TimeEntry[], now: Date) {
 function labourCostMultiplierForProfile(profile: Profile, employeeMultiplier: number) {
   if (profile.workerType === 'contractor') return profile.contractorHstApplicable ? 1.15 : 1;
   return employeeMultiplier;
+}
+
+function multiplierForDate(schedule: GrossUpScheduleEntry[], dateKey: string): number {
+  if (!schedule.length) return 1.25;
+  const sorted = [...schedule].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  let result = sorted[0].multiplier;
+  for (const entry of sorted) {
+    if (entry.effectiveDate <= dateKey) {
+      result = entry.multiplier;
+    } else {
+      break;
+    }
+  }
+  return result;
+}
+
+function weightedWorkerMultiplier(entries: TimeEntry[], profile: Profile, schedule: GrossUpScheduleEntry[], now: Date): number {
+  let weighted = 0;
+  let totalHours = 0;
+  for (const entry of entries) {
+    const hours = getEntryDurationHours(entry, now);
+    if (hours <= 0) continue;
+    const base = multiplierForDate(schedule, getAtlanticDateKey(entry.clockIn));
+    weighted += hours * labourCostMultiplierForProfile(profile, base);
+    totalHours += hours;
+  }
+  if (totalHours <= 0) {
+    return labourCostMultiplierForProfile(profile, multiplierForDate(schedule, getAtlanticDateKey(now.toISOString())));
+  }
+  return weighted / totalHours;
 }
 
 function profileDisplayName(profile: Profile) {

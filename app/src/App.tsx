@@ -11,7 +11,7 @@ import { PasskeySetupPrompt } from './components/PasskeySetupPrompt';
 import { SettingsScreen } from './components/SettingsScreen';
 import { TimesheetScreen } from './components/TimesheetScreen';
 import { appConfig } from './config/env';
-import type { AppRole, AuditLog, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from './domain/types';
+import type { AppRole, AuditLog, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, TimeEntry, TimesheetApproval } from './domain/types';
 import { defaultPayPeriodSettings } from './hooks/usePayPeriodSettings';
 import { timeClockService } from './services/timeClockServiceFactory';
 
@@ -34,6 +34,7 @@ export default function App() {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [timesheetApprovals, setTimesheetApprovals] = useState<TimesheetApproval[]>([]);
   const [payPeriodSettings, setPayPeriodSettings] = useState<PayPeriodSettings>(() => defaultPayPeriodSettings());
+  const [grossUpMultipliers, setGrossUpMultipliers] = useState<PayrollGrossUpMultiplier[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [openWorkEntry, setOpenWorkEntry] = useState<TimeEntry | null>(null);
   const [openBreakEntry, setOpenBreakEntry] = useState<TimeEntry | null>(null);
@@ -58,20 +59,23 @@ export default function App() {
           setEntries([]);
           setTimesheetApprovals([]);
           setAuditLogs([]);
+          setGrossUpMultipliers([]);
           setOpenWorkEntry(null);
           setOpenBreakEntry(null);
           return;
         }
-        const [timeEntries, approvals, openWork, openBreak, logs] = await Promise.all([
+        const [timeEntries, approvals, openWork, openBreak, logs, grossUps] = await Promise.all([
           service.listTimeEntries(isAdmin ? {} : { userId: currentProfile.id }),
           service.listTimesheetApprovals(isAdmin ? {} : { userId: currentProfile.id }),
           service.getOpenWorkEntry(currentProfile.id),
           service.getOpenBreakEntry(currentProfile.id),
           isAdmin ? service.listAuditLogs() : Promise.resolve([]),
+          isAdmin ? service.listPayrollGrossUpMultipliers() : Promise.resolve([]),
         ]);
         setEntries(timeEntries);
         setTimesheetApprovals(approvals);
         setAuditLogs(logs);
+        setGrossUpMultipliers(grossUps);
         setOpenWorkEntry(openWork);
         setOpenBreakEntry(openBreak);
         if (isAdmin && !adminTabs.includes(activeTab)) setActiveTab(adminDefaultTab);
@@ -80,6 +84,7 @@ export default function App() {
         setEntries([]);
         setTimesheetApprovals([]);
         setAuditLogs([]);
+        setGrossUpMultipliers([]);
         setJobSites([]);
         setOpenWorkEntry(null);
         setOpenBreakEntry(null);
@@ -125,6 +130,16 @@ export default function App() {
     await refresh();
   };
 
+  const saveGrossUpMultiplier = async (effectiveDate: string, multiplier: number, adminPassword: string) => {
+    await service.upsertPayrollGrossUpMultiplier({ effectiveDate, multiplier, adminPassword });
+    await refresh();
+  };
+
+  const removeGrossUpMultiplier = async (id: string, adminPassword: string) => {
+    await service.deletePayrollGrossUpMultiplier({ id, adminPassword });
+    await refresh();
+  };
+
   const isAdmin = profile?.role === 'admin';
   const canSwitchRole = Boolean(service.setMockRole);
 
@@ -149,8 +164,8 @@ export default function App() {
 
       {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
       {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} currentProfileId={profile.id} service={service} onPayPeriodSettingsChange={updatePayPeriodSettings} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} />}
+      {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
+      {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
       {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
 
       {profile && profile.isActive && hasScopeAccess(profile) && activeTab === 'scope' && <div id="scope-content-root" />}

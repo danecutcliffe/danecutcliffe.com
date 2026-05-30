@@ -1,4 +1,4 @@
-import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
+import type { AppRole, AuditLog, GpsPoint, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry, TimesheetApproval } from '../domain/types';
 
 export interface PasskeySupport {
   isSupported: boolean;
@@ -194,6 +194,19 @@ export interface AdminTimeClockService extends TimeClockService {
     settings: PayPeriodSettings;
     adminPassword: string;
   }): Promise<PayPeriodSettings>;
+
+  listPayrollGrossUpMultipliers(): Promise<PayrollGrossUpMultiplier[]>;
+
+  upsertPayrollGrossUpMultiplier(params: {
+    effectiveDate: string;
+    multiplier: number;
+    adminPassword: string;
+  }): Promise<void>;
+
+  deletePayrollGrossUpMultiplier(params: {
+    id: string;
+    adminPassword: string;
+  }): Promise<void>;
 
   listScopeBuilderProjects(): Promise<ScopeBuilderProject[]>;
 

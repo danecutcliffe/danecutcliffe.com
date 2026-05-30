@@ -78,7 +78,16 @@ export interface TimesheetApproval {
 export interface PayPeriodSettings {
   anchorStart: string;
   lengthDays: number;
+  // Deprecated: superseded by the effective-dated PayrollGrossUpMultiplier history.
+  // Retained for backward compatibility; no longer the source of truth for cost reporting.
   laborCostMultiplier: number;
+}
+
+export interface PayrollGrossUpMultiplier {
+  id: string;
+  effectiveDate: string;
+  multiplier: number;
+  createdAt?: string;
 }
 
 export interface AuditLog {

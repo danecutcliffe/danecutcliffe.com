@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { appConfig } from '../config/env';
-import type { GpsPoint, JobCode, JobSite, PayPeriodSettings, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry } from '../domain/types';
+import type { GpsPoint, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, ScopeBuilderData, ScopeBuilderItem, ScopeBuilderProject, ScopeBuilderSection, TimeEntry } from '../domain/types';
 import { defaultPayPeriodSettings, normalizePayPeriodSettings } from '../hooks/usePayPeriodSettings';
 import { getBrowserPasskeySupport } from '../utils/passkeys';
 import { createSupabaseBrowserClient } from './supabase/client';
@@ -556,6 +556,48 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
     if (error) throw new Error(error.message);
     return normalized;
+  }
+
+  async listPayrollGrossUpMultipliers(): Promise<PayrollGrossUpMultiplier[]> {
+    if (!(await this.hasSession())) return [];
+    const { data, error } = await this.client
+      .from('payroll_gross_up_multipliers')
+      .select('id, effective_date, multiplier, created_at')
+      .order('effective_date', { ascending: false });
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Array<{ id: string; effective_date: string; multiplier: number | string; created_at: string | null }>;
+    return rows.map((row) => ({
+      id: row.id,
+      effectiveDate: row.effective_date,
+      multiplier: Number(row.multiplier),
+      createdAt: row.created_at ?? undefined,
+    }));
+  }
+
+  async upsertPayrollGrossUpMultiplier({ effectiveDate, multiplier, adminPassword }: { effectiveDate: string; multiplier: number; adminPassword: string }) {
+    const profile = await this.assertAdmin();
+    await this.verifyCurrentUserPassword(adminPassword, profile);
+    if (!effectiveDate) throw new Error('An effective date is required.');
+    if (!Number.isFinite(multiplier) || multiplier < 1) throw new Error('Enter a multiplier of 1.00 or higher.');
+    const { error } = await this.client
+      .from('payroll_gross_up_multipliers')
+      .upsert({
+        effective_date: effectiveDate,
+        multiplier,
+        created_by: profile.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'effective_date' });
+    if (error) throw new Error(error.message);
+  }
+
+  async deletePayrollGrossUpMultiplier({ id, adminPassword }: { id: string; adminPassword: string }) {
+    const profile = await this.assertAdmin();
+    await this.verifyCurrentUserPassword(adminPassword, profile);
+    const { error } = await this.client
+      .from('payroll_gross_up_multipliers')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
   }
 
   async listScopeBuilderProjects(): Promise<ScopeBuilderProject[]> {

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Archive, ChevronDown, ChevronUp, ExternalLink, MapPin, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
-import type { AppRole, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, WorkerType } from '../domain/types';
+import type { AppRole, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, TimeEntry, WorkerType } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { geocodeAddress } from '../utils/geocoding';
 import { googleMapsCoordinatesUrl, googleMapsSearchUrl, isJobCodeUsed, jobPropertyName, jobSiteById } from '../utils/jobs';
-import { formatAtlanticDate } from '../utils/time';
+import { formatAtlanticDate, getAtlanticDateKey } from '../utils/time';
 
 interface AdminEmployeesProps {
   profiles: Profile[];
@@ -13,13 +13,16 @@ interface AdminEmployeesProps {
   jobCodes: JobCode[];
   entries: TimeEntry[];
   payPeriodSettings: PayPeriodSettings;
+  grossUpMultipliers: PayrollGrossUpMultiplier[];
   currentProfileId: string;
   service: AdminTimeClockService;
   onPayPeriodSettingsChange: (settings: PayPeriodSettings, adminPassword: string) => Promise<void>;
+  onGrossUpMultiplierSave: (effectiveDate: string, multiplier: number, adminPassword: string) => Promise<void>;
+  onGrossUpMultiplierDelete: (id: string, adminPassword: string) => Promise<void>;
   onDataChange: () => Promise<void>;
 }
 
-export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPeriodSettings, currentProfileId, service, onPayPeriodSettingsChange, onDataChange }: AdminEmployeesProps) {
+export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPeriodSettings, grossUpMultipliers, currentProfileId, service, onPayPeriodSettingsChange, onGrossUpMultiplierSave, onGrossUpMultiplierDelete, onDataChange }: AdminEmployeesProps) {
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
@@ -272,6 +275,14 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
             />
           )}
         </section>
+
+        {/* Payroll gross-up multiplier (effective-dated, compact) */}
+        <PayrollGrossUpPanel
+          multipliers={grossUpMultipliers}
+          isBusy={isBusy}
+          onSave={(effectiveDate, multiplier, adminPassword) => runAction(() => onGrossUpMultiplierSave(effectiveDate, multiplier, adminPassword))}
+          onDelete={(id, adminPassword) => runAction(() => onGrossUpMultiplierDelete(id, adminPassword))}
+        />
     </section>
   );
 }
@@ -298,9 +309,99 @@ function buildJobCodeSections(jobCodes: JobCode[], jobSites: JobSite[]) {
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
 
-function getValidLaborCostMultiplier(value: number | null | undefined) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 1 ? Number(parsed.toFixed(4)) : DEFAULT_PAYROLL_LOAD_FACTOR;
+function PayrollGrossUpPanel({
+  multipliers,
+  isBusy,
+  onSave,
+  onDelete,
+}: {
+  multipliers: PayrollGrossUpMultiplier[];
+  isBusy: boolean;
+  onSave: (effectiveDate: string, multiplier: number, adminPassword: string) => void;
+  onDelete: (id: string, adminPassword: string) => void;
+}) {
+  const today = getAtlanticDateKey(new Date().toISOString());
+  const [effectiveDate, setEffectiveDate] = useState(today);
+  const [multiplier, setMultiplier] = useState(DEFAULT_PAYROLL_LOAD_FACTOR.toString());
+  const [adminPassword, setAdminPassword] = useState('');
+  const sorted = [...multipliers].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+  const nextMultiplier = Number(multiplier);
+  const isMultiplierValid = !Number.isNaN(nextMultiplier) && nextMultiplier >= 1;
+  const canSave = Boolean(effectiveDate) && isMultiplierValid && adminPassword.length > 0;
+
+  return (
+    <section id="gross-up-multiplier" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
+      <h2 className="text-lg font-bold">Payroll gross-up multiplier</h2>
+      <p className="mt-1 text-sm text-muted">Effective-dated multiplier for loaded labor cost in reporting. Each entry uses the value in effect on its work date, so setting a new effective date leaves earlier periods unchanged.</p>
+
+      {sorted.length > 0 && (
+        <ul className="mt-4 divide-y divide-app-border-subtle rounded-md border border-app-border-subtle">
+          {sorted.map((entry) => (
+            <li key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="font-semibold text-muted-strong">
+                {entry.multiplier}x <span className="font-normal text-muted">· effective {formatAtlanticDate(entry.effectiveDate)}</span>
+              </span>
+              <button
+                className="shrink-0 rounded p-1 text-muted-light hover:text-error-text disabled:opacity-40"
+                type="button"
+                aria-label={`Remove multiplier effective ${entry.effectiveDate}`}
+                disabled={isBusy || adminPassword.length === 0 || sorted.length <= 1}
+                onClick={() => onDelete(entry.id, adminPassword)}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,8rem)_minmax(0,1fr)_auto] sm:items-end">
+        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-date">
+          Effective date
+          <input
+            id="gross-up-date"
+            className="mt-1 block box-border h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-input-border bg-card px-3 text-center"
+            type="date"
+            value={effectiveDate}
+            onChange={(event) => setEffectiveDate(event.target.value)}
+          />
+        </label>
+        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-value">
+          Multiplier
+          <input
+            id="gross-up-value"
+            className="mt-1 block box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
+            type="number"
+            min="1"
+            step="0.01"
+            inputMode="decimal"
+            value={multiplier}
+            onChange={(event) => setMultiplier(event.target.value)}
+          />
+        </label>
+        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-password">
+          Confirm admin password
+          <input
+            id="gross-up-password"
+            className="mt-1 box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
+            type="password"
+            autoComplete="current-password"
+            value={adminPassword}
+            onChange={(event) => setAdminPassword(event.target.value)}
+          />
+        </label>
+        <button
+          className="h-10 shrink-0 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+          type="button"
+          disabled={isBusy || !canSave}
+          onClick={() => onSave(effectiveDate, nextMultiplier, adminPassword)}
+        >
+          Save
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-muted-light">Saving an existing effective date updates that entry. 1.25 = gross payroll plus 25%.</p>
+    </section>
+  );
 }
 
 function PayPeriodSettingsPanel({
@@ -312,33 +413,27 @@ function PayPeriodSettingsPanel({
   isBusy: boolean;
   onSave: (settings: PayPeriodSettings, adminPassword: string) => void;
 }) {
-  const currentLaborCostMultiplier = getValidLaborCostMultiplier(settings.laborCostMultiplier);
   const [anchorStart, setAnchorStart] = useState(settings.anchorStart);
   const [lengthDays, setLengthDays] = useState(settings.lengthDays.toString());
-  const [laborCostMultiplier, setLaborCostMultiplier] = useState(currentLaborCostMultiplier.toString());
   const [adminPassword, setAdminPassword] = useState('');
   const nextLengthDays = Number(lengthDays);
-  const nextLaborCostMultiplier = Number(laborCostMultiplier);
   const isLengthValid = !Number.isNaN(nextLengthDays) && nextLengthDays > 0;
-  const isLaborCostMultiplierValid = !Number.isNaN(nextLaborCostMultiplier) && nextLaborCostMultiplier >= 1;
   const periodPreview = getPayPeriodForDate(isLengthValid && anchorStart ? { ...settings, anchorStart, lengthDays: nextLengthDays } : settings);
   const hasChanges =
     anchorStart !== settings.anchorStart ||
-    nextLengthDays !== settings.lengthDays ||
-    nextLaborCostMultiplier !== currentLaborCostMultiplier;
-  const canSave = hasChanges && anchorStart && isLengthValid && isLaborCostMultiplierValid && adminPassword.length > 0;
+    nextLengthDays !== settings.lengthDays;
+  const canSave = hasChanges && anchorStart && isLengthValid && adminPassword.length > 0;
 
   useEffect(() => {
     setAnchorStart(settings.anchorStart);
     setLengthDays(settings.lengthDays.toString());
-    setLaborCostMultiplier(currentLaborCostMultiplier.toString());
     setAdminPassword('');
-  }, [currentLaborCostMultiplier, settings.anchorStart, settings.lengthDays]);
+  }, [settings.anchorStart, settings.lengthDays]);
 
   return (
     <section id="pay-period" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
       <h2 className="text-lg font-bold">Pay Period</h2>
-      <p className="mt-1 text-sm text-muted">Manage the payroll calendar and the loaded labor cost used across admin reporting.</p>
+      <p className="mt-1 text-sm text-muted">Manage the payroll calendar that drives timesheets and reporting periods.</p>
       <div className="mt-4 space-y-4">
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
           <h3 className="text-sm font-bold">Pay period cadence</h3>
@@ -372,23 +467,6 @@ function PayPeriodSettingsPanel({
         </div>
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-          <label className="block min-w-0 text-sm font-bold" htmlFor="labor-cost-multiplier">
-            Payroll gross-up multiplier
-            <input
-              id="labor-cost-multiplier"
-              className="mt-1.5 block box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3 sm:max-w-[12rem]"
-              type="number"
-              min="1"
-              step="0.01"
-              inputMode="decimal"
-              value={laborCostMultiplier}
-              onChange={(event) => setLaborCostMultiplier(event.target.value)}
-            />
-          </label>
-          <p className="mt-2 text-xs font-semibold text-muted">Grosses up loaded labor cost in admin reporting (1.25 = gross payroll plus 25%).</p>
-        </div>
-
-        <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] lg:items-end">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-muted-light">Current period</p>
@@ -413,7 +491,7 @@ function PayPeriodSettingsPanel({
               className="min-h-10 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
               type="button"
               disabled={isBusy || !canSave}
-              onClick={() => onSave({ ...settings, anchorStart, lengthDays: nextLengthDays, laborCostMultiplier: nextLaborCostMultiplier }, adminPassword)}
+              onClick={() => onSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword)}
             >
               Save Settings
             </button>

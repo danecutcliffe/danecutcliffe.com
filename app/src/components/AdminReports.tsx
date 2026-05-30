@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AuditLog, JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
+import type { AuditLog, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, TimeEntry } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { buildDetailedCsv, buildQboCsv, downloadCsv } from '../utils/csv';
 import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
@@ -20,12 +20,13 @@ interface AdminReportsProps {
   entries: TimeEntry[];
   auditLogs: AuditLog[];
   payPeriodSettings: PayPeriodSettings;
+  grossUpMultipliers: PayrollGrossUpMultiplier[];
 }
 
 type ReportType = 'detailed' | 'hours' | 'jobs' | 'overtime';
 type PreviewType = 'detailed' | 'qbo';
 
-export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings }: AdminReportsProps) {
+export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
   const [isLabourCostsOpen, setIsLabourCostsOpen] = useState(true);
@@ -62,10 +63,10 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       profiles,
       jobSites,
       jobCodes,
-      laborCostMultiplier: payPeriodSettings.laborCostMultiplier,
+      grossUpSchedule: grossUpMultipliers,
       payPeriodSettings,
     }),
-    [entries, jobCodes, jobSites, payPeriodSettings, profiles],
+    [entries, grossUpMultipliers, jobCodes, jobSites, payPeriodSettings, profiles],
   );
   const detailedCsv = buildDetailedCsv({ entries: filteredEntries, profiles, jobSites, jobCodes });
   const qboCsv = buildQboCsv({ entries: exportableEntries, profiles, jobSites, jobCodes });
