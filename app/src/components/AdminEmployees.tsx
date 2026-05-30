@@ -373,7 +373,7 @@ function PayPeriodSettingsPanel({
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
           <label className="block min-w-0 text-sm font-bold" htmlFor="labor-cost-multiplier">
-            Payroll load factor
+            Payroll gross-up multiplier
             <input
               id="labor-cost-multiplier"
               className="mt-1.5 block box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3 sm:max-w-[12rem]"
@@ -385,7 +385,7 @@ function PayPeriodSettingsPanel({
               onChange={(event) => setLaborCostMultiplier(event.target.value)}
             />
           </label>
-          <p className="mt-2 text-xs font-semibold text-muted">Multiplier for loaded labor cost in admin reporting (1.25 = gross payroll plus 25%).</p>
+          <p className="mt-2 text-xs font-semibold text-muted">Grosses up loaded labor cost in admin reporting (1.25 = gross payroll plus 25%).</p>
         </div>
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
