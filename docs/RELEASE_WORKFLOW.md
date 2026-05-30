@@ -18,6 +18,17 @@ This workspace is the single source of truth for future Time Clock development a
 4. Commit the full release state in one commit.
 5. Add a deploy tag after the commit is ready to publish.
 
+## Staging Flow
+
+Use staging when validating new features against a production-shaped data snapshot without publishing to the production site.
+
+1. Confirm `app/.env.staging.local` points at the staging Supabase project.
+2. Run `./scripts/build-time-clock-staging.sh`.
+3. Confirm `staging-site/time/` was regenerated and the Scope integration scripts are no-op files.
+4. Commit and push from `staging-site/`, the separate GitHub Pages repo for `staging.danecutcliffe.com`.
+5. Do not push the canonical production repo unless this is also an approved production release.
+6. Verify `http://staging.danecutcliffe.com/time/` or `https://staging.danecutcliffe.com/time/` after GitHub Pages and certificate provisioning are ready.
+
 ## Commit Guidance
 
 - Use normal commits for work in progress.
@@ -47,3 +58,6 @@ Pick one format and stay consistent.
 - Do not edit `time/` by hand during normal work.
 - Do not deploy from inactive archive folders.
 - Do not split source and deploy history across separate active repos again.
+- Do not use the Supabase CLI without first verifying the intended project ref.
+- After staging Supabase work, run `supabase unlink --yes` before ending the session unless the link is intentionally being retained.
+- Do not enable Notion secrets, Notion webhooks, or Scope Edge Functions in staging without explicit approval.

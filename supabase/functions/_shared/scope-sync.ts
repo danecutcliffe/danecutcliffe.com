@@ -1,4 +1,4 @@
-export const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://akofsmmsxtfqduebetga.supabase.co";
+export const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 export const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 export const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 export const NOTION_TOKEN = Deno.env.get("NOTION_API_KEY") || Deno.env.get("NOTION_TOKEN") || "";
@@ -235,6 +235,7 @@ export async function notion(path: string, options: RequestInit = {}): Promise<a
 }
 
 export async function supabase(path: string, options: RequestInit = {}): Promise<any> {
+  if (!SUPABASE_URL) throw new Error("SUPABASE_URL is not configured in Supabase.");
   if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured in Supabase.");
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
@@ -254,6 +255,7 @@ export async function supabase(path: string, options: RequestInit = {}): Promise
 }
 
 export async function supabaseAsUser(path: string, accessToken: string, options: RequestInit = {}): Promise<any> {
+  if (!SUPABASE_URL) throw new Error("SUPABASE_URL is not configured in Supabase.");
   if (!SUPABASE_ANON_KEY) throw new Error("SUPABASE_ANON_KEY is not configured in Supabase.");
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
@@ -273,6 +275,7 @@ export async function supabaseAsUser(path: string, accessToken: string, options:
 }
 
 export async function requireAdmin(accessToken: string): Promise<void> {
+  if (!SUPABASE_URL) throw new Error("SUPABASE_URL is not configured in Supabase.");
   if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured in Supabase.");
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: {

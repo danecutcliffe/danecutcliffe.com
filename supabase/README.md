@@ -12,6 +12,22 @@ Phase 1B adds the schema, RLS policies, and client adapter. The app still defaul
 
 The first admin profile must be inserted with service-role access or from the SQL editor because client-side admin policies require an existing admin.
 
+## Remote Environments
+
+- Production project ref: `akofsmmsxtfqduebetga`
+- Staging project ref: `qumnzxzoypgpejtwbigw`
+
+The Supabase CLI link is session state. Before running any remote migration, query, import/export, or Edge Function deploy, verify the intended project ref:
+
+1. Check `supabase/.temp/project-ref` if it exists.
+2. Link deliberately to the intended project ref immediately before remote work.
+3. Run the command against that project only.
+4. After staging work, run `supabase unlink --yes` unless the link must intentionally remain.
+
+Staging is allowed to have a production-shaped snapshot of public app data, including time entries, job sites, job codes, approvals, audit logs, and Scope-derived tables. Auth data copied to staging must be staging-only auth stubs or staging-created users; production passwords must never be copied.
+
+Staging should share schema and migrations with production, including Notion-related tables, so migration testing is realistic. Do not configure production Notion secrets, Notion webhooks, or live Notion Edge Function behavior in staging unless Dane explicitly approves that integration.
+
 ## Adding Employees in Supabase Mode
 
 The static web app cannot safely create Supabase Auth users by itself because that requires a service-role secret.
