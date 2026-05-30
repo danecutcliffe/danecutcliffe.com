@@ -105,6 +105,30 @@ async function setSectionState(projectId: string, section: string, payload: Reco
   });
 }
 
+async function acquireSectionSyncLock(projectId: string, section: string, lockToken: string): Promise<boolean> {
+  const result = await supabase("/rest/v1/rpc/scope_try_acquire_section_sync_lock", {
+    method: "POST",
+    body: JSON.stringify({
+      p_scope_project_id: projectId,
+      p_section: normalizeSection(section),
+      p_lock_token: lockToken,
+      p_lock_ttl_seconds: 180,
+    }),
+  });
+  return result === true;
+}
+
+async function releaseSectionSyncLock(projectId: string, section: string, lockToken: string): Promise<void> {
+  await supabase("/rest/v1/rpc/scope_release_section_sync_lock", {
+    method: "POST",
+    body: JSON.stringify({
+      p_scope_project_id: projectId,
+      p_section: normalizeSection(section),
+      p_lock_token: lockToken,
+    }),
+  });
+}
+
 async function currentSectionOrderIds(projectId: string, section: string): Promise<string[]> {
   const items = await supabase(
     `/rest/v1/scope_items?select=id&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(normalizeSection(section))}&is_active=eq.true&order=sort_order.asc`,
@@ -916,84 +940,104 @@ export async function syncSectionOrderToNotion(
   section: string,
   options: { resyncPage?: boolean } = {},
 ): Promise<boolean> {
-  const projects = await supabase(`/rest/v1/scope_projects?select=*&id=eq.${encodeURIComponent(projectId)}&limit=1`);
-  const project = projects[0];
-  if (!project?.notion_page_id) return false;
-
-  await dedupeActiveScopeItems(projectId, section);
-  const items = await supabase(
-    `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(section)}&is_active=eq.true&order=sort_order.asc`,
-  );
-  if (!items.length) return true;
-
-  let parentBlockId = items.find((item: any) => item.notion_parent_block_id)?.notion_parent_block_id || null;
-  if (!parentBlockId) {
-    const notionItems = await pageBlocksToItems(project.notion_page_id);
-    parentBlockId = notionItems.find((item) => item.section === section && item.parentBlockId)?.parentBlockId || null;
+  const normalizedSection = normalizeSection(section);
+  const lockToken = crypto.randomUUID();
+  const hasLock = await acquireSectionSyncLock(projectId, normalizedSection, lockToken);
+  if (!hasLock) {
+    throw new Error(`Notion section "${normalizedSection}" is already syncing. It will retry shortly.`);
   }
-  const targetParentId = parentBlockId || project.notion_page_id;
-  const existingChildren = await queryBlockChildren(targetParentId);
-  const oldBlockIds = uniqueStrings(existingChildren
-    .filter((block: any) => isScopeContentBlock(block))
-    .map((block: any) => String(block.id || ""))
-    .filter(Boolean));
 
-  const response = await notion(`/blocks/${encodeURIComponent(targetParentId)}/children`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      position: { type: "start" },
-      children: items.map((item: any) => notionToDoBlockForScopeItem(item)),
-    }),
-  });
+  try {
+    const projects = await supabase(`/rest/v1/scope_projects?select=*&id=eq.${encodeURIComponent(projectId)}&limit=1`);
+    const project = projects[0];
+    if (!project?.notion_page_id) return false;
 
-  const newBlocks = response.results || [];
-  const pushedAt = new Date().toISOString();
+    await dedupeActiveScopeItems(projectId, normalizedSection);
+    const items = await supabase(
+      `/rest/v1/scope_items?select=*&scope_project_id=eq.${encodeURIComponent(projectId)}&section=eq.${encodeURIComponent(normalizedSection)}&is_active=eq.true&order=sort_order.asc`,
+    );
+    if (!items.length) return true;
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    const block = newBlocks[index];
-    if (!block?.id) continue;
-    await supabase(`/rest/v1/scope_items?id=eq.${encodeURIComponent(item.id)}`, {
+    let parentBlockId = items.find((item: any) => item.notion_parent_block_id)?.notion_parent_block_id || null;
+    if (!parentBlockId) {
+      const notionItems = await pageBlocksToItems(project.notion_page_id);
+      parentBlockId = notionItems.find((item) => item.section === normalizedSection && item.parentBlockId)?.parentBlockId || null;
+    }
+    const targetParentId = parentBlockId || project.notion_page_id;
+    const existingChildren = await queryBlockChildren(targetParentId);
+    const oldBlockIds = uniqueStrings(existingChildren
+      .filter((block: any) => isScopeContentBlock(block))
+      .map((block: any) => String(block.id || ""))
+      .filter(Boolean));
+
+    const deleteErrors: string[] = [];
+    for (const blockId of oldBlockIds) {
+      try {
+        await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" });
+      } catch (error) {
+        deleteErrors.push(`${blockId}: ${error instanceof Error ? error.message : "delete failed"}`);
+      }
+    }
+
+    if (oldBlockIds.length) {
+      const refreshedChildren = await queryBlockChildren(targetParentId);
+      const lingeringBlockIds = uniqueStrings(refreshedChildren
+        .filter((block: any) => isScopeContentBlock(block))
+        .map((block: any) => String(block.id || ""))
+        .filter((blockId) => oldBlockIds.includes(blockId)));
+
+      if (deleteErrors.length || lingeringBlockIds.length) {
+        const problems = [
+          deleteErrors.length ? `delete errors: ${deleteErrors.join("; ")}` : "",
+          lingeringBlockIds.length ? `lingering blocks: ${lingeringBlockIds.join(", ")}` : "",
+        ].filter(Boolean).join(" | ");
+        throw new Error(`Notion section cleanup failed for "${normalizedSection}". ${problems}`.trim());
+      }
+    }
+
+    const response = await notion(`/blocks/${encodeURIComponent(targetParentId)}/children`, {
       method: "PATCH",
-      headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
-        notion_block_id: block.id,
-        notion_parent_block_id: targetParentId === project.notion_page_id ? null : targetParentId,
-        notion_checked: Boolean(item.completed_at || item.notion_checked),
-        last_pushed_to_notion_at: pushedAt,
-        sync_status: "notion-pushed",
+        position: { type: "start" },
+        children: items.map((item: any) => notionToDoBlockForScopeItem(item)),
       }),
+    });
+
+    const newBlocks = response.results || [];
+    const pushedAt = new Date().toISOString();
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const block = newBlocks[index];
+      if (!block?.id) continue;
+      await supabase(`/rest/v1/scope_items?id=eq.${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          notion_block_id: block.id,
+          notion_parent_block_id: targetParentId === project.notion_page_id ? null : targetParentId,
+          notion_checked: Boolean(item.completed_at || item.notion_checked),
+          last_pushed_to_notion_at: pushedAt,
+          sync_status: "notion-pushed",
+        }),
+      });
+    }
+
+    const finalChildren = await queryBlockChildren(targetParentId);
+    const finalScopeBlockCount = finalChildren.filter((block: any) => isScopeContentBlock(block)).length;
+    if (finalScopeBlockCount !== items.length) {
+      throw new Error(`Notion section "${normalizedSection}" rewrite produced ${finalScopeBlockCount} content blocks instead of ${items.length}.`);
+    }
+  } finally {
+    await releaseSectionSyncLock(projectId, normalizedSection, lockToken).catch((error) => {
+      console.error("Failed to release section sync lock", projectId, normalizedSection, error);
     });
   }
 
-  const deleteErrors: string[] = [];
-  for (const blockId of oldBlockIds) {
-    if (newBlocks.some((block: any) => block.id === blockId)) continue;
-    try {
-      await notion(`/blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" });
-    } catch (error) {
-      deleteErrors.push(`${blockId}: ${error instanceof Error ? error.message : "delete failed"}`);
-    }
-  }
-
-  if (oldBlockIds.length) {
-    // Verify cleanup so repeated repair attempts cannot silently stack duplicate blocks in Notion.
-    const refreshedChildren = await queryBlockChildren(targetParentId);
-    const lingeringBlockIds = uniqueStrings(refreshedChildren
-      .filter((block: any) => isScopeContentBlock(block))
-      .map((block: any) => String(block.id || ""))
-      .filter((blockId) => oldBlockIds.includes(blockId)));
-
-    if (deleteErrors.length || lingeringBlockIds.length) {
-      const problems = [
-        deleteErrors.length ? `delete errors: ${deleteErrors.join("; ")}` : "",
-        lingeringBlockIds.length ? `lingering blocks: ${lingeringBlockIds.join(", ")}` : "",
-      ].filter(Boolean).join(" | ");
-      throw new Error(`Notion section cleanup failed for "${section}". ${problems}`.trim());
-    }
-  }
-
   if (options.resyncPage !== false) {
+    const projects = await supabase(`/rest/v1/scope_projects?select=notion_page_id&id=eq.${encodeURIComponent(projectId)}&limit=1`);
+    const project = projects[0];
+    if (!project?.notion_page_id) return true;
     const refreshedPage = await notion(`/pages/${encodeURIComponent(project.notion_page_id)}`);
     await syncPage(refreshedPage);
   }
