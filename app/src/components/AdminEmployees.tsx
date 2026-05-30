@@ -303,10 +303,6 @@ function getValidLaborCostMultiplier(value: number | null | undefined) {
   return Number.isFinite(parsed) && parsed >= 1 ? Number(parsed.toFixed(4)) : DEFAULT_PAYROLL_LOAD_FACTOR;
 }
 
-function formatCompactNumber(value: number, maximumFractionDigits = 2) {
-  return value.toFixed(maximumFractionDigits).replace(/\.?0+$/, '');
-}
-
 function PayPeriodSettingsPanel({
   settings,
   isBusy,
@@ -326,7 +322,6 @@ function PayPeriodSettingsPanel({
   const isLengthValid = !Number.isNaN(nextLengthDays) && nextLengthDays > 0;
   const isLaborCostMultiplierValid = !Number.isNaN(nextLaborCostMultiplier) && nextLaborCostMultiplier >= 1;
   const periodPreview = getPayPeriodForDate(isLengthValid && anchorStart ? { ...settings, anchorStart, lengthDays: nextLengthDays } : settings);
-  const burdenPercent = Math.max(0, ((isLaborCostMultiplierValid ? nextLaborCostMultiplier : currentLaborCostMultiplier) - 1) * 100);
   const hasChanges =
     anchorStart !== settings.anchorStart ||
     nextLengthDays !== settings.lengthDays ||
@@ -377,31 +372,20 @@ function PayPeriodSettingsPanel({
         </div>
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-          <h3 className="text-sm font-bold">Payroll load factor</h3>
-          <p className="mt-1 text-xs font-semibold text-muted">Use this multiplier for loaded labor cost in admin reporting. 1.25 = gross payroll plus 25% burden.</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-[minmax(0,12rem)_1fr] sm:items-start">
-            <label className="block min-w-0 text-sm font-semibold text-muted" htmlFor="labor-cost-multiplier">
-              Payroll load factor
-              <input
-                id="labor-cost-multiplier"
-                className="mt-1.5 box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
-                type="number"
-                min="1"
-                step="0.01"
-                inputMode="decimal"
-                value={laborCostMultiplier}
-                onChange={(event) => setLaborCostMultiplier(event.target.value)}
-              />
-            </label>
-            <div className="rounded-md border border-app-border bg-card px-3 py-2.5">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-light">Loaded payroll</p>
-              <p className="mt-1 text-sm font-semibold text-muted-strong">
-                {isLaborCostMultiplierValid
-                  ? `${formatCompactNumber(nextLaborCostMultiplier)}x = gross payroll plus ${formatCompactNumber(burdenPercent)}% burden.`
-                  : 'Enter 1.00 or higher to save this setting.'}
-              </p>
-            </div>
-          </div>
+          <label className="block min-w-0 text-sm font-bold" htmlFor="labor-cost-multiplier">
+            Payroll load factor
+            <input
+              id="labor-cost-multiplier"
+              className="mt-1.5 block box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3 sm:max-w-[12rem]"
+              type="number"
+              min="1"
+              step="0.01"
+              inputMode="decimal"
+              value={laborCostMultiplier}
+              onChange={(event) => setLaborCostMultiplier(event.target.value)}
+            />
+          </label>
+          <p className="mt-2 text-xs font-semibold text-muted">Multiplier for loaded labor cost in admin reporting (1.25 = gross payroll plus 25%).</p>
         </div>
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
