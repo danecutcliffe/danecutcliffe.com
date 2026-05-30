@@ -145,6 +145,16 @@ export default function App() {
 
   return (
     <AppShell activeTab={activeTab} currentProfile={profile} isLoading={isLoading} onTabChange={setActiveTab} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined}>
+      {appConfig.isStaging && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 shadow-soft">
+          STAGING - test environment at staging.danecutcliffe.com. Do not use for live payroll.
+        </div>
+      )}
+      {appConfig.isStagingUsingProductionSupabase && (
+        <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">
+          Staging is pointed at the production Supabase project. Stop testing and update the staging environment variables.
+        </div>
+      )}
       {isLoading && !profile && <div className="rounded-md border border-app-border bg-card p-6 text-center shadow-soft"><p className="font-semibold text-muted">Loading time clock...</p></div>}
       {loadError && <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">{loadError}</div>}
       {appConfig.isSupabaseRequestedButMissingConfig && (

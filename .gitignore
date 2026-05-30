@@ -3,8 +3,10 @@ app/.claude/
 app/.env
 app/.env.*
 !app/.env.example
+!app/.env.staging.example
 app/.vite/
 app/dist/
 app/node_modules/
 app/tsconfig.tsbuildinfo
+staging-site/
 supabase/.temp/

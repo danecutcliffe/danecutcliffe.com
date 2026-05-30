@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const swPath = resolve(scriptDir, '../time/sw.js');
+const buildOutDir = process.env.VITE_BUILD_OUT_DIR || '../time';
+const swPath = resolve(scriptDir, '../app', buildOutDir, 'sw.js');
 
 if (!existsSync(swPath)) {
   console.warn(`[stamp-sw] ${swPath} not found; service worker cache not stamped.`);
