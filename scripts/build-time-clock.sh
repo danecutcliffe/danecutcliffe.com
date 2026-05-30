@@ -24,16 +24,6 @@ if ! has_vite_env VITE_TIME_CLOCK_DATA_SOURCE ||
 fi
 
 cd "$APP_DIR"
+# npm run build also stamps time/sw.js with a unique per-build cache id
+# (postbuild: node ../scripts/stamp-sw.mjs), so every deploy busts stale clients.
 npm run build
-
-# Stamp the service worker cache name with a unique per-build id so every deploy
-# forces clients off the previous cached shell. Without this, sw.js stays
-# byte-identical across deploys and stuck browsers never pull the new app.
-SW_FILE="$ROOT_DIR/time/sw.js"
-if [[ -f "$SW_FILE" ]]; then
-  BUILD_ID="$(date -u +%Y%m%d%H%M%S)"
-  sed -i '' -E "s/time-clock-runtime-[A-Za-z0-9._-]+/time-clock-runtime-${BUILD_ID}/" "$SW_FILE"
-  echo "Stamped service worker cache: time-clock-runtime-${BUILD_ID}"
-else
-  echo "WARNING: $SW_FILE not found; service worker cache not stamped." >&2
-fi
