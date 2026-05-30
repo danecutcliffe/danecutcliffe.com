@@ -16,9 +16,11 @@ interface TabDef {
 interface AppShellProps {
   activeTab: AppTab;
   currentProfile: Profile | null;
+  signedInProfile?: Profile | null;
   isLoading: boolean;
   onTabChange: (tab: AppTab) => void;
   onRoleChange?: (role: AppRole) => void;
+  onViewRoleChange?: (role: AppRole) => void;
   onSignOut?: () => Promise<void>;
   children: ReactNode;
 }
@@ -70,8 +72,10 @@ const adminTabs: TabDef[] = [
   { id: 'scope', label: 'Scope' },
 ];
 
-export function AppShell({ activeTab, currentProfile, isLoading, onTabChange, onRoleChange, onSignOut, children }: AppShellProps) {
+export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading, onTabChange, onRoleChange, onViewRoleChange, onSignOut, children }: AppShellProps) {
   const currentRole = currentProfile?.role ?? 'employee';
+  const switchRole = onViewRoleChange ?? onRoleChange;
+  const profileForMenu = signedInProfile ?? currentProfile;
   const canUseScopes = currentRole === 'admin' || currentProfile?.canAccessScopes !== false;
   const tabs = currentProfile?.isActive ? (currentRole === 'admin' ? adminTabs : employeeTabs.filter((tab) => tab.id !== 'scope' || canUseScopes)) : [];
   const mobileTabs = tabs.filter((tab) => !(currentRole === 'admin' && tab.id === 'reports'));
@@ -86,25 +90,26 @@ export function AppShell({ activeTab, currentProfile, isLoading, onTabChange, on
             </span>
             <h1 className="text-lg font-semibold leading-tight">Time Clock</h1>
           </div>
-          {onRoleChange ? (
-            <div className="flex rounded-full border border-input-border bg-card p-1 text-xs shadow-sm">
-              {(['employee', 'admin'] as AppRole[]).map((role) => (
-                <button
-                  key={role}
-                  className={`min-h-10 rounded-full px-3 font-semibold capitalize transition ${
-                    currentRole === role ? 'bg-accent text-white' : 'text-muted'
-                  }`}
-                  type="button"
-                  onClick={() => onRoleChange(role)}
-                  disabled={isLoading}
-                >
-                  {role}
-                </button>
-              ))}
-            </div>
-          ) : currentProfile ? (
-            <ProfileDropdown profile={currentProfile} onSignOut={onSignOut} />
-          ) : null}
+          <div className="flex items-center gap-2">
+            {switchRole && (
+              <div className="flex rounded-full border border-input-border bg-card p-1 text-xs shadow-sm" aria-label={onViewRoleChange ? 'Preview view' : 'Role'}>
+                {(['employee', 'admin'] as AppRole[]).map((role) => (
+                  <button
+                    key={role}
+                    className={`min-h-10 rounded-full px-3 font-semibold capitalize transition ${
+                      currentRole === role ? 'bg-accent text-white' : 'text-muted'
+                    }`}
+                    type="button"
+                    onClick={() => switchRole(role)}
+                    disabled={isLoading}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+            )}
+            {profileForMenu && <ProfileDropdown profile={profileForMenu} onSignOut={onSignOut} />}
+          </div>
         </div>
       </header>
 

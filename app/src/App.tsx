@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminEmployees } from './components/AdminEmployees';
 import { AdminReports } from './components/AdminReports';
@@ -40,6 +40,7 @@ export default function App() {
   const [openBreakEntry, setOpenBreakEntry] = useState<TimeEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [stagingViewRole, setStagingViewRole] = useState<AppRole>('admin');
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -78,8 +79,10 @@ export default function App() {
         setGrossUpMultipliers(grossUps);
         setOpenWorkEntry(openWork);
         setOpenBreakEntry(openBreak);
-        if (isAdmin && !adminTabs.includes(activeTab)) setActiveTab(adminDefaultTab);
-        if (!isAdmin && !(hasScopeAccess(currentProfile) ? employeeTabs : employeeTabsWithoutScope).includes(activeTab)) setActiveTab(employeeDefaultTab);
+        const navigationRole = appConfig.isStaging && isAdmin && stagingViewRole === 'employee' ? 'employee' : currentProfile.role;
+        const navigationProfile = navigationRole === 'employee' && isAdmin ? { ...currentProfile, role: 'employee' as AppRole } : currentProfile;
+        if (navigationRole === 'admin' && !adminTabs.includes(activeTab)) setActiveTab(adminDefaultTab);
+        if (navigationRole !== 'admin' && !(hasScopeAccess(navigationProfile) ? employeeTabs : employeeTabsWithoutScope).includes(activeTab)) setActiveTab(employeeDefaultTab);
       } else {
         setEntries([]);
         setTimesheetApprovals([]);
@@ -94,7 +97,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab]);
+  }, [activeTab, stagingViewRole]);
 
   useEffect(() => {
     void refresh();
@@ -118,6 +121,7 @@ export default function App() {
     if (!service.signOut) return;
     await service.signOut();
     setActiveTab(employeeDefaultTab);
+    setStagingViewRole('admin');
     await refresh();
   };
 
@@ -140,11 +144,42 @@ export default function App() {
     await refresh();
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const stagingEmployeeProfile = useMemo(() => {
+    const activeEmployees = profiles
+      .filter((candidate) => candidate.role === 'employee' && candidate.isActive)
+      .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    return activeEmployees.find((candidate) => entries.some((entry) => entry.userId === candidate.id)) ?? activeEmployees[0] ?? null;
+  }, [entries, profiles]);
+
+  const canUseStagingViewSwitch = Boolean(appConfig.isStaging && profile?.role === 'admin' && profile.isActive && stagingEmployeeProfile);
+  const displayedProfile = canUseStagingViewSwitch && stagingViewRole === 'employee' && stagingEmployeeProfile ? stagingEmployeeProfile : profile;
+  const isAdmin = displayedProfile?.role === 'admin';
+  const displayedEntries = canUseStagingViewSwitch && stagingViewRole === 'employee' && displayedProfile ? entries.filter((entry) => entry.userId === displayedProfile.id) : entries;
+  const displayedApprovals = canUseStagingViewSwitch && stagingViewRole === 'employee' && displayedProfile ? timesheetApprovals.filter((approval) => approval.userId === displayedProfile.id) : timesheetApprovals;
+  const displayedOpenWorkEntry = canUseStagingViewSwitch && stagingViewRole === 'employee'
+    ? displayedEntries.find((entry) => entry.eventType === 'work' && !entry.clockOut) ?? null
+    : openWorkEntry;
+  const displayedOpenBreakEntry = canUseStagingViewSwitch && stagingViewRole === 'employee'
+    ? displayedEntries.find((entry) => entry.eventType === 'break' && !entry.clockOut) ?? null
+    : openBreakEntry;
   const canSwitchRole = Boolean(service.setMockRole);
 
+  const changeStagingViewRole = (role: AppRole) => {
+    setStagingViewRole(role);
+    setActiveTab(role === 'admin' ? adminDefaultTab : employeeDefaultTab);
+  };
+
   return (
-    <AppShell activeTab={activeTab} currentProfile={profile} isLoading={isLoading} onTabChange={setActiveTab} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined}>
+    <AppShell
+      activeTab={activeTab}
+      currentProfile={displayedProfile}
+      signedInProfile={profile}
+      isLoading={isLoading}
+      onTabChange={setActiveTab}
+      onRoleChange={canSwitchRole ? changeRole : undefined}
+      onViewRoleChange={canUseStagingViewSwitch ? changeStagingViewRole : undefined}
+      onSignOut={service.signOut ? signOut : undefined}
+    >
       {appConfig.isStaging && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 shadow-soft">
           STAGING - test environment at staging.danecutcliffe.com. Do not use for live payroll.
@@ -168,9 +203,9 @@ export default function App() {
 
       {profile && profile.isActive && <PasskeySetupPrompt profile={profile} service={service} />}
 
-      {profile && profile.isActive && !isAdmin && activeTab === 'clock' && <ClockScreen profile={profile} service={service} jobSites={jobSites} jobCodes={jobCodes} entries={entries} openWorkEntry={openWorkEntry} openBreakEntry={openBreakEntry} onDataChange={refresh} />}
-      {profile && profile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={profile} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} />}
-      {profile && profile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={profile} service={service} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
+      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'clock' && <ClockScreen profile={displayedProfile} service={service} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} openWorkEntry={displayedOpenWorkEntry} openBreakEntry={displayedOpenBreakEntry} onDataChange={refresh} />}
+      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={displayedProfile} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} approvals={displayedApprovals} payPeriodSettings={payPeriodSettings} />}
+      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
 
       {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
       {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
@@ -178,7 +213,7 @@ export default function App() {
       {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
       {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
 
-      {profile && profile.isActive && hasScopeAccess(profile) && activeTab === 'scope' && <div id="scope-content-root" />}
+      {displayedProfile && displayedProfile.isActive && hasScopeAccess(displayedProfile) && activeTab === 'scope' && <div id="scope-content-root" />}
     </AppShell>
   );
 }
