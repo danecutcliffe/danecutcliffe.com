@@ -279,16 +279,14 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
           )}
         </section>
 
-        {/* Payroll gross-up multiplier (effective-dated, compact) */}
-        <PayrollGrossUpPanel
+        <PayrollSettingsPanel
+          settings={payPeriodSettings}
           multipliers={grossUpMultipliers}
           isBusy={isBusy}
-          onSave={(effectiveDate, multiplier, adminPassword) => runAction(() => onGrossUpMultiplierSave(effectiveDate, multiplier, adminPassword))}
-          onDelete={(id, adminPassword) => runAction(() => onGrossUpMultiplierDelete(id, adminPassword))}
+          onPayPeriodSave={(nextSettings, adminPassword) => runAction(() => onPayPeriodSettingsChange(nextSettings, adminPassword))}
+          onGrossUpSave={(effectiveDate, multiplier, adminPassword) => runAction(() => onGrossUpMultiplierSave(effectiveDate, multiplier, adminPassword))}
+          onGrossUpDelete={(id, adminPassword) => runAction(() => onGrossUpMultiplierDelete(id, adminPassword))}
         />
-
-        {/* Pay Period */}
-        <PayPeriodSettingsPanel settings={payPeriodSettings} isBusy={isBusy} onSave={(nextSettings, adminPassword) => runAction(() => onPayPeriodSettingsChange(nextSettings, adminPassword))} />
     </section>
   );
 }
@@ -315,159 +313,74 @@ function buildJobCodeSections(jobCodes: JobCode[], jobSites: JobSite[]) {
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
 
-function PayrollGrossUpPanel({
+function PayrollSettingsPanel({
+  settings,
   multipliers,
   isBusy,
-  onSave,
-  onDelete,
-}: {
-  multipliers: PayrollGrossUpMultiplier[];
-  isBusy: boolean;
-  onSave: (effectiveDate: string, multiplier: number, adminPassword: string) => Promise<void>;
-  onDelete: (id: string, adminPassword: string) => Promise<void>;
-}) {
-  const today = getAtlanticDateKey(new Date().toISOString());
-  const [effectiveDate, setEffectiveDate] = useState(today);
-  const [multiplier, setMultiplier] = useState(DEFAULT_PAYROLL_LOAD_FACTOR.toString());
-  const [pendingConfirmation, setPendingConfirmation] = useState<{ type: 'save' } | { type: 'delete'; id: string; effectiveDate: string } | null>(null);
-  const sorted = [...multipliers].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
-  const nextMultiplier = Number(multiplier);
-  const isMultiplierValid = !Number.isNaN(nextMultiplier) && nextMultiplier >= 1;
-  const canSave = Boolean(effectiveDate) && isMultiplierValid;
-
-  return (
-    <section id="gross-up-multiplier" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
-      <h2 className="text-lg font-bold">Payroll gross-up multiplier</h2>
-      <p className="mt-1 text-sm text-muted">Effective-dated multiplier for loaded labor cost in reporting. Each entry uses the value in effect on its work date, so setting a new effective date leaves earlier periods unchanged.</p>
-
-      {sorted.length > 0 && (
-        <ul className="mt-4 divide-y divide-app-border-subtle rounded-md border border-app-border-subtle">
-          {sorted.map((entry) => (
-            <li key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <span className="font-semibold text-muted-strong">
-                {entry.multiplier}x <span className="font-normal text-muted">· effective {formatAtlanticDate(entry.effectiveDate)}</span>
-              </span>
-              <button
-                className="shrink-0 rounded p-1 text-muted-light hover:text-error-text disabled:opacity-40"
-                type="button"
-                aria-label={`Remove multiplier effective ${entry.effectiveDate}`}
-                disabled={isBusy || sorted.length <= 1}
-                onClick={() => setPendingConfirmation({ type: 'delete', id: entry.id, effectiveDate: entry.effectiveDate })}
-              >
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_max-content] sm:items-end">
-        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-date">
-          Effective date
-          <input
-            id="gross-up-date"
-            className="mt-1 block box-border h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-input-border bg-card px-3 text-center"
-            type="date"
-            value={effectiveDate}
-            onChange={(event) => setEffectiveDate(event.target.value)}
-          />
-        </label>
-        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-value">
-          Multiplier
-          <input
-            id="gross-up-value"
-            className="mt-1 block box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
-            type="number"
-            min="1"
-            step="0.01"
-            inputMode="decimal"
-            value={multiplier}
-            onChange={(event) => setMultiplier(event.target.value)}
-          />
-        </label>
-        <button
-          className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
-          type="button"
-          disabled={isBusy || !canSave}
-          onClick={() => setPendingConfirmation({ type: 'save' })}
-        >
-          Save
-        </button>
-      </div>
-      <p className="mt-2 text-xs text-muted-light">Saving an existing effective date updates that entry. 1.25 = gross payroll plus 25%.</p>
-      {pendingConfirmation && (
-        <AdminPasswordDialog
-          title={pendingConfirmation.type === 'save' ? 'Confirm multiplier change' : 'Confirm multiplier deletion'}
-          description={pendingConfirmation.type === 'save'
-            ? 'Enter your admin password to update the payroll gross-up multiplier.'
-            : `Enter your admin password to remove the multiplier effective ${formatAtlanticDate(pendingConfirmation.effectiveDate)}.`}
-          isBusy={isBusy}
-          confirmLabel={pendingConfirmation.type === 'save' ? 'Save Multiplier' : 'Delete Multiplier'}
-          onCancel={() => setPendingConfirmation(null)}
-          onConfirm={async (adminPassword) => {
-            if (pendingConfirmation.type === 'save') {
-              await onSave(effectiveDate, nextMultiplier, adminPassword);
-            } else {
-              await onDelete(pendingConfirmation.id, adminPassword);
-            }
-            setPendingConfirmation(null);
-          }}
-        />
-      )}
-    </section>
-  );
-}
-
-function PayPeriodSettingsPanel({
-  settings,
-  isBusy,
-  onSave,
+  onPayPeriodSave,
+  onGrossUpSave,
+  onGrossUpDelete,
 }: {
   settings: PayPeriodSettings;
+  multipliers: PayrollGrossUpMultiplier[];
   isBusy: boolean;
-  onSave: (settings: PayPeriodSettings, adminPassword: string) => Promise<void>;
+  onPayPeriodSave: (settings: PayPeriodSettings, adminPassword: string) => Promise<void>;
+  onGrossUpSave: (effectiveDate: string, multiplier: number, adminPassword: string) => Promise<void>;
+  onGrossUpDelete: (id: string, adminPassword: string) => Promise<void>;
 }) {
+  const today = getAtlanticDateKey(new Date().toISOString());
   const [anchorStart, setAnchorStart] = useState(settings.anchorStart);
   const [lengthDays, setLengthDays] = useState(settings.lengthDays.toString());
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [effectiveDate, setEffectiveDate] = useState(today);
+  const [multiplier, setMultiplier] = useState(DEFAULT_PAYROLL_LOAD_FACTOR.toString());
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ type: 'pay-period' } | { type: 'gross-up-save' } | { type: 'gross-up-delete'; id: string; effectiveDate: string } | null>(null);
+
   const nextLengthDays = Number(lengthDays);
   const isLengthValid = !Number.isNaN(nextLengthDays) && nextLengthDays > 0;
   const periodPreview = getPayPeriodForDate(isLengthValid && anchorStart ? { ...settings, anchorStart, lengthDays: nextLengthDays } : settings);
-  const hasChanges =
+  const hasPayPeriodChanges =
     anchorStart !== settings.anchorStart ||
     nextLengthDays !== settings.lengthDays;
-  const canSave = hasChanges && anchorStart && isLengthValid;
+  const canSavePayPeriod = hasPayPeriodChanges && Boolean(anchorStart) && isLengthValid;
+
+  const sorted = [...multipliers].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+  const currentMultiplier = sorted[0];
+  const nextMultiplier = Number(multiplier);
+  const isMultiplierValid = !Number.isNaN(nextMultiplier) && nextMultiplier >= 1;
+  const canSaveMultiplier = Boolean(effectiveDate) && isMultiplierValid;
 
   useEffect(() => {
     setAnchorStart(settings.anchorStart);
     setLengthDays(settings.lengthDays.toString());
-    setConfirmOpen(false);
+    setPendingConfirmation(null);
   }, [settings.anchorStart, settings.lengthDays]);
 
   return (
-    <section id="pay-period" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
-      <h2 className="text-lg font-bold">Pay Period</h2>
-      <p className="mt-1 text-sm text-muted">Manage the payroll calendar that drives timesheets and reporting periods.</p>
-      <div className="mt-4 space-y-4">
-        <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-          <h3 className="text-sm font-bold">Pay period cadence</h3>
-          <p className="mt-1 text-xs font-semibold text-muted">This global setting defines the first pay period start date. Every later period follows the selected cadence.</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <label className="block min-w-0 overflow-hidden text-sm font-semibold text-muted" htmlFor="period-start">
-              First period start
+    <section id="payroll-settings" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
+      <h2 className="text-lg font-bold">Payroll Settings</h2>
+
+      <div className="mt-4 divide-y divide-app-border-subtle">
+        <div className="grid gap-4 py-4 first:pt-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-end">
+          <div>
+            <h3 className="text-sm font-bold">Pay period</h3>
+            <p className="mt-1 text-xs font-semibold text-muted">Current: {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_max-content] sm:items-end">
+            <label className="block min-w-0 overflow-hidden text-xs font-semibold text-muted" htmlFor="period-start">
+              Start date
               <input
                 id="period-start"
-                className="mt-1.5 block box-border h-11 w-full min-w-0 max-w-full appearance-none rounded-md border border-input-border bg-card px-3 text-center leading-[2.75rem]"
+                className="mt-1 block box-border h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-input-border bg-card px-3 text-center"
                 type="date"
                 value={anchorStart}
                 onChange={(event) => setAnchorStart(event.target.value)}
               />
             </label>
-            <label className="block min-w-0 text-sm font-semibold text-muted" htmlFor="period-length">
+            <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="period-length">
               Cadence
               <select
                 id="period-length"
-                className="mt-1.5 box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
+                className="mt-1 box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
                 value={lengthDays}
                 onChange={(event) => setLengthDays(event.target.value)}
               >
@@ -477,38 +390,118 @@ function PayPeriodSettingsPanel({
                 <option value={30}>Monthly proxy</option>
               </select>
             </label>
-          </div>
-        </div>
-
-        <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-light">Current period</p>
-            <p className="mt-1 text-sm font-semibold text-muted-strong">
-              {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}
-            </p>
-          </div>
-          <div className="mt-4 flex justify-end">
             <button
-              className="min-h-10 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+              className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
               type="button"
-              disabled={isBusy || !canSave}
-              onClick={() => setConfirmOpen(true)}
+              disabled={isBusy || !canSavePayPeriod}
+              onClick={() => setPendingConfirmation({ type: 'pay-period' })}
             >
-              Save Settings
+              Save
             </button>
           </div>
         </div>
+
+        <div className="grid gap-4 py-4 last:pb-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-start">
+          <div>
+            <h3 className="text-sm font-bold">Gross-up multiplier</h3>
+            <p className="mt-1 text-xs font-semibold text-muted">
+              Current: {currentMultiplier ? `${currentMultiplier.multiplier}x` : `${DEFAULT_PAYROLL_LOAD_FACTOR}x`}
+            </p>
+          </div>
+          <div>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_max-content] sm:items-end">
+              <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-date">
+                Effective date
+                <input
+                  id="gross-up-date"
+                  className="mt-1 block box-border h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-input-border bg-card px-3 text-center"
+                  type="date"
+                  value={effectiveDate}
+                  onChange={(event) => setEffectiveDate(event.target.value)}
+                />
+              </label>
+              <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-value">
+                Multiplier
+                <input
+                  id="gross-up-value"
+                  className="mt-1 block box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={multiplier}
+                  onChange={(event) => setMultiplier(event.target.value)}
+                />
+              </label>
+              <button
+                className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+                type="button"
+                disabled={isBusy || !canSaveMultiplier}
+                onClick={() => setPendingConfirmation({ type: 'gross-up-save' })}
+              >
+                Save
+              </button>
+            </div>
+
+            {sorted.length > 1 && (
+              <details className="mt-3 rounded-md border border-app-border-subtle px-3 py-2 text-xs text-muted">
+                <summary className="cursor-pointer font-bold text-muted-strong">History</summary>
+                <ul className="mt-2 divide-y divide-app-border-subtle">
+                  {sorted.map((entry) => (
+                    <li key={entry.id} className="flex items-center justify-between gap-3 py-2">
+                      <span>{entry.multiplier}x · {formatAtlanticDate(entry.effectiveDate)}</span>
+                      <button
+                        className="shrink-0 rounded p-1 text-muted-light hover:text-error-text disabled:opacity-40"
+                        type="button"
+                        aria-label={`Remove multiplier effective ${entry.effectiveDate}`}
+                        disabled={isBusy || sorted.length <= 1}
+                        onClick={() => setPendingConfirmation({ type: 'gross-up-delete', id: entry.id, effectiveDate: entry.effectiveDate })}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        </div>
       </div>
-      {confirmOpen && (
+
+      {pendingConfirmation && (
         <AdminPasswordDialog
-          title="Confirm pay period change"
-          description="Enter your admin password to update the payroll start date or cadence. This changes the period boundaries used by timesheets and reports."
+          title={
+            pendingConfirmation.type === 'pay-period'
+              ? 'Confirm pay period change'
+              : pendingConfirmation.type === 'gross-up-save'
+                ? 'Confirm multiplier change'
+                : 'Confirm multiplier deletion'
+          }
+          description={
+            pendingConfirmation.type === 'pay-period'
+              ? 'Enter your admin password to update the payroll period.'
+              : pendingConfirmation.type === 'gross-up-save'
+                ? 'Enter your admin password to update the gross-up multiplier.'
+                : `Enter your admin password to remove the multiplier effective ${formatAtlanticDate(pendingConfirmation.effectiveDate)}.`
+          }
           isBusy={isBusy}
-          confirmLabel="Save Settings"
-          onCancel={() => setConfirmOpen(false)}
+          confirmLabel={
+            pendingConfirmation.type === 'pay-period'
+              ? 'Save Pay Period'
+              : pendingConfirmation.type === 'gross-up-save'
+                ? 'Save Multiplier'
+                : 'Delete Multiplier'
+          }
+          onCancel={() => setPendingConfirmation(null)}
           onConfirm={async (adminPassword) => {
-            await onSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword);
-            setConfirmOpen(false);
+            if (pendingConfirmation.type === 'pay-period') {
+              await onPayPeriodSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword);
+            } else if (pendingConfirmation.type === 'gross-up-save') {
+              await onGrossUpSave(effectiveDate, nextMultiplier, adminPassword);
+            } else {
+              await onGrossUpDelete(pendingConfirmation.id, adminPassword);
+            }
+            setPendingConfirmation(null);
           }}
         />
       )}
