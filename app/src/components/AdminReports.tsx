@@ -266,7 +266,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
         <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold.</p>
-        <div className="grid gap-3 lg:grid-cols-4">
+        <div className="grid items-start gap-3 lg:grid-cols-4">
           <LabeledSelect
             label="Report Type"
             value={reportType}
@@ -299,7 +299,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
             ]}
           />
           <div className="hidden lg:block" aria-hidden="true" />
-          <button className="min-h-12 rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
+          <button className="min-h-12 self-start rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
         </div>
       </div>
 
@@ -482,10 +482,15 @@ function LabeledSelect({
   onChange: (value: string) => void;
   className?: string;
 }) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? '';
   return (
-    <label className={`block min-h-12 min-w-0 rounded-md border border-input-border bg-card px-3 py-2 ${className ?? ''}`}>
-      <span className="block text-xs font-bold text-muted">{label}</span>
-      <select className="mt-1 block h-6 w-full min-w-0 truncate bg-card text-sm font-bold text-ink outline-none" value={value} onChange={(event) => onChange(event.target.value)}>
+    <label className={`relative flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input-border bg-card px-3 py-2 font-semibold focus-within:ring-2 focus-within:ring-accent ${className ?? ''}`}>
+      <span className="min-w-0">
+        <span className="block text-xs font-bold text-muted">{label}</span>
+        <span className="block truncate text-sm text-ink">{selectedLabel}</span>
+      </span>
+      <span className="shrink-0 text-muted-light" aria-hidden="true">▾</span>
+      <select className="absolute inset-0 h-full w-full cursor-pointer opacity-0" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label}>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
