@@ -9,7 +9,7 @@ import type { ThemePreference } from '../utils/theme';
 import { formatAtlanticDate, getAtlanticDateKey } from '../utils/time';
 import { ThemePreferenceControl } from './ThemePreferenceControl';
 
-type EmployeeSortMode = 'name' | 'payRate' | 'employeeType';
+type EmployeeSortMode = 'nameAsc' | 'nameDesc' | 'payRateAsc' | 'payRateDesc' | 'employeeType';
 type EmployeeTypeFilter = 'all' | 'admin' | 'employee' | 'contractor';
 
 interface AdminEmployeesProps {
@@ -38,7 +38,7 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
   const [employeesOpen, setEmployeesOpen] = useState(true);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
   const [jobCodesOpen, setJobCodesOpen] = useState(true);
-  const [employeeSort, setEmployeeSort] = useState<EmployeeSortMode>('name');
+  const [employeeSort, setEmployeeSort] = useState<EmployeeSortMode>('nameAsc');
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState<EmployeeTypeFilter>('all');
   const [archivedJobCodesOpen, setArchivedJobCodesOpen] = useState(false);
   const workingSites = jobSites.filter((site) => !site.isArchived);
@@ -104,8 +104,10 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
                     value={employeeSort}
                     onChange={(event) => setEmployeeSort(event.target.value as EmployeeSortMode)}
                   >
-                    <option value="name">Name</option>
-                    <option value="payRate">Pay rate</option>
+                    <option value="nameAsc">Name A-Z</option>
+                    <option value="nameDesc">Name Z-A</option>
+                    <option value="payRateAsc">Pay rate low-high</option>
+                    <option value="payRateDesc">Pay rate high-low</option>
                     <option value="employeeType">Employee type</option>
                   </select>
                 </label>
@@ -214,7 +216,7 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
             </button>
             <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white" type="button" onClick={() => setAddSiteOpen(true)}>
               <Plus size={16} aria-hidden="true" />
-              Add
+              Add Property
             </button>
           </div>
           {propertiesOpen && (
@@ -280,7 +282,7 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
               onClick={() => setAddJobOpen(true)}
             >
               <Plus size={16} aria-hidden="true" />
-              Add
+              Add Job Code
             </button>
           </div>
           {jobCodesOpen && (
@@ -412,7 +414,9 @@ function profileTypeLabel(profile: Profile) {
 function sortProfiles(profiles: Profile[], sortMode: EmployeeSortMode) {
   return [...profiles].sort((a, b) => {
     const nameCompare = `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
-    if (sortMode === 'payRate') return a.hourlyRate - b.hourlyRate || nameCompare;
+    if (sortMode === 'nameDesc') return -nameCompare;
+    if (sortMode === 'payRateAsc') return a.hourlyRate - b.hourlyRate || nameCompare;
+    if (sortMode === 'payRateDesc') return b.hourlyRate - a.hourlyRate || nameCompare;
     if (sortMode === 'employeeType') return profileTypeLabel(a).localeCompare(profileTypeLabel(b)) || nameCompare;
     return nameCompare;
   });
