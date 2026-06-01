@@ -52,6 +52,7 @@ interface BuildLabourCostBreakdownParams {
   jobCodes: JobCode[];
   grossUpSchedule: GrossUpScheduleEntry[];
   selectedJobCodeId?: string;
+  weeklyOvertimeThresholdHours?: number;
   now?: Date;
 }
 
@@ -92,6 +93,7 @@ export function buildLabourCostBreakdown({
   jobCodes,
   grossUpSchedule,
   selectedJobCodeId,
+  weeklyOvertimeThresholdHours,
   now = new Date(),
 }: BuildLabourCostBreakdownParams): LabourCostBreakdown {
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -123,6 +125,7 @@ export function buildLabourCostBreakdown({
     const summary = calculateTimesheetSummary(employeeEntries, profile.hourlyRate, now, {
       paidBreaks: profile.paidBreaks,
       paidBreakMinutes: profile.paidBreakMinutes,
+      weeklyOvertimeThresholdHours,
     });
     const workerCostMultiplier = weightedWorkerMultiplier(includedWorkEntries, profile, grossUpSchedule, now);
     const includedGrossPay = summary.grossPay * (includedWorkHours / totalWorkHours);
@@ -235,7 +238,11 @@ export function buildLabourCostBreakdownAcrossPayPeriods({
   ...params
 }: BuildLabourCostBreakdownAcrossPayPeriodsParams): LabourCostBreakdown {
   const periods = groupEntriesByPayPeriod(params.entries, payPeriodSettings);
-  const breakdowns = Array.from(periods.values()).map((periodEntries) => buildLabourCostBreakdown({ ...params, entries: periodEntries }));
+  const breakdowns = Array.from(periods.values()).map((periodEntries) => buildLabourCostBreakdown({
+    ...params,
+    entries: periodEntries,
+    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+  }));
   const merged = mergeLabourCostBreakdowns(breakdowns);
 
   return {

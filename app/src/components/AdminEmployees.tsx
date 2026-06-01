@@ -423,6 +423,7 @@ function sortProfiles(profiles: Profile[], sortMode: EmployeeSortMode) {
 }
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
+const PAY_PERIOD_SETTINGS_GRID = 'grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
 const PAYROLL_SETTINGS_GRID = 'grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
 const PAYROLL_SETTINGS_SAVE_BUTTON = 'h-10 w-full shrink-0 rounded-md bg-accent px-5 text-sm font-bold text-white disabled:opacity-45';
 
@@ -444,17 +445,21 @@ function PayrollSettingsPanel({
   const today = getAtlanticDateKey(new Date().toISOString());
   const [anchorStart, setAnchorStart] = useState(settings.anchorStart);
   const [lengthDays, setLengthDays] = useState(settings.lengthDays.toString());
+  const [weeklyOvertimeThresholdHours, setWeeklyOvertimeThresholdHours] = useState(settings.weeklyOvertimeThresholdHours.toString());
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [multiplier, setMultiplier] = useState(DEFAULT_PAYROLL_LOAD_FACTOR.toString());
   const [pendingConfirmation, setPendingConfirmation] = useState<{ type: 'pay-period' } | { type: 'gross-up-save' } | { type: 'gross-up-delete'; id: string; effectiveDate: string } | null>(null);
 
   const nextLengthDays = Number(lengthDays);
+  const nextWeeklyOvertimeThresholdHours = Number(weeklyOvertimeThresholdHours);
   const isLengthValid = !Number.isNaN(nextLengthDays) && nextLengthDays > 0;
+  const isOvertimeThresholdValid = !Number.isNaN(nextWeeklyOvertimeThresholdHours) && nextWeeklyOvertimeThresholdHours > 0;
   const periodPreview = getPayPeriodForDate(isLengthValid && anchorStart ? { ...settings, anchorStart, lengthDays: nextLengthDays } : settings);
   const hasPayPeriodChanges =
     anchorStart !== settings.anchorStart ||
-    nextLengthDays !== settings.lengthDays;
-  const canSavePayPeriod = hasPayPeriodChanges && Boolean(anchorStart) && isLengthValid;
+    nextLengthDays !== settings.lengthDays ||
+    nextWeeklyOvertimeThresholdHours !== settings.weeklyOvertimeThresholdHours;
+  const canSavePayPeriod = hasPayPeriodChanges && Boolean(anchorStart) && isLengthValid && isOvertimeThresholdValid;
 
   const sorted = [...multipliers].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
   const currentMultiplier = sorted[0];
@@ -465,8 +470,9 @@ function PayrollSettingsPanel({
   useEffect(() => {
     setAnchorStart(settings.anchorStart);
     setLengthDays(settings.lengthDays.toString());
+    setWeeklyOvertimeThresholdHours(settings.weeklyOvertimeThresholdHours.toString());
     setPendingConfirmation(null);
-  }, [settings.anchorStart, settings.lengthDays]);
+  }, [settings.anchorStart, settings.lengthDays, settings.weeklyOvertimeThresholdHours]);
 
   return (
     <section id="payroll-settings" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
@@ -478,7 +484,7 @@ function PayrollSettingsPanel({
             <h3 className="text-sm font-bold">Pay period</h3>
             <p className="mt-1 text-xs font-semibold text-muted">Current: {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}</p>
           </div>
-          <div className={PAYROLL_SETTINGS_GRID}>
+          <div className={PAY_PERIOD_SETTINGS_GRID}>
             <label className="block min-w-0 overflow-hidden text-xs font-semibold text-muted" htmlFor="period-start">
               Start date
               <input
@@ -502,6 +508,19 @@ function PayrollSettingsPanel({
                 <option value={15}>Semi-monthly proxy</option>
                 <option value={30}>Monthly proxy</option>
               </select>
+            </label>
+            <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="weekly-overtime-threshold">
+              Weekly overtime threshold
+              <input
+                id="weekly-overtime-threshold"
+                className="mt-1 block box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
+                type="number"
+                min="1"
+                step="0.25"
+                inputMode="decimal"
+                value={weeklyOvertimeThresholdHours}
+                onChange={(event) => setWeeklyOvertimeThresholdHours(event.target.value)}
+              />
             </label>
             <button
               className={PAYROLL_SETTINGS_SAVE_BUTTON}
@@ -585,14 +604,14 @@ function PayrollSettingsPanel({
         <AdminPasswordDialog
           title={
             pendingConfirmation.type === 'pay-period'
-              ? 'Confirm pay period change'
+              ? 'Confirm payroll settings change'
               : pendingConfirmation.type === 'gross-up-save'
                 ? 'Confirm multiplier change'
                 : 'Confirm multiplier deletion'
           }
           description={
             pendingConfirmation.type === 'pay-period'
-              ? 'Enter your admin password to update the payroll period.'
+              ? 'Enter your admin password to update the pay period or weekly overtime threshold.'
               : pendingConfirmation.type === 'gross-up-save'
                 ? 'Enter your admin password to update the gross-up multiplier.'
                 : `Enter your admin password to remove the multiplier effective ${formatAtlanticDate(pendingConfirmation.effectiveDate)}.`
@@ -600,7 +619,7 @@ function PayrollSettingsPanel({
           isBusy={isBusy}
           confirmLabel={
             pendingConfirmation.type === 'pay-period'
-              ? 'Save Pay Period'
+              ? 'Save Payroll Settings'
               : pendingConfirmation.type === 'gross-up-save'
                 ? 'Save Multiplier'
                 : 'Delete Multiplier'
@@ -608,7 +627,12 @@ function PayrollSettingsPanel({
           onCancel={() => setPendingConfirmation(null)}
           onConfirm={async (adminPassword) => {
             if (pendingConfirmation.type === 'pay-period') {
-              await onPayPeriodSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword);
+              await onPayPeriodSave({
+                ...settings,
+                anchorStart,
+                lengthDays: nextLengthDays,
+                weeklyOvertimeThresholdHours: nextWeeklyOvertimeThresholdHours,
+              }, adminPassword);
             } else if (pendingConfirmation.type === 'gross-up-save') {
               await onGrossUpSave(effectiveDate, nextMultiplier, adminPassword);
             } else {

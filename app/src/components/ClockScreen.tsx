@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlarmClock } from 'lucide-react';
-import type { JobCode, JobSite, Profile, TimeEntry } from '../domain/types';
+import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import type { TimeClockService } from '../services/TimeClockService';
 import { requestGpsPoint } from '../utils/gps';
 import { employeeJobDisplayName, getEntryGpsVerification, isSelectableJobCode, isSelectableJobSite, jobCodeLabel, jobSiteById } from '../utils/jobs';
@@ -14,12 +14,13 @@ interface ClockScreenProps {
   entries: TimeEntry[];
   openWorkEntry: TimeEntry | null;
   openBreakEntry: TimeEntry | null;
+  payPeriodSettings: PayPeriodSettings;
   onDataChange: () => Promise<void>;
 }
 
 const unassignedPropertyId = '__unassigned__';
 
-export function ClockScreen({ profile, service, jobSites, jobCodes, entries, openWorkEntry, openBreakEntry, onDataChange }: ClockScreenProps) {
+export function ClockScreen({ profile, service, jobSites, jobCodes, entries, openWorkEntry, openBreakEntry, payPeriodSettings, onDataChange }: ClockScreenProps) {
   const selectableJobs = useMemo(() => jobCodes.filter(isSelectableJobCode), [jobCodes]);
   const firstSelectableJob = selectableJobs[0] ?? null;
   const [selectedPropertyId, setSelectedPropertyId] = useState(firstSelectableJob?.jobSiteId ?? unassignedPropertyId);
@@ -56,7 +57,11 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
   const activeSite = activeJob?.jobSiteId ? siteById.get(activeJob.jobSiteId) : null;
   const todayKey = getAtlanticDateKey(now);
   const todaysEntries = entries.filter((entry) => getAtlanticDateKey(entry.clockIn) === todayKey).sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-  const todaySummary = calculateTimesheetSummary(todaysEntries, profile.hourlyRate, now, { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes });
+  const todaySummary = calculateTimesheetSummary(todaysEntries, profile.hourlyRate, now, {
+    paidBreaks: profile.paidBreaks,
+    paidBreakMinutes: profile.paidBreakMinutes,
+    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+  });
   const finalClockOutNote = shiftNotes.trim();
 
   useEffect(() => {

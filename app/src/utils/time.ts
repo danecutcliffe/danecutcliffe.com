@@ -146,6 +146,7 @@ export function formatDurationCompact(hours: number): string {
 export interface TimesheetSummaryOptions {
   paidBreaks?: boolean;
   paidBreakMinutes?: number;
+  weeklyOvertimeThresholdHours?: number;
 }
 
 export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: number, now = new Date(), options: TimesheetSummaryOptions = {}) {
@@ -164,8 +165,31 @@ export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: numb
     : 0;
   const unpaidBreakHours = Math.max(0, breakHours - paidBreakHours);
   const netWorkHours = Math.max(0, grossWorkHours - unpaidBreakHours);
-  const regularHours = Math.min(netWorkHours, OVERTIME_THRESHOLD_HOURS);
-  const overtimeHours = Math.max(0, netWorkHours - OVERTIME_THRESHOLD_HOURS);
+  const weeklyOvertimeThresholdHours = options.weeklyOvertimeThresholdHours && options.weeklyOvertimeThresholdHours > 0
+    ? options.weeklyOvertimeThresholdHours
+    : OVERTIME_THRESHOLD_HOURS;
+  const grossWorkHoursByWeek = workEntries.reduce<Record<string, number>>((totals, entry) => {
+    const weekStart = getAtlanticWeekStart(entry.clockIn);
+    totals[weekStart] = (totals[weekStart] ?? 0) + getEntryDurationHours(entry, now);
+    return totals;
+  }, {});
+  const unpaidBreakHoursByWeek = Object.entries(breakHoursByDay).reduce<Record<string, number>>((totals, [day, dailyBreakHours]) => {
+    const weekStart = getAtlanticWeekStart(`${day}T12:00:00Z`);
+    const paidDailyBreakHours = options.paidBreaks ? Math.min(dailyBreakHours, paidBreakLimitHours) : 0;
+    totals[weekStart] = (totals[weekStart] ?? 0) + Math.max(0, dailyBreakHours - paidDailyBreakHours);
+    return totals;
+  }, {});
+  const weekStarts = [...new Set([...Object.keys(grossWorkHoursByWeek), ...Object.keys(unpaidBreakHoursByWeek)])];
+  const { regularHours, overtimeHours } = weekStarts.reduce(
+    (totals, weekStart) => {
+      const weeklyNetHours = Math.max(0, (grossWorkHoursByWeek[weekStart] ?? 0) - (unpaidBreakHoursByWeek[weekStart] ?? 0));
+      return {
+        regularHours: totals.regularHours + Math.min(weeklyNetHours, weeklyOvertimeThresholdHours),
+        overtimeHours: totals.overtimeHours + Math.max(0, weeklyNetHours - weeklyOvertimeThresholdHours),
+      };
+    },
+    { regularHours: 0, overtimeHours: 0 },
+  );
   const grossPay = regularHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
 
   return {

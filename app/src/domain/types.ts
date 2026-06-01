@@ -78,6 +78,7 @@ export interface TimesheetApproval {
 export interface PayPeriodSettings {
   anchorStart: string;
   lengthDays: number;
+  weeklyOvertimeThresholdHours: number;
   // Deprecated: superseded by the effective-dated PayrollGrossUpMultiplier history.
   // Retained for backward compatibility; no longer the source of truth for cost reporting.
   laborCostMultiplier: number;

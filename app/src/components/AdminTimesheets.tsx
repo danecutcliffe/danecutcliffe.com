@@ -32,7 +32,11 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const employee = employees.find((profile) => profile.id === selectedEmployeeId) ?? employees[0];
   const periodDays = getPayPeriodDays(payPeriodSettings, periodStart);
   const profileEntries = entries.filter((entry) => entry.userId === employee?.id && periodDays.includes(getAtlanticDateKey(entry.clockIn)));
-  const summary = calculateTimesheetSummary(profileEntries, employee?.hourlyRate ?? 0, new Date(), { paidBreaks: employee?.paidBreaks ?? false, paidBreakMinutes: employee?.paidBreakMinutes ?? 30 });
+  const summary = calculateTimesheetSummary(profileEntries, employee?.hourlyRate ?? 0, new Date(), {
+    paidBreaks: employee?.paidBreaks ?? false,
+    paidBreakMinutes: employee?.paidBreakMinutes ?? 30,
+    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+  });
   const groupedEntries = groupEntriesByAtlanticDate(profileEntries);
   const displayDays = [...periodDays].reverse();
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
@@ -127,7 +131,11 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           {viewMode === 'summary' && displayDays.map((day) => {
               const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
               if (dayEntries.length === 0) return null;
-              const daySummary = calculateTimesheetSummary(dayEntries, employee?.hourlyRate ?? 0, new Date(), { paidBreaks: employee?.paidBreaks ?? false, paidBreakMinutes: employee?.paidBreakMinutes ?? 30 });
+              const daySummary = calculateTimesheetSummary(dayEntries, employee?.hourlyRate ?? 0, new Date(), {
+                paidBreaks: employee?.paidBreaks ?? false,
+                paidBreakMinutes: employee?.paidBreakMinutes ?? 30,
+                weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+              });
               const isOpen = dayEntries.some((entry) => !entry.clockOut);
 
               return (

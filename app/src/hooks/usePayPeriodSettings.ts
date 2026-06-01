@@ -3,11 +3,13 @@ import { addDaysToDateKey, dayDiff, getAtlanticDateKey, getCurrentAtlanticWeekSt
 
 export const DEFAULT_PAY_PERIOD_LENGTH_DAYS = 14;
 export const DEFAULT_LABOR_COST_MULTIPLIER = 1.25;
+export const DEFAULT_WEEKLY_OVERTIME_THRESHOLD_HOURS = 48;
 
 export function defaultPayPeriodSettings(): PayPeriodSettings {
   return {
     anchorStart: getCurrentAtlanticWeekStart(),
     lengthDays: DEFAULT_PAY_PERIOD_LENGTH_DAYS,
+    weeklyOvertimeThresholdHours: DEFAULT_WEEKLY_OVERTIME_THRESHOLD_HOURS,
     laborCostMultiplier: DEFAULT_LABOR_COST_MULTIPLIER,
   };
 }
@@ -16,6 +18,7 @@ export function normalizePayPeriodSettings(settings: Partial<PayPeriodSettings> 
   const fallback = defaultPayPeriodSettings();
   const lengthDays = Number(settings?.lengthDays);
   const laborCostMultiplier = Number(settings?.laborCostMultiplier);
+  const weeklyOvertimeThresholdHours = Number(settings?.weeklyOvertimeThresholdHours);
   const anchorStart = settings?.anchorStart;
 
   if (!anchorStart || Number.isNaN(lengthDays) || lengthDays < 1) return fallback;
@@ -23,6 +26,9 @@ export function normalizePayPeriodSettings(settings: Partial<PayPeriodSettings> 
   return {
     anchorStart,
     lengthDays,
+    weeklyOvertimeThresholdHours: Number.isNaN(weeklyOvertimeThresholdHours) || weeklyOvertimeThresholdHours <= 0
+      ? fallback.weeklyOvertimeThresholdHours
+      : Number(weeklyOvertimeThresholdHours.toFixed(2)),
     laborCostMultiplier: Number.isNaN(laborCostMultiplier) || laborCostMultiplier < 1
       ? fallback.laborCostMultiplier
       : Number(laborCostMultiplier.toFixed(4)),

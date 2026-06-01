@@ -4,6 +4,8 @@ import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { buildDetailedCsv, buildQboCsv, downloadCsv } from '../utils/csv';
 import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
+import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
+import { downloadReportXlsx } from '../utils/xlsxReports';
 import {
   addDaysToDateKey,
   calculateTimesheetSummary,
@@ -23,8 +25,7 @@ interface AdminReportsProps {
   grossUpMultipliers: PayrollGrossUpMultiplier[];
 }
 
-type ReportType = 'detailed' | 'hours' | 'jobs' | 'overtime';
-type PreviewType = 'detailed' | 'qbo';
+type ReportType = 'detailed' | 'hoursByLocation' | 'payrollSummary' | 'jobs' | 'overtime';
 
 export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
@@ -33,30 +34,33 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const [openPropertyIds, setOpenPropertyIds] = useState<Record<string, boolean>>({});
   const periodEnd = addDaysToDateKey(periodStart, payPeriodSettings.lengthDays - 1);
   const [reportType, setReportType] = useState<ReportType>('detailed');
-  const [employeeId, setEmployeeId] = useState('');
-  const [jobCodeId, setJobCodeId] = useState('');
+  const [employeeIds, setEmployeeIds] = useState<string[]>([]);
+  const [propertyIds, setPropertyIds] = useState<string[]>([]);
+  const [jobCodeIds, setJobCodeIds] = useState<string[]>([]);
   const [auditTable, setAuditTable] = useState('');
-  const [csvPreview, setCsvPreview] = useState('');
-  const [previewType, setPreviewType] = useState<PreviewType>('qbo');
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
   const siteById = useMemo(() => jobSiteById(jobSites), [jobSites]);
-  const employees = useMemo(() => profiles.filter((profile) => profile.role === 'employee'), [profiles]);
+  const reportPeople = useMemo(() => [...profiles].sort((a, b) => name(a).localeCompare(name(b))), [profiles]);
   const periodEntries = useMemo(() => entries.filter((entry) => {
     const key = getAtlanticDateKey(entry.clockIn);
     return key >= periodStart && key <= periodEnd;
   }), [entries, periodEnd, periodStart]);
-  const employeeScopedEntries = useMemo(
-    () => periodEntries.filter((entry) => !employeeId || entry.userId === employeeId),
-    [employeeId, periodEntries],
-  );
   const filteredEntries = useMemo(
-    () => employeeScopedEntries.filter((entry) => !jobCodeId || entry.jobCodeId === jobCodeId),
-    [employeeScopedEntries, jobCodeId],
+    () => periodEntries.filter((entry) => {
+      if (employeeIds.length > 0 && !employeeIds.includes(entry.userId)) return false;
+      if (jobCodeIds.length > 0 && (!entry.jobCodeId || !jobCodeIds.includes(entry.jobCodeId))) return false;
+      if (propertyIds.length > 0) {
+        const job = entry.jobCodeId ? jobById.get(entry.jobCodeId) : null;
+        if (!job?.jobSiteId || !propertyIds.includes(job.jobSiteId)) return false;
+      }
+      return true;
+    }),
+    [employeeIds, jobById, jobCodeIds, periodEntries, propertyIds],
   );
   const exportableEntries = useMemo(() => filteredEntries.filter((entry) => entry.clockOut), [filteredEntries]);
   const blockers = useMemo(() => buildExportBlockers(filteredEntries, profileById), [filteredEntries, profileById]);
-  const summary = useMemo(() => calculatePayrollSummary(filteredEntries, employees), [employees, filteredEntries]);
+  const summary = useMemo(() => calculatePayrollSummary(filteredEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [filteredEntries, payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople]);
   const labourBreakdown = useMemo(
     () => buildLabourCostBreakdownAcrossPayPeriods({
       entries,
@@ -72,9 +76,44 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const qboCsv = buildQboCsv({ entries: exportableEntries, profiles, jobSites, jobCodes });
   const detailedFilename = `time-detail-${periodStart}_to_${periodEnd}.csv`;
   const qboFilename = `qbo-time-${periodStart}_to_${periodEnd}.csv`;
-  const displayedPayableHours = jobCodeId ? labourBreakdown.payableHours : summary.netWorkHours;
-  const displayedGrossPay = jobCodeId ? labourBreakdown.grossPay : summary.grossPay;
-  const displayedOvertimeHours = jobCodeId ? labourBreakdown.overtimeHours : summary.overtimeHours;
+  const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
+    entries: filteredEntries,
+    profiles,
+    jobSites,
+    jobCodes,
+    payPeriodSettings,
+    periodStart,
+    periodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+  const hoursByLocationModel = useMemo(() => buildHoursByLocationReport({
+    entries: filteredEntries,
+    profiles,
+    jobSites,
+    jobCodes,
+    payPeriodSettings,
+    periodStart,
+    periodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+  const payrollSummaryModel = useMemo(() => buildPayrollSummaryReport({
+    entries: filteredEntries,
+    profiles,
+    jobSites,
+    jobCodes,
+    payPeriodSettings,
+    periodStart,
+    periodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+  const selectedReportModel = reportType === 'detailed'
+    ? detailedTimecardModel
+    : reportType === 'hoursByLocation'
+      ? hoursByLocationModel
+      : reportType === 'payrollSummary'
+        ? payrollSummaryModel
+        : null;
+  const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${periodStart}_to_${periodEnd}.xlsx`;
+  const displayedPayableHours = summary.netWorkHours;
+  const displayedGrossPay = summary.grossPay;
+  const displayedOvertimeHours = summary.overtimeHours;
   const maxPropertyLoadedCost = labourBreakdown.properties[0]?.loadedCost ?? 0;
 
   useEffect(() => {
@@ -92,11 +131,6 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       return next;
     });
   }, [labourBreakdown.properties]);
-
-  const showPreview = (type: PreviewType) => {
-    setPreviewType(type);
-    setCsvPreview(type === 'qbo' ? qboCsv : detailedCsv);
-  };
 
   return (
     <section className="space-y-4">
@@ -185,46 +219,36 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       </div>
 
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
-        <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting.</p>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold.</p>
+        <div className="grid gap-3 lg:grid-cols-4">
           <select className="min-h-12 rounded-md border border-input-border bg-card px-3" value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}>
-            <option value="detailed">Detailed Time</option>
-            <option value="hours">Hours Summary</option>
+            <option value="detailed">Detailed Timecard</option>
+            <option value="hoursByLocation">Hours by Location</option>
+            <option value="payrollSummary">Payroll Summary</option>
             <option value="jobs">Job Hours</option>
             <option value="overtime">Overtime</option>
           </select>
-          <select className="min-h-12 rounded-md border border-input-border bg-card px-3" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-            <option value="">All employees</option>
-            {employees.map((profile) => <option key={profile.id} value={profile.id}>{name(profile)}</option>)}
-          </select>
-          <select className="min-h-12 rounded-md border border-input-border bg-card px-3" value={jobCodeId} onChange={(event) => setJobCodeId(event.target.value)}>
-            <option value="">All jobs</option>
-            {jobCodes.map((job) => <option key={job.id} value={job.id}>{jobDisplayNameById(job.id, jobById, siteById)}</option>)}
-          </select>
-          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white" type="button" onClick={() => showPreview('qbo')}>Preview QBO CSV</button>
+          <ChecklistFilter label="Employees" allLabel="All employees" selectedIds={employeeIds} options={reportPeople.map((profile) => ({ id: profile.id, label: name(profile) }))} onChange={setEmployeeIds} />
+          <ChecklistFilter label="Properties" allLabel="All properties" selectedIds={propertyIds} options={jobSites.map((site) => ({ id: site.id, label: site.name }))} onChange={setPropertyIds} />
+          <ChecklistFilter label="Jobs" allLabel="All jobs" selectedIds={jobCodeIds} options={jobCodes.map((job) => ({ id: job.id, label: jobDisplayNameById(job.id, jobById, siteById) }))} onChange={setJobCodeIds} />
         </div>
+        <p className="mt-3 text-xs font-semibold text-muted">
+          Scope: {employeeIds.length === 0 ? 'all employees' : `${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}`} · {propertyIds.length === 0 ? 'all properties' : `${propertyIds.length} propert${propertyIds.length === 1 ? 'y' : 'ies'}`} · {jobCodeIds.length === 0 ? 'all jobs' : `${jobCodeIds.length} job${jobCodeIds.length === 1 ? '' : 's'}`}
+        </p>
       </div>
 
       <div id="report-detail" className="scroll-mt-20 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 rounded-md border border-app-border bg-card p-4 shadow-soft">
-          {reportType === 'detailed' && <DetailedReport entries={filteredEntries} profileById={profileById} jobById={jobById} siteById={siteById} />}
-          {reportType === 'hours' && <HoursReport entries={filteredEntries} profiles={employees} />}
+          {selectedReportModel && <ReportPreview model={selectedReportModel} />}
           {reportType === 'jobs' && <JobReport entries={filteredEntries} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} />}
-          {reportType === 'overtime' && <OvertimeReport entries={filteredEntries} profiles={employees} />}
+          {reportType === 'overtime' && <OvertimeReport entries={filteredEntries} profiles={reportPeople} weeklyOvertimeThresholdHours={payPeriodSettings.weeklyOvertimeThresholdHours} />}
         </div>
         <aside id="csv-exports" className="scroll-mt-20 min-w-0 space-y-3 rounded-md border border-app-border bg-card p-4 shadow-soft">
-          <h2 className="text-xl font-bold">CSV exports</h2>
-          <p className="text-sm text-muted">QBO export uses a common Time Activity CSV shape. QuickBooks may still require QuickBooks Time or an importer app for upload.</p>
-          <button className="min-h-12 w-full rounded-md border border-input-border px-4 font-bold" type="button" onClick={() => showPreview('detailed')}>Preview Detailed CSV</button>
-          <button className="min-h-12 w-full rounded-md border border-input-border px-4 font-bold" type="button" onClick={() => showPreview('qbo')}>Preview QBO CSV</button>
+          <h2 className="text-xl font-bold">Exports</h2>
+          <p className="text-sm text-muted">XLSX exports use the report preview model. CSV remains available for raw data/import workflows.</p>
+          <button className="min-h-12 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={!selectedReportModel || selectedReportModel.rows.length === 0} onClick={() => selectedReportModel && downloadReportXlsx(selectedReportModel, selectedXlsxFilename)}>Download XLSX</button>
           <button className="min-h-12 w-full rounded-md border border-input-border px-4 font-bold" type="button" onClick={() => downloadCsv(detailedFilename, detailedCsv)}>Download Detailed CSV</button>
           <button className="min-h-12 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={blockers.length > 0 || exportableEntries.length === 0} onClick={() => downloadCsv(qboFilename, qboCsv)}>Download QBO CSV</button>
-          {csvPreview && (
-            <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">{previewType === 'qbo' ? 'QBO CSV preview' : 'Detailed CSV preview'}</p>
-              <pre className="max-h-80 overflow-auto rounded-md bg-ink p-3 text-xs text-card">{csvPreview}</pre>
-            </div>
-          )}
         </aside>
       </div>
 
@@ -324,6 +348,112 @@ function LabourCostPropertyCard({
   );
 }
 
+function ReportPreview({ model }: { model: ReportModel }) {
+  const previewRows = model.rows.slice(0, 50);
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">{model.title}</h2>
+          <p className="mt-1 text-sm font-semibold text-muted">{model.subtitle}</p>
+        </div>
+        <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{model.rows.length} row{model.rows.length === 1 ? '' : 's'}</span>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        {model.summary.map((item) => (
+          <Metric key={item.label} label={item.label} value={item.value} />
+        ))}
+      </div>
+
+      {model.exceptions.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {model.exceptions.map((exception) => (
+            <p key={exception.message} className={`rounded-md border p-3 text-sm font-bold ${exception.severity === 'blocker' ? 'border-error-border bg-error-bg text-error-text' : 'border-warn-border bg-warn-bg text-warning'}`}>
+              {exception.message}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 max-h-[42rem] overflow-auto rounded-md border border-app-border">
+        <table className="min-w-full border-collapse text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-card text-xs uppercase text-muted">
+            <tr>
+              {model.columns.map((column) => (
+                <th key={column.key} className={`border-b border-app-border px-3 py-2 font-bold ${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : 'text-left'}`}>
+                  {column.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {previewRows.map((row, index) => (
+              <tr key={index} className={`border-b border-app-border-subtle ${row.entryStatus === 'Open' ? 'bg-warn-bg' : ''}`}>
+                {model.columns.map((column) => (
+                  <td key={column.key} className={`px-3 py-2 align-top ${column.align === 'right' ? 'text-right tabular-nums' : column.align === 'center' ? 'text-center' : ''}`}>
+                    {formatPreviewCell(row[column.key], column.format)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {model.rows.length === 0 && (
+              <tr>
+                <td className="px-3 py-4 text-sm text-muted" colSpan={model.columns.length}>No rows match the selected report filters.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {model.rows.length > previewRows.length && <p className="mt-2 text-xs font-semibold text-muted">Showing first {previewRows.length} rows. XLSX export includes all {model.rows.length} rows.</p>}
+    </>
+  );
+}
+
+function ChecklistFilter({
+  label,
+  allLabel,
+  options,
+  selectedIds,
+  onChange,
+}: {
+  label: string;
+  allLabel: string;
+  options: Array<{ id: string; label: string }>;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const selectedLabel = selectedIds.length === 0 ? allLabel : `${selectedIds.length} selected`;
+  const toggle = (id: string) => {
+    onChange(selectedIds.includes(id) ? selectedIds.filter((selectedId) => selectedId !== id) : [...selectedIds, id]);
+  };
+
+  return (
+    <details className="relative rounded-md border border-input-border bg-card">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 font-semibold marker:hidden">
+        <span className="min-w-0">
+          <span className="block text-xs text-muted">{label}</span>
+          <span className="block truncate text-sm text-ink">{selectedLabel}</span>
+        </span>
+        <span className="text-muted-light" aria-hidden="true">▾</span>
+      </summary>
+      <div className="absolute z-30 mt-2 max-h-80 w-full min-w-72 overflow-auto rounded-md border border-app-border bg-card p-2 shadow-soft">
+        <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
+          <input type="checkbox" checked={selectedIds.length === 0} onChange={() => onChange([])} />
+          {allLabel}
+        </label>
+        <div className="my-1 border-t border-app-border-subtle" />
+        {options.map((option) => (
+          <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
+            <input type="checkbox" checked={selectedIds.includes(option.id)} onChange={() => toggle(option.id)} />
+            <span className="min-w-0 truncate">{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function DetailedReport({ entries, profileById, jobById, siteById }: { entries: TimeEntry[]; profileById: Map<string, Profile>; jobById: Map<string, JobCode>; siteById: Map<string, JobSite> }) {
   return (
     <>
@@ -340,8 +470,8 @@ function DetailedReport({ entries, profileById, jobById, siteById }: { entries: 
   );
 }
 
-function HoursReport({ entries, profiles }: { entries: TimeEntry[]; profiles: Profile[] }) {
-  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes }).netWorkHours.toFixed(2)} payable hours` }))} />;
+function HoursReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entries: TimeEntry[]; profiles: Profile[]; weeklyOvertimeThresholdHours: number }) {
+  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes, weeklyOvertimeThresholdHours }).netWorkHours.toFixed(2)} payable hours` }))} />;
 }
 
 function JobReport({ entries, profiles, jobSites, jobCodes }: { entries: TimeEntry[]; profiles: Profile[]; jobSites: JobSite[]; jobCodes: JobCode[] }) {
@@ -351,8 +481,8 @@ function JobReport({ entries, profiles, jobSites, jobCodes }: { entries: TimeEnt
   return <ReportList title="Job hours" items={jobCodes.map((job) => ({ title: jobDisplayNameById(job.id, jobById, siteById), body: `${calculateJobPayableHours(entries.filter((entry) => entry.jobCodeId === job.id), profileById).toFixed(2)} payable hours` }))} />;
 }
 
-function OvertimeReport({ entries, profiles }: { entries: TimeEntry[]; profiles: Profile[] }) {
-  return <ReportList title="Overtime" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes }).overtimeHours.toFixed(2)} overtime hours` }))} />;
+function OvertimeReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entries: TimeEntry[]; profiles: Profile[]; weeklyOvertimeThresholdHours: number }) {
+  return <ReportList title="Overtime" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes, weeklyOvertimeThresholdHours }).overtimeHours.toFixed(2)} overtime hours` }))} />;
 }
 
 function ReportList({ title, items }: { title: string; items: Array<{ title: string; body: string }> }) {
@@ -423,11 +553,15 @@ function Metric({ label, value, sublabel, className }: { label: string; value: s
   );
 }
 
-function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[]) {
+function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[], weeklyOvertimeThresholdHours: number) {
   return employees.reduce(
     (total, employee) => {
       const employeeEntries = entries.filter((entry) => entry.userId === employee.id);
-      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), { paidBreaks: employee.paidBreaks, paidBreakMinutes: employee.paidBreakMinutes });
+      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), {
+        paidBreaks: employee.paidBreaks,
+        paidBreakMinutes: employee.paidBreakMinutes,
+        weeklyOvertimeThresholdHours,
+      });
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,
@@ -523,6 +657,23 @@ function calculateJobPayableHours(entries: TimeEntry[], profileById: Map<string,
 
 function money(value: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(value);
+}
+
+function formatPreviewCell(value: unknown, format?: string) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (format === 'hours' && typeof value === 'number') return value.toFixed(2);
+  if (format === 'currency' && typeof value === 'number') return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(value);
+  if (format === 'date' && typeof value === 'string') return formatAtlanticDate(value);
+  if (format === 'time' && typeof value === 'string') return formatAtlanticDateTime(value).split(', ').pop() ?? value;
+  return String(value);
+}
+
+function reportFilenamePrefix(reportType: ReportType) {
+  if (reportType === 'hoursByLocation') return 'hours-by-location';
+  if (reportType === 'payrollSummary') return 'payroll-summary';
+  if (reportType === 'jobs') return 'job-hours';
+  if (reportType === 'overtime') return 'overtime';
+  return 'timecard-detail';
 }
 
 function formatMultiplier(value: number) {

@@ -41,7 +41,11 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const periodSummary = employees.reduce(
     (total, employee) => {
       const employeeEntries = periodEntries.filter((entry) => entry.userId === employee.id);
-      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), { paidBreaks: employee.paidBreaks, paidBreakMinutes: employee.paidBreakMinutes });
+      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), {
+        paidBreaks: employee.paidBreaks,
+        paidBreakMinutes: employee.paidBreakMinutes,
+        weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+      });
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,
@@ -74,6 +78,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${readinessClass(readiness)}`}>{readinessLabel(readiness)}</span>
               <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{payPeriodSettings.lengthDays}-day period</span>
               <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Employee lunch rules</span>
+              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">OT after {payPeriodSettings.weeklyOvertimeThresholdHours}h/week</span>
             </div>
             <h2 className="mt-3 text-2xl font-bold leading-tight">Is this pay period ready to export?</h2>
             <p className="mt-1 text-sm text-muted">
@@ -129,6 +134,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
                 flags={flags.filter((flag) => flag.entry?.userId === employee.id)}
                 jobById={jobById}
                 siteById={siteById}
+                weeklyOvertimeThresholdHours={payPeriodSettings.weeklyOvertimeThresholdHours}
                 onOpenTimesheets={onOpenTimesheets}
               />
             ))}
@@ -165,8 +171,12 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   );
 }
 
-function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; onOpenTimesheets?: () => void }) {
-  const summary = calculateTimesheetSummary(entries, employee.hourlyRate, new Date(), { paidBreaks: employee.paidBreaks, paidBreakMinutes: employee.paidBreakMinutes });
+function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weeklyOvertimeThresholdHours, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; weeklyOvertimeThresholdHours: number; onOpenTimesheets?: () => void }) {
+  const summary = calculateTimesheetSummary(entries, employee.hourlyRate, new Date(), {
+    paidBreaks: employee.paidBreaks,
+    paidBreakMinutes: employee.paidBreakMinutes,
+    weeklyOvertimeThresholdHours,
+  });
   const lastEntry = [...entries].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
   const jobSplits = getJobSplits(entries, jobById, siteById, employee);
   return (

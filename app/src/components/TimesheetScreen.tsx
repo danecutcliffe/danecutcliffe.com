@@ -22,7 +22,11 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
   const periodEntries = entries.filter((entry) => periodDays.includes(getAtlanticDateKey(entry.clockIn)));
   const periodApproval = approvals.find((approval) => approval.userId === profile.id && approval.weekStart === periodStart && approval.status === 'approved');
   const groupedEntries = groupEntriesByAtlanticDate(periodEntries);
-  const summary = calculateTimesheetSummary(periodEntries, profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes });
+  const summary = calculateTimesheetSummary(periodEntries, profile.hourlyRate, new Date(), {
+    paidBreaks: profile.paidBreaks,
+    paidBreakMinutes: profile.paidBreakMinutes,
+    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+  });
   const displayDays = [...periodDays].reverse();
 
   useEffect(() => {
@@ -52,7 +56,11 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
       <div id="daily-breakdown" className="scroll-mt-20 rounded-md border border-app-border bg-card shadow-soft">
         {displayDays.map((day) => {
           const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-          const daySummary = calculateTimesheetSummary(dayEntries, profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes });
+          const daySummary = calculateTimesheetSummary(dayEntries, profile.hourlyRate, new Date(), {
+            paidBreaks: profile.paidBreaks,
+            paidBreakMinutes: profile.paidBreakMinutes,
+            weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+          });
           return (
             <div key={day} className="time-day-panel p-4">
               <div className="flex items-center justify-between gap-3">
