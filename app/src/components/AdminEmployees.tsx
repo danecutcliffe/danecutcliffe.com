@@ -9,6 +9,9 @@ import type { ThemePreference } from '../utils/theme';
 import { formatAtlanticDate, getAtlanticDateKey } from '../utils/time';
 import { ThemePreferenceControl } from './ThemePreferenceControl';
 
+type EmployeeSortMode = 'name' | 'payRate' | 'employeeType';
+type EmployeeTypeFilter = 'all' | 'admin' | 'employee' | 'contractor';
+
 interface AdminEmployeesProps {
   profiles: Profile[];
   jobSites: JobSite[];
@@ -32,6 +35,11 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addSiteOpen, setAddSiteOpen] = useState(false);
   const [addJobOpen, setAddJobOpen] = useState(false);
+  const [employeesOpen, setEmployeesOpen] = useState(true);
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const [jobCodesOpen, setJobCodesOpen] = useState(true);
+  const [employeeSort, setEmployeeSort] = useState<EmployeeSortMode>('name');
+  const [employeeTypeFilter, setEmployeeTypeFilter] = useState<EmployeeTypeFilter>('all');
   const [archivedJobCodesOpen, setArchivedJobCodesOpen] = useState(false);
   const workingSites = jobSites.filter((site) => !site.isArchived);
   const archivedSites = jobSites.filter((site) => site.isArchived);
@@ -41,6 +49,10 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
   const archivedJobSections = buildJobCodeSections(archivedJobCodes, jobSites);
   const pendingProfiles = profiles.filter((profile) => !profile.isActive && !profile.isRejected);
   const visibleProfiles = profiles.filter((profile) => !profile.isRejected);
+  const displayedProfiles = sortProfiles(
+    visibleProfiles.filter((profile) => employeeTypeFilter === 'all' || profileType(profile) === employeeTypeFilter),
+    employeeSort,
+  );
 
   const runAction = async (action: () => Promise<void>) => {
     setIsBusy(true);
@@ -64,68 +76,114 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
         {/* Employees */}
         <section id="employees" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">Employees</h2>
+            <button
+              className="inline-flex min-h-10 items-center gap-2 text-left text-lg font-bold"
+              type="button"
+              aria-expanded={employeesOpen}
+              aria-controls="employees-content"
+              onClick={() => setEmployeesOpen(!employeesOpen)}
+            >
+              {employeesOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+              <span>Employees</span>
+              <span className="text-xs font-semibold text-muted">({displayedProfiles.length}/{visibleProfiles.length})</span>
+            </button>
             <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white" type="button" onClick={() => setAddEmployeeOpen(true)}>
               <Plus size={16} aria-hidden="true" />
               Add Employee
             </button>
           </div>
-          {pendingProfiles.length > 0 && (
-            <div className="mt-4 rounded-md border border-warn-border bg-warn-bg p-3">
-              <h3 className="text-sm font-bold text-warning">Pending signups</h3>
-              <p className="mt-1 text-xs font-semibold text-muted">Newly confirmed users appear here inactive. Set their role/rate below, then activate them when they should be allowed to punch time.</p>
-              <div className="mt-3 space-y-2">
-                {pendingProfiles.map((profile) => (
-                  <div key={profile.id} className="flex flex-col gap-3 rounded-md bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-ink">{profile.firstName} {profile.lastName}</p>
-                      <p className="break-words text-xs font-semibold text-muted">{profile.email}</p>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button className="min-h-9 rounded-md border border-error-border px-3 text-xs font-bold text-error-text" type="button" disabled={isBusy} onClick={() => runAction(async () => {
-                        const confirmed = window.confirm(`Reject and delete signup request for ${profile.firstName} ${profile.lastName}? This removes their login request and cannot be undone.`);
-                        if (!confirmed) return;
-                        if (service.rejectSignup) {
-                          await service.rejectSignup({ profileId: profile.id });
-                          return;
-                        }
-                        if (service.deleteProfile) {
-                          await service.deleteProfile({ profileId: profile.id });
-                          return;
-                        }
-                        await service.updateProfile({ profileId: profile.id, patch: { isRejected: true, isActive: false } });
-                      })}>Reject / Delete</button>
-                      <button className="min-h-9 rounded-md border border-input-border px-3 text-xs font-bold text-muted-strong" type="button" disabled={isBusy} onClick={() => runAction(() => service.updateProfile({ profileId: profile.id, patch: { role: 'admin', isActive: true, isRejected: false } }).then())}>Approve - Admin</button>
-                      <button className="min-h-9 rounded-md bg-accent px-3 text-xs font-bold text-white" type="button" disabled={isBusy} onClick={() => runAction(() => service.updateProfile({ profileId: profile.id, patch: { role: 'employee', isActive: true, isRejected: false } }).then())}>Approve - Employee</button>
-                    </div>
+
+          {employeesOpen && (
+            <div id="employees-content">
+              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)]">
+                <label className="block text-xs font-semibold text-muted" htmlFor="employee-sort">
+                  Sort
+                  <select
+                    id="employee-sort"
+                    className="mt-1 box-border h-10 w-full rounded-md border border-input-border bg-card px-3 text-sm text-ink"
+                    value={employeeSort}
+                    onChange={(event) => setEmployeeSort(event.target.value as EmployeeSortMode)}
+                  >
+                    <option value="name">Name</option>
+                    <option value="payRate">Pay rate</option>
+                    <option value="employeeType">Employee type</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-muted" htmlFor="employee-type-filter">
+                  Filter
+                  <select
+                    id="employee-type-filter"
+                    className="mt-1 box-border h-10 w-full rounded-md border border-input-border bg-card px-3 text-sm text-ink"
+                    value={employeeTypeFilter}
+                    onChange={(event) => setEmployeeTypeFilter(event.target.value as EmployeeTypeFilter)}
+                  >
+                    <option value="all">All types</option>
+                    <option value="admin">Admin</option>
+                    <option value="employee">Employee</option>
+                    <option value="contractor">Contractor</option>
+                  </select>
+                </label>
+              </div>
+
+              {pendingProfiles.length > 0 && (
+                <div className="mt-4 rounded-md border border-warn-border bg-warn-bg p-3">
+                  <h3 className="text-sm font-bold text-warning">Pending signups</h3>
+                  <p className="mt-1 text-xs font-semibold text-muted">Newly confirmed users appear here inactive. Set their role/rate below, then activate them when they should be allowed to punch time.</p>
+                  <div className="mt-3 space-y-2">
+                    {pendingProfiles.map((profile) => (
+                      <div key={profile.id} className="flex flex-col gap-3 rounded-md bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-ink">{profile.firstName} {profile.lastName}</p>
+                          <p className="break-words text-xs font-semibold text-muted">{profile.email}</p>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button className="min-h-9 rounded-md border border-error-border px-3 text-xs font-bold text-error-text" type="button" disabled={isBusy} onClick={() => runAction(async () => {
+                            const confirmed = window.confirm(`Reject and delete signup request for ${profile.firstName} ${profile.lastName}? This removes their login request and cannot be undone.`);
+                            if (!confirmed) return;
+                            if (service.rejectSignup) {
+                              await service.rejectSignup({ profileId: profile.id });
+                              return;
+                            }
+                            if (service.deleteProfile) {
+                              await service.deleteProfile({ profileId: profile.id });
+                              return;
+                            }
+                            await service.updateProfile({ profileId: profile.id, patch: { isRejected: true, isActive: false } });
+                          })}>Reject / Delete</button>
+                          <button className="min-h-9 rounded-md border border-input-border px-3 text-xs font-bold text-muted-strong" type="button" disabled={isBusy} onClick={() => runAction(() => service.updateProfile({ profileId: profile.id, patch: { role: 'admin', isActive: true, isRejected: false } }).then())}>Approve - Admin</button>
+                          <button className="min-h-9 rounded-md bg-accent px-3 text-xs font-bold text-white" type="button" disabled={isBusy} onClick={() => runAction(() => service.updateProfile({ profileId: profile.id, patch: { role: 'employee', isActive: true, isRejected: false } }).then())}>Approve - Employee</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+              )}
+              <div className="mt-4 space-y-3">
+                {displayedProfiles.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No employees match this filter.</p>}
+                {displayedProfiles.map((profile) => {
+                  const hasTimeHistory = entries.some((entry) => entry.userId === profile.id);
+                  const isCurrentProfile = profile.id === currentProfileId;
+                  return (
+                    <EmployeeRow
+                      key={profile.id}
+                      profile={profile}
+                      isBusy={isBusy}
+                      canDelete={Boolean(service.deleteProfile) && !hasTimeHistory && !isCurrentProfile}
+                      hasTimeHistory={hasTimeHistory}
+                      isCurrentProfile={isCurrentProfile}
+                      onDelete={() => runAction(async () => {
+                        if (!service.deleteProfile) throw new Error('Deleting employees is not available in this data mode.');
+                        const confirmed = window.confirm(`Delete ${profile.firstName} ${profile.lastName}? This is only intended for employees with no payroll history.`);
+                        if (!confirmed) return;
+                        await service.deleteProfile({ profileId: profile.id });
+                      })}
+                      onSave={(patch) => runAction(() => service.updateProfile({ profileId: profile.id, patch }).then())}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
-          <div className="mt-4 space-y-3">
-            {visibleProfiles.map((profile) => {
-              const hasTimeHistory = entries.some((entry) => entry.userId === profile.id);
-              const isCurrentProfile = profile.id === currentProfileId;
-              return (
-                <EmployeeRow
-                  key={profile.id}
-                  profile={profile}
-                  isBusy={isBusy}
-                  canDelete={Boolean(service.deleteProfile) && !hasTimeHistory && !isCurrentProfile}
-                  hasTimeHistory={hasTimeHistory}
-                  isCurrentProfile={isCurrentProfile}
-                  onDelete={() => runAction(async () => {
-                    if (!service.deleteProfile) throw new Error('Deleting employees is not available in this data mode.');
-                    const confirmed = window.confirm(`Delete ${profile.firstName} ${profile.lastName}? This is only intended for employees with no payroll history.`);
-                    if (!confirmed) return;
-                    await service.deleteProfile({ profileId: profile.id });
-                  })}
-                  onSave={(patch) => runAction(() => service.updateProfile({ profileId: profile.id, patch }).then())}
-                />
-              );
-            })}
-          </div>
           {addEmployeeOpen && (
             <AddEmployeeDialog
               isBusy={isBusy}
@@ -142,37 +200,51 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
 
         {/* Properties */}
         <section id="properties" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">Properties</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              className="inline-flex min-h-10 items-center gap-2 text-left text-lg font-bold"
+              type="button"
+              aria-expanded={propertiesOpen}
+              aria-controls="properties-content"
+              onClick={() => setPropertiesOpen(!propertiesOpen)}
+            >
+              {propertiesOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+              <span>Properties</span>
+              <span className="text-xs font-semibold text-muted">({workingSites.length})</span>
+            </button>
             <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white" type="button" onClick={() => setAddSiteOpen(true)}>
               <Plus size={16} aria-hidden="true" />
               Add
             </button>
           </div>
-          <p className="mt-1 text-sm text-muted">Job codes sit under a property. Geofences default to 250m.</p>
-          <div className="mt-4 space-y-3">
-            {workingSites.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No properties yet.</p>}
-            {workingSites.map((site) => (
-              <JobSiteRow
-                key={site.id}
-                site={site}
-                isBusy={isBusy}
-                onSave={(patch) => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch }).then())}
-                onArchive={() => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch: { isArchived: true, isActive: false } }).then())}
-              />
-            ))}
-          </div>
-          {archivedSites.length > 0 && (
-            <div className="mt-5 border-t border-app-border-subtle pt-4">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-light">Archived properties</h3>
-              <div className="mt-3 space-y-2">
-                {archivedSites.map((site) => (
-                  <div key={site.id} className="flex items-center justify-between gap-3 rounded-md border border-app-border bg-card-alt px-3 py-2.5">
-                    <p className="font-semibold text-muted">{site.name}</p>
-                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input-border bg-card text-muted" type="button" onClick={() => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch: { isArchived: false } }).then())}><RotateCcw size={14} aria-hidden="true" /></button>
-                  </div>
+          {propertiesOpen && (
+            <div id="properties-content">
+              <p className="mt-1 text-sm text-muted">Job codes sit under a property. Geofences default to 250m.</p>
+              <div className="mt-4 space-y-3">
+                {workingSites.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No properties yet.</p>}
+                {workingSites.map((site) => (
+                  <JobSiteRow
+                    key={site.id}
+                    site={site}
+                    isBusy={isBusy}
+                    onSave={(patch) => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch }).then())}
+                    onArchive={() => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch: { isArchived: true, isActive: false } }).then())}
+                  />
                 ))}
               </div>
+              {archivedSites.length > 0 && (
+                <div className="mt-5 border-t border-app-border-subtle pt-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-muted-light">Archived properties</h3>
+                  <div className="mt-3 space-y-2">
+                    {archivedSites.map((site) => (
+                      <div key={site.id} className="flex items-center justify-between gap-3 rounded-md border border-app-border bg-card-alt px-3 py-2.5">
+                        <p className="font-semibold text-muted">{site.name}</p>
+                        <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input-border bg-card text-muted" type="button" onClick={() => runAction(() => service.updateJobSite({ jobSiteId: site.id, patch: { isArchived: false } }).then())}><RotateCcw size={14} aria-hidden="true" /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {addSiteOpen && (
@@ -189,8 +261,18 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
 
         {/* Job Codes */}
         <section id="job-codes" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">Job Codes</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              className="inline-flex min-h-10 items-center gap-2 text-left text-lg font-bold"
+              type="button"
+              aria-expanded={jobCodesOpen}
+              aria-controls="job-codes-content"
+              onClick={() => setJobCodesOpen(!jobCodesOpen)}
+            >
+              {jobCodesOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+              <span>Job Codes</span>
+              <span className="text-xs font-semibold text-muted">({workingJobCodes.length})</span>
+            </button>
             <button
               aria-label="Add job code"
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white"
@@ -201,67 +283,71 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
               Add
             </button>
           </div>
-          <div className="mt-4 space-y-3">
-            {workingJobCodes.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No active job codes.</p>}
-            {workingJobSections.map((section) => (
-              <div key={section.id} className="rounded-md border border-app-border bg-card">
-                <div className="border-b border-app-border-subtle bg-card-alt px-4 py-2.5">
-                  <p className="text-sm font-bold text-muted-strong">{section.name}</p>
-                  <p className="text-xs font-semibold text-muted-light">{section.jobs.length} job code{section.jobs.length === 1 ? '' : 's'}</p>
-                </div>
-                <div className="space-y-2 p-3">
-                  {section.jobs.map((job) => (
-                    <JobCodeRow
-                      key={job.id}
-                      job={job}
-                      jobSites={jobSites}
-                      isBusy={isBusy}
-                      isUsed={isJobCodeUsed(job, entries)}
-                      onArchive={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isArchived: true, isActive: false } }).then())}
-                      onToggleActive={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isActive: !job.isActive } }).then())}
-                      onSave={(patch) => runAction(async () => {
-                        await service.updateJobCode({ jobCodeId: job.id, patch });
-                      })}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {archivedJobCodes.length > 0 && (
-            <div className="mt-5 border-t border-app-border-subtle pt-4">
-              <button
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-app-border bg-card-alt px-3 text-left"
-                type="button"
-                onClick={() => setArchivedJobCodesOpen(!archivedJobCodesOpen)}
-              >
-                <span>
-                  <span className="block text-xs font-bold uppercase tracking-wide text-muted">Archived job codes</span>
-                  <span className="mt-0.5 block text-xs font-semibold text-muted-light">{archivedJobCodes.length} job code{archivedJobCodes.length === 1 ? '' : 's'}</span>
-                </span>
-                {archivedJobCodesOpen ? <ChevronUp size={16} className="shrink-0 text-muted-light" aria-hidden="true" /> : <ChevronDown size={16} className="shrink-0 text-muted-light" aria-hidden="true" />}
-              </button>
-              {archivedJobCodesOpen && (
-                <div className="mt-3 space-y-3">
-                  {archivedJobSections.map((section) => (
-                    <div key={section.id} className="rounded-md border border-app-border bg-card-alt">
-                      <div className="border-b border-app-border px-3 py-2">
-                        <p className="text-sm font-bold text-muted">{section.name}</p>
-                      </div>
-                      <div className="space-y-2 p-2">
-                        {section.jobs.map((job) => (
-                          <ArchivedJobCodeRow
-                            key={job.id}
-                            job={job}
-                            propertyName={section.name}
-                            isBusy={isBusy}
-                            onRestore={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isArchived: false } }).then())}
-                          />
-                        ))}
-                      </div>
+          {jobCodesOpen && (
+            <div id="job-codes-content">
+              <div className="mt-4 space-y-3">
+                {workingJobCodes.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No active job codes.</p>}
+                {workingJobSections.map((section) => (
+                  <div key={section.id} className="rounded-md border border-app-border bg-card">
+                    <div className="border-b border-app-border-subtle bg-card-alt px-4 py-2.5">
+                      <p className="text-sm font-bold text-muted-strong">{section.name}</p>
+                      <p className="text-xs font-semibold text-muted-light">{section.jobs.length} job code{section.jobs.length === 1 ? '' : 's'}</p>
                     </div>
-                  ))}
+                    <div className="space-y-2 p-3">
+                      {section.jobs.map((job) => (
+                        <JobCodeRow
+                          key={job.id}
+                          job={job}
+                          jobSites={jobSites}
+                          isBusy={isBusy}
+                          isUsed={isJobCodeUsed(job, entries)}
+                          onArchive={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isArchived: true, isActive: false } }).then())}
+                          onToggleActive={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isActive: !job.isActive } }).then())}
+                          onSave={(patch) => runAction(async () => {
+                            await service.updateJobCode({ jobCodeId: job.id, patch });
+                          })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {archivedJobCodes.length > 0 && (
+                <div className="mt-5 border-t border-app-border-subtle pt-4">
+                  <button
+                    className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-app-border bg-card-alt px-3 text-left"
+                    type="button"
+                    onClick={() => setArchivedJobCodesOpen(!archivedJobCodesOpen)}
+                  >
+                    <span>
+                      <span className="block text-xs font-bold uppercase tracking-wide text-muted">Archived job codes</span>
+                      <span className="mt-0.5 block text-xs font-semibold text-muted-light">{archivedJobCodes.length} job code{archivedJobCodes.length === 1 ? '' : 's'}</span>
+                    </span>
+                    {archivedJobCodesOpen ? <ChevronUp size={16} className="shrink-0 text-muted-light" aria-hidden="true" /> : <ChevronDown size={16} className="shrink-0 text-muted-light" aria-hidden="true" />}
+                  </button>
+                  {archivedJobCodesOpen && (
+                    <div className="mt-3 space-y-3">
+                      {archivedJobSections.map((section) => (
+                        <div key={section.id} className="rounded-md border border-app-border bg-card-alt">
+                          <div className="border-b border-app-border px-3 py-2">
+                            <p className="text-sm font-bold text-muted">{section.name}</p>
+                          </div>
+                          <div className="space-y-2 p-2">
+                            {section.jobs.map((job) => (
+                              <ArchivedJobCodeRow
+                                key={job.id}
+                                job={job}
+                                propertyName={section.name}
+                                isBusy={isBusy}
+                                onRestore={() => runAction(() => service.updateJobCode({ jobCodeId: job.id, patch: { isArchived: false } }).then())}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -309,6 +395,27 @@ function buildJobCodeSections(jobCodes: JobCode[], jobSites: JobSite[]) {
       if (b.id === 'no-property') return -1;
       return a.name.localeCompare(b.name);
     });
+}
+
+function profileType(profile: Profile): Exclude<EmployeeTypeFilter, 'all'> {
+  if (profile.role === 'admin') return 'admin';
+  return profile.workerType === 'contractor' ? 'contractor' : 'employee';
+}
+
+function profileTypeLabel(profile: Profile) {
+  const type = profileType(profile);
+  if (type === 'admin') return 'Admin';
+  if (type === 'contractor') return 'Contractor';
+  return 'Employee';
+}
+
+function sortProfiles(profiles: Profile[], sortMode: EmployeeSortMode) {
+  return [...profiles].sort((a, b) => {
+    const nameCompare = `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+    if (sortMode === 'payRate') return a.hourlyRate - b.hourlyRate || nameCompare;
+    if (sortMode === 'employeeType') return profileTypeLabel(a).localeCompare(profileTypeLabel(b)) || nameCompare;
+    return nameCompare;
+  });
 }
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
@@ -598,7 +705,7 @@ function EmployeeRow({
   const paidBreakMinutesNumber = Math.max(0, Math.min(240, Number(paidBreakMinutes)));
   const nextContractorHstApplicable = workerType === 'contractor' ? contractorHstApplicable : false;
   const hasChanges = firstName !== profile.firstName || lastName !== profile.lastName || role !== profile.role || workerType !== profile.workerType || nextContractorHstApplicable !== profile.contractorHstApplicable || rateNumber !== profile.hourlyRate || paidBreaks !== profile.paidBreaks || paidBreakMinutesNumber !== profile.paidBreakMinutes || canAccessScopes !== profile.canAccessScopes || canPunch !== profile.isActive;
-  const summaryWorkerLabel = profile.role === 'admin' ? 'Admin' : profile.workerType === 'contractor' ? 'Contractor' : 'Employee';
+  const summaryWorkerLabel = profileTypeLabel(profile);
 
   return (
     <div className="rounded-md border border-app-border">
