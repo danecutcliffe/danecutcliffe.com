@@ -312,6 +312,8 @@ function buildJobCodeSections(jobCodes: JobCode[], jobSites: JobSite[]) {
 }
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
+const PAYROLL_SETTINGS_GRID = 'grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
+const PAYROLL_SETTINGS_SAVE_BUTTON = 'h-10 w-full shrink-0 rounded-md bg-accent px-5 text-sm font-bold text-white disabled:opacity-45';
 
 function PayrollSettingsPanel({
   settings,
@@ -365,7 +367,7 @@ function PayrollSettingsPanel({
             <h3 className="text-sm font-bold">Pay period</h3>
             <p className="mt-1 text-xs font-semibold text-muted">Current: {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_max-content] sm:items-end">
+          <div className={PAYROLL_SETTINGS_GRID}>
             <label className="block min-w-0 overflow-hidden text-xs font-semibold text-muted" htmlFor="period-start">
               Start date
               <input
@@ -391,7 +393,7 @@ function PayrollSettingsPanel({
               </select>
             </label>
             <button
-              className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+              className={PAYROLL_SETTINGS_SAVE_BUTTON}
               type="button"
               disabled={isBusy || !canSavePayPeriod}
               onClick={() => setPendingConfirmation({ type: 'pay-period' })}
@@ -409,7 +411,7 @@ function PayrollSettingsPanel({
             </p>
           </div>
           <div>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_max-content] sm:items-end">
+            <div className={PAYROLL_SETTINGS_GRID}>
               <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-date">
                 Effective date
                 <input
@@ -434,7 +436,7 @@ function PayrollSettingsPanel({
                 />
               </label>
               <button
-                className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+                className={PAYROLL_SETTINGS_SAVE_BUTTON}
                 type="button"
                 disabled={isBusy || !canSaveMultiplier}
                 onClick={() => setPendingConfirmation({ type: 'gross-up-save' })}
