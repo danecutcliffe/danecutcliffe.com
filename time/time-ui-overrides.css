@@ -37,7 +37,7 @@
     min-height: 100dvh;
   }
 
-  #root nav.fixed.inset-x-0.bottom-0.z-20 {
+  #root .app-mobile-bottom-nav {
     position: fixed !important;
     right: 0 !important;
     bottom: 0 !important;
@@ -51,12 +51,12 @@
     will-change: transform;
   }
 
-  #root nav.fixed.inset-x-0.bottom-0.z-20 > div {
+  #root .app-mobile-bottom-nav > div {
     display: flex !important;
     width: 100%;
   }
 
-  #root nav.fixed.inset-x-0.bottom-0.z-20 button {
+  #root .app-mobile-bottom-nav button {
     flex: 1 1 0;
     min-width: 0;
   }

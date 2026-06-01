@@ -546,9 +546,17 @@ function EntryTypeControl({ value, onChange }: { value: TimeEntry['eventType']; 
 }
 
 function FormModal({ children, onClose }: { children: ReactNode; onClose?: () => void }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-auto rounded-t-md bg-card shadow-soft sm:mx-auto sm:max-w-2xl sm:rounded-md">
+    <div className="fixed inset-0 z-[80] flex items-end bg-black/40 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1rem)] w-full overflow-auto rounded-t-md bg-card shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-2xl sm:rounded-md">
         {onClose && (
           <div className="flex justify-end px-4 pt-3">
             <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>

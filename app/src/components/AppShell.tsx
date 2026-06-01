@@ -160,7 +160,7 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
 
       {/* Mobile bottom nav — unchanged */}
       {mobileTabs.length > 0 && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-card lg:hidden">
+        <nav className="app-mobile-bottom-nav fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-card lg:hidden">
           <div className={`grid ${mobileTabs.length >= 5 ? 'grid-cols-5' : mobileTabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {mobileTabs.map((tab) => (
               <button
