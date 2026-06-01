@@ -59,9 +59,6 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
     <section className="space-y-6">
         {error && <div className="rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text">{error}</div>}
 
-        {/* Pay Period */}
-        <PayPeriodSettingsPanel settings={payPeriodSettings} isBusy={isBusy} onSave={(nextSettings, adminPassword) => runAction(() => onPayPeriodSettingsChange(nextSettings, adminPassword))} />
-
         <ThemePreferenceControl value={themePreference} onChange={onThemePreferenceChange} />
 
         {/* Employees */}
@@ -289,6 +286,9 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
           onSave={(effectiveDate, multiplier, adminPassword) => runAction(() => onGrossUpMultiplierSave(effectiveDate, multiplier, adminPassword))}
           onDelete={(id, adminPassword) => runAction(() => onGrossUpMultiplierDelete(id, adminPassword))}
         />
+
+        {/* Pay Period */}
+        <PayPeriodSettingsPanel settings={payPeriodSettings} isBusy={isBusy} onSave={(nextSettings, adminPassword) => runAction(() => onPayPeriodSettingsChange(nextSettings, adminPassword))} />
     </section>
   );
 }
@@ -323,17 +323,17 @@ function PayrollGrossUpPanel({
 }: {
   multipliers: PayrollGrossUpMultiplier[];
   isBusy: boolean;
-  onSave: (effectiveDate: string, multiplier: number, adminPassword: string) => void;
-  onDelete: (id: string, adminPassword: string) => void;
+  onSave: (effectiveDate: string, multiplier: number, adminPassword: string) => Promise<void>;
+  onDelete: (id: string, adminPassword: string) => Promise<void>;
 }) {
   const today = getAtlanticDateKey(new Date().toISOString());
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [multiplier, setMultiplier] = useState(DEFAULT_PAYROLL_LOAD_FACTOR.toString());
-  const [adminPassword, setAdminPassword] = useState('');
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ type: 'save' } | { type: 'delete'; id: string; effectiveDate: string } | null>(null);
   const sorted = [...multipliers].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
   const nextMultiplier = Number(multiplier);
   const isMultiplierValid = !Number.isNaN(nextMultiplier) && nextMultiplier >= 1;
-  const canSave = Boolean(effectiveDate) && isMultiplierValid && adminPassword.length > 0;
+  const canSave = Boolean(effectiveDate) && isMultiplierValid;
 
   return (
     <section id="gross-up-multiplier" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">
@@ -351,8 +351,8 @@ function PayrollGrossUpPanel({
                 className="shrink-0 rounded p-1 text-muted-light hover:text-error-text disabled:opacity-40"
                 type="button"
                 aria-label={`Remove multiplier effective ${entry.effectiveDate}`}
-                disabled={isBusy || adminPassword.length === 0 || sorted.length <= 1}
-                onClick={() => onDelete(entry.id, adminPassword)}
+                disabled={isBusy || sorted.length <= 1}
+                onClick={() => setPendingConfirmation({ type: 'delete', id: entry.id, effectiveDate: entry.effectiveDate })}
               >
                 <Trash2 size={14} aria-hidden="true" />
               </button>
@@ -361,7 +361,7 @@ function PayrollGrossUpPanel({
         </ul>
       )}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,8rem)_minmax(0,1fr)_auto] sm:items-end">
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_max-content] sm:items-end">
         <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-date">
           Effective date
           <input
@@ -385,27 +385,35 @@ function PayrollGrossUpPanel({
             onChange={(event) => setMultiplier(event.target.value)}
           />
         </label>
-        <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="gross-up-password">
-          Confirm admin password
-          <input
-            id="gross-up-password"
-            className="mt-1 box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
-            type="password"
-            autoComplete="current-password"
-            value={adminPassword}
-            onChange={(event) => setAdminPassword(event.target.value)}
-          />
-        </label>
         <button
-          className="h-10 shrink-0 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
+          className="h-10 w-auto shrink-0 justify-self-start rounded-md bg-accent px-5 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
           type="button"
           disabled={isBusy || !canSave}
-          onClick={() => onSave(effectiveDate, nextMultiplier, adminPassword)}
+          onClick={() => setPendingConfirmation({ type: 'save' })}
         >
           Save
         </button>
       </div>
       <p className="mt-2 text-xs text-muted-light">Saving an existing effective date updates that entry. 1.25 = gross payroll plus 25%.</p>
+      {pendingConfirmation && (
+        <AdminPasswordDialog
+          title={pendingConfirmation.type === 'save' ? 'Confirm multiplier change' : 'Confirm multiplier deletion'}
+          description={pendingConfirmation.type === 'save'
+            ? 'Enter your admin password to update the payroll gross-up multiplier.'
+            : `Enter your admin password to remove the multiplier effective ${formatAtlanticDate(pendingConfirmation.effectiveDate)}.`}
+          isBusy={isBusy}
+          confirmLabel={pendingConfirmation.type === 'save' ? 'Save Multiplier' : 'Delete Multiplier'}
+          onCancel={() => setPendingConfirmation(null)}
+          onConfirm={async (adminPassword) => {
+            if (pendingConfirmation.type === 'save') {
+              await onSave(effectiveDate, nextMultiplier, adminPassword);
+            } else {
+              await onDelete(pendingConfirmation.id, adminPassword);
+            }
+            setPendingConfirmation(null);
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -417,23 +425,23 @@ function PayPeriodSettingsPanel({
 }: {
   settings: PayPeriodSettings;
   isBusy: boolean;
-  onSave: (settings: PayPeriodSettings, adminPassword: string) => void;
+  onSave: (settings: PayPeriodSettings, adminPassword: string) => Promise<void>;
 }) {
   const [anchorStart, setAnchorStart] = useState(settings.anchorStart);
   const [lengthDays, setLengthDays] = useState(settings.lengthDays.toString());
-  const [adminPassword, setAdminPassword] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const nextLengthDays = Number(lengthDays);
   const isLengthValid = !Number.isNaN(nextLengthDays) && nextLengthDays > 0;
   const periodPreview = getPayPeriodForDate(isLengthValid && anchorStart ? { ...settings, anchorStart, lengthDays: nextLengthDays } : settings);
   const hasChanges =
     anchorStart !== settings.anchorStart ||
     nextLengthDays !== settings.lengthDays;
-  const canSave = hasChanges && anchorStart && isLengthValid && adminPassword.length > 0;
+  const canSave = hasChanges && anchorStart && isLengthValid;
 
   useEffect(() => {
     setAnchorStart(settings.anchorStart);
     setLengthDays(settings.lengthDays.toString());
-    setAdminPassword('');
+    setConfirmOpen(false);
   }, [settings.anchorStart, settings.lengthDays]);
 
   return (
@@ -473,38 +481,93 @@ function PayPeriodSettingsPanel({
         </div>
 
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] lg:items-end">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-light">Current period</p>
-              <p className="mt-1 text-sm font-semibold text-muted-strong">
-                {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}
-              </p>
-            </div>
-            <label className="block min-w-0 text-sm font-semibold text-muted" htmlFor="period-admin-password">
-              Confirm admin password
-              <input
-                id="period-admin-password"
-                className="mt-1.5 box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
-                type="password"
-                autoComplete="current-password"
-                value={adminPassword}
-                onChange={(event) => setAdminPassword(event.target.value)}
-              />
-            </label>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-light">Current period</p>
+            <p className="mt-1 text-sm font-semibold text-muted-strong">
+              {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}
+            </p>
           </div>
           <div className="mt-4 flex justify-end">
             <button
               className="min-h-10 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted"
               type="button"
               disabled={isBusy || !canSave}
-              onClick={() => onSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword)}
+              onClick={() => setConfirmOpen(true)}
             >
               Save Settings
             </button>
           </div>
         </div>
       </div>
+      {confirmOpen && (
+        <AdminPasswordDialog
+          title="Confirm pay period change"
+          description="Enter your admin password to update the payroll start date or cadence. This changes the period boundaries used by timesheets and reports."
+          isBusy={isBusy}
+          confirmLabel="Save Settings"
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={async (adminPassword) => {
+            await onSave({ ...settings, anchorStart, lengthDays: nextLengthDays }, adminPassword);
+            setConfirmOpen(false);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function AdminPasswordDialog({
+  title,
+  description,
+  confirmLabel,
+  isBusy,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  isBusy: boolean;
+  onCancel: () => void;
+  onConfirm: (adminPassword: string) => Promise<void>;
+}) {
+  const [adminPassword, setAdminPassword] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end bg-black/50 p-0 sm:items-center sm:p-4">
+      <div className="w-full rounded-t-md bg-card p-4 shadow-soft sm:mx-auto sm:max-w-md sm:rounded-md">
+        <h3 className="text-lg font-bold">{title}</h3>
+        <p className="mt-1 text-sm text-muted">{description}</p>
+        <label className="mt-4 block text-sm font-semibold text-muted" htmlFor="admin-confirm-password">
+          Admin password
+          <input
+            id="admin-confirm-password"
+            className="mt-2 box-border min-h-12 w-full rounded-md border border-input-border bg-card px-3"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            value={adminPassword}
+            onChange={(event) => setAdminPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && adminPassword.length > 0 && !isBusy) {
+                void onConfirm(adminPassword);
+              }
+            }}
+          />
+        </label>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button className="min-h-11 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" disabled={isBusy} onClick={onCancel}>Cancel</button>
+          <button
+            className="min-h-11 rounded-md bg-accent px-4 font-bold text-white disabled:bg-app-border disabled:text-muted"
+            type="button"
+            disabled={isBusy || adminPassword.length === 0}
+            onClick={() => void onConfirm(adminPassword)}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
