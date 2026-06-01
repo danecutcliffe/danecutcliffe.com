@@ -447,15 +447,25 @@ function ReportPreview({ model }: { model: ReportModel }) {
             </tr>
           </thead>
           <tbody>
-            {previewRows.map((row, index) => (
-              <tr key={index} className={`border-b border-app-border-subtle ${row.entryStatus === 'Open' ? 'bg-warn-bg' : ''}`}>
-                {model.columns.map((column) => (
-                  <td key={column.key} className={`px-3 py-2 align-top ${column.align === 'right' ? 'text-right tabular-nums' : column.align === 'center' ? 'text-center' : ''}`}>
-                    {formatPreviewCell(row[column.key], column.format)}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {previewRows.map((row, index) => {
+              if (row.rowKind === 'group') {
+                return (
+                  <tr key={index} className={reportRowClass(row)}>
+                    <td className="px-3 py-2 font-bold" colSpan={model.columns.length}>{formatPreviewCell(row.description)}</td>
+                  </tr>
+                );
+              }
+
+              return (
+                <tr key={index} className={`border-b border-app-border-subtle ${reportRowClass(row)}`}>
+                  {model.columns.map((column) => (
+                    <td key={column.key} className={`px-3 py-2 align-top ${reportCellClass(row, column.key, column.align)}`}>
+                      {formatPreviewCell(row[column.key], column.format)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
             {model.rows.length === 0 && (
               <tr>
                 <td className="px-3 py-4 text-sm text-muted" colSpan={model.columns.length}>No rows match the selected report filters.</td>
@@ -467,6 +477,20 @@ function ReportPreview({ model }: { model: ReportModel }) {
       {model.rows.length > previewRows.length && <p className="mt-2 text-xs font-semibold text-muted">Showing first {previewRows.length} rows. XLSX export includes all {model.rows.length} rows.</p>}
     </>
   );
+}
+
+function reportRowClass(row: Record<string, unknown>) {
+  if (row.entryStatus === 'Open') return 'bg-warn-bg';
+  if (row.rowKind === 'group') return 'bg-ink text-card';
+  if (row.rowKind === 'total') return 'bg-card-alt font-bold';
+  if (row.rowKind === 'grandTotal') return 'bg-accent text-white font-bold';
+  return '';
+}
+
+function reportCellClass(row: Record<string, unknown>, columnKey: string, align?: 'left' | 'right' | 'center') {
+  const alignment = align === 'right' ? 'text-right tabular-nums' : align === 'center' ? 'text-center' : '';
+  const indent = row.rowKind === 'detail' && columnKey === 'description' ? 'pl-8' : '';
+  return `${alignment} ${indent}`;
 }
 
 function LabeledSelect({

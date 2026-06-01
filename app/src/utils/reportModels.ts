@@ -150,57 +150,92 @@ export function buildDetailedTimecardReport({
 export function buildHoursByLocationReport(params: BuildPeriodReportParams): ReportModel {
   const detail = buildDetailedTimecardReport(params);
   const profileByName = new Map(params.profiles.map((profile) => [`${profile.firstName} ${profile.lastName}`, profile]));
-  const grouped = new Map<string, Record<string, ReportCellValue>>();
-  const employeesByGroup = new Map<string, Set<string>>();
+  const groups = new Map<string, {
+    label: string;
+    employees: Map<string, Record<string, ReportCellValue>>;
+    regularHours: number;
+    otHours: number;
+    totalHours: number;
+    estPay: number;
+  }>();
 
   detail.rows.forEach((row) => {
     if (row.entryStatus === 'Open') return;
     const key = `${row.property}|${row.jobCode}|${row.job}`;
     const profile = profileByName.get(String(row.employee));
-    const current = grouped.get(key) ?? {
-      property: row.property,
-      jobCode: row.jobCode,
-      job: row.job,
-      employeeCount: 0,
+    const current = groups.get(key) ?? {
+      label: String(row.job || row.property),
+      employees: new Map<string, Record<string, ReportCellValue>>(),
       regularHours: 0,
       otHours: 0,
       totalHours: 0,
       estPay: 0,
     };
-    const employeeSet = employeesByGroup.get(key) ?? new Set<string>();
-    employeeSet.add(String(row.employee));
-    employeesByGroup.set(key, employeeSet);
     const regularHours = Number(row.regularHours ?? 0);
     const otHours = Number(row.otHours ?? 0);
     const rate = profile?.hourlyRate ?? 0;
-    current.employeeCount = employeeSet.size;
-    current.regularHours = roundHours(Number(current.regularHours ?? 0) + regularHours);
-    current.otHours = roundHours(Number(current.otHours ?? 0) + otHours);
-    current.totalHours = roundHours(Number(current.totalHours ?? 0) + regularHours + otHours);
-    current.estPay = roundMoney(Number(current.estPay ?? 0) + regularHours * rate + otHours * rate * 1.5);
-    grouped.set(key, current);
+    const estPay = regularHours * rate + otHours * rate * 1.5;
+    const employeeKey = String(row.employee);
+    const employee = current.employees.get(employeeKey) ?? {
+      rowKind: 'detail',
+      description: row.employee,
+      regularHours: 0,
+      otHours: 0,
+      estPay: 0,
+      totalHours: 0,
+    };
+
+    employee.regularHours = roundHours(Number(employee.regularHours ?? 0) + regularHours);
+    employee.otHours = roundHours(Number(employee.otHours ?? 0) + otHours);
+    employee.totalHours = roundHours(Number(employee.totalHours ?? 0) + regularHours + otHours);
+    employee.estPay = roundMoney(Number(employee.estPay ?? 0) + estPay);
+    current.employees.set(employeeKey, employee);
+    current.regularHours = roundHours(current.regularHours + regularHours);
+    current.otHours = roundHours(current.otHours + otHours);
+    current.totalHours = roundHours(current.totalHours + regularHours + otHours);
+    current.estPay = roundMoney(current.estPay + estPay);
+    groups.set(key, current);
   });
 
-  const rows = [...grouped.values()].sort((a, b) => `${a.property}${a.jobCode}`.localeCompare(`${b.property}${b.jobCode}`));
-  const totalHours = rows.reduce((total, row) => total + Number(row.totalHours ?? 0), 0);
-  const totalPay = rows.reduce((total, row) => total + Number(row.estPay ?? 0), 0);
+  const sortedGroups = [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+  const rows = sortedGroups.flatMap((group) => [
+    { rowKind: 'group', description: group.label, regularHours: null, otHours: null, estPay: null, totalHours: null },
+    ...[...group.employees.values()].sort((a, b) => String(a.description).localeCompare(String(b.description))),
+    {
+      rowKind: 'total',
+      description: `Total ${group.label}`,
+      regularHours: roundHours(group.regularHours),
+      otHours: roundHours(group.otHours),
+      estPay: roundMoney(group.estPay),
+      totalHours: roundHours(group.totalHours),
+    },
+  ]);
+  const totalRegularHours = sortedGroups.reduce((total, group) => total + group.regularHours, 0);
+  const totalOtHours = sortedGroups.reduce((total, group) => total + group.otHours, 0);
+  const totalHours = sortedGroups.reduce((total, group) => total + group.totalHours, 0);
+  const totalPay = sortedGroups.reduce((total, group) => total + group.estPay, 0);
+  rows.push({
+    rowKind: 'grandTotal',
+    description: `Total (${params.periodStart} - ${params.periodEnd})`,
+    regularHours: roundHours(totalRegularHours),
+    otHours: roundHours(totalOtHours),
+    estPay: roundMoney(totalPay),
+    totalHours: roundHours(totalHours),
+  });
 
   return {
     title: 'Hours by Location',
-    subtitle: `${params.periodStart} to ${params.periodEnd} | Grouped by property and job code`,
+    subtitle: `${params.periodStart} to ${params.periodEnd}`,
     columns: [
-      { key: 'property', label: 'Property', width: 22 },
-      { key: 'jobCode', label: 'Job Code', width: 12 },
-      { key: 'job', label: 'Job', width: 26 },
-      { key: 'employeeCount', label: 'Employees', width: 12, align: 'right' },
-      { key: 'regularHours', label: 'Reg', width: 10, format: 'hours', align: 'right' },
-      { key: 'otHours', label: 'OT', width: 10, format: 'hours', align: 'right' },
-      { key: 'totalHours', label: 'Total', width: 10, format: 'hours', align: 'right' },
+      { key: 'description', label: 'Location / Employee', width: 44 },
+      { key: 'regularHours', label: 'Reg', width: 11, format: 'hours', align: 'right' },
+      { key: 'otHours', label: 'OT', width: 11, format: 'hours', align: 'right' },
       { key: 'estPay', label: 'Est Pay', width: 13, format: 'currency', align: 'right' },
+      { key: 'totalHours', label: 'Total', width: 11, format: 'hours', align: 'right' },
     ],
     rows,
     summary: [
-      { label: 'Rows', value: rows.length.toString() },
+      { label: 'Locations / jobs', value: sortedGroups.length.toString() },
       { label: 'Total hours', value: `${roundHours(totalHours).toFixed(2)}h` },
       { label: 'Estimated pay', value: formatMoney(totalPay) },
       { label: 'Open entries excluded', value: detail.exceptions.some((exception) => exception.message.includes('open')) ? 'Yes' : 'No' },

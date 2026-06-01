@@ -87,6 +87,7 @@ function writeReportSheet(sheet: ExcelJS.Worksheet, model: ReportModel) {
 
   model.rows.forEach((row) => {
     const excelRow = sheet.addRow(model.columns.map((column) => formatCellValue(row[column.key], column)));
+    const rowKind = typeof row.rowKind === 'string' ? row.rowKind : '';
     model.columns.forEach((column, index) => {
       const cell = excelRow.getCell(index + 1);
       cell.alignment = { horizontal: column.align ?? 'left', vertical: 'middle', wrapText: column.key === 'notes' };
@@ -96,19 +97,42 @@ function writeReportSheet(sheet: ExcelJS.Worksheet, model: ReportModel) {
       if (column.format === 'date') cell.numFmt = 'yyyy-mm-dd';
       if (column.format === 'time') cell.numFmt = 'h:mm AM/PM';
       if (row.entryStatus === 'Open') cell.fill = solidFill(COLORS.warning);
+      if (rowKind === 'detail' && index === 0) cell.alignment = { ...cell.alignment, indent: 2 };
+      if (rowKind === 'total') {
+        cell.font = { bold: true };
+        cell.fill = solidFill(COLORS.accentLight);
+      }
+      if (rowKind === 'grandTotal') {
+        cell.font = { bold: true, color: { argb: COLORS.white } };
+        cell.fill = solidFill(COLORS.header);
+      }
+      if (rowKind === 'group') {
+        cell.font = { bold: true, color: { argb: COLORS.white } };
+        cell.fill = solidFill(COLORS.charcoal);
+      }
     });
+    if (rowKind === 'group' && columnCount > 1) {
+      sheet.mergeCells(excelRow.number, 1, excelRow.number, columnCount);
+    }
   });
 
   const tableEndRow = Math.max(4, 4 + model.rows.length);
-  sheet.addTable({
-    name: safeTableName(model.title),
-    ref: 'A4',
-    headerRow: true,
-    totalsRow: false,
-    style: { theme: 'TableStyleMedium2', showRowStripes: true },
-    columns: model.columns.map((column) => ({ name: column.label, filterButton: true })),
-    rows: model.rows.map((row) => model.columns.map((column) => formatCellValue(row[column.key], column))),
-  });
+  if (model.rows.some((row) => typeof row.rowKind === 'string')) {
+    sheet.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4, column: columnCount },
+    };
+  } else {
+    sheet.addTable({
+      name: safeTableName(model.title),
+      ref: 'A4',
+      headerRow: true,
+      totalsRow: false,
+      style: { theme: 'TableStyleMedium2', showRowStripes: true },
+      columns: model.columns.map((column) => ({ name: column.label, filterButton: true })),
+      rows: model.rows.map((row) => model.columns.map((column) => formatCellValue(row[column.key], column))),
+    });
+  }
   if (model.summary.length > 0) {
     const summaryStart = tableEndRow + 3;
     sheet.mergeCells(summaryStart, 1, summaryStart, Math.min(4, columnCount));
