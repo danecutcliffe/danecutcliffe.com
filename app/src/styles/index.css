@@ -125,6 +125,14 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+.report-toggle-button:focus-visible {
+  outline: none;
+}
+
+.report-toggle-button:focus-visible .report-toggle-icon {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
 .time-day-panel {
   position: relative;
 }

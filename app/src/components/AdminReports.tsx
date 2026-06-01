@@ -102,7 +102,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     <section className="space-y-4">
       <div id="labour-costs" className="scroll-mt-20 rounded-md border border-app-border bg-card shadow-soft">
         <button
-          className="flex w-full flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between"
+          className="report-toggle-button flex w-full flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between"
           type="button"
           aria-expanded={isLabourCostsOpen}
           onClick={() => setIsLabourCostsOpen(!isLabourCostsOpen)}
@@ -119,7 +119,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
               <p className="mt-1 text-2xl font-bold text-warning">{money(labourBreakdown.loadedCost)}</p>
               <p className="text-xs font-semibold text-muted">{money(labourBreakdown.grossPay)} gross payroll</p>
             </div>
-            <span className={`shrink-0 text-warning transition ${isLabourCostsOpen ? 'rotate-180' : ''}`}>
+            <span className={`report-toggle-icon shrink-0 rounded-full p-1 text-warning transition ${isLabourCostsOpen ? 'rotate-180' : ''}`}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </span>
           </div>
@@ -248,7 +248,7 @@ function LabourCostPropertyCard({
 
   return (
     <div className="rounded-md border border-app-border bg-card-alt">
-      <button className="flex w-full items-center justify-between gap-3 p-4 text-left" type="button" aria-expanded={isOpen} onClick={onToggle}>
+      <button className="report-toggle-button flex w-full items-center justify-between gap-3 p-4 text-left" type="button" aria-expanded={isOpen} onClick={onToggle}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-bold">{property.propertyName}</h3>
@@ -261,7 +261,7 @@ function LabourCostPropertyCard({
             <p className="text-base font-bold text-warning">{money(property.loadedCost)}</p>
             <p className="text-xs font-semibold text-muted">{money(property.grossPay)} gross payroll</p>
           </div>
-          <span className={`shrink-0 text-muted-light transition ${isOpen ? 'rotate-180' : ''}`}>
+          <span className={`report-toggle-icon shrink-0 rounded-full p-1 text-muted-light transition ${isOpen ? 'rotate-180' : ''}`}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </span>
         </div>
