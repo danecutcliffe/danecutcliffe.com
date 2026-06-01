@@ -26,6 +26,8 @@ interface AdminReportsProps {
 }
 
 type ReportType = 'detailed' | 'hoursByLocation' | 'payrollSummary' | 'jobs' | 'overtime';
+type FilterKey = 'employees' | 'properties' | 'jobs';
+type ExportFormat = 'xlsx' | 'detailedCsv' | 'qboCsv';
 
 export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
@@ -37,11 +39,19 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const [employeeIds, setEmployeeIds] = useState<string[]>([]);
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [jobCodeIds, setJobCodeIds] = useState<string[]>([]);
+  const [openFilter, setOpenFilter] = useState<FilterKey | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('xlsx');
   const [auditTable, setAuditTable] = useState('');
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
   const siteById = useMemo(() => jobSiteById(jobSites), [jobSites]);
   const reportPeople = useMemo(() => [...profiles].sort((a, b) => name(a).localeCompare(name(b))), [profiles]);
+  const availableJobCodes = useMemo(
+    () => propertyIds.length === 0
+      ? jobCodes
+      : jobCodes.filter((job) => job.jobSiteId && propertyIds.includes(job.jobSiteId)),
+    [jobCodes, propertyIds],
+  );
   const periodEntries = useMemo(() => entries.filter((entry) => {
     const key = getAtlanticDateKey(entry.clockIn);
     return key >= periodStart && key <= periodEnd;
@@ -111,6 +121,11 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
         ? payrollSummaryModel
         : null;
   const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${periodStart}_to_${periodEnd}.xlsx`;
+  const canExportSelectedFormat = exportFormat === 'xlsx'
+    ? Boolean(selectedReportModel && selectedReportModel.rows.length > 0)
+    : exportFormat === 'detailedCsv'
+      ? filteredEntries.length > 0
+      : blockers.length === 0 && exportableEntries.length > 0;
   const displayedPayableHours = summary.netWorkHours;
   const displayedGrossPay = summary.grossPay;
   const displayedOvertimeHours = summary.overtimeHours;
@@ -131,6 +146,22 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       return next;
     });
   }, [labourBreakdown.properties]);
+
+  useEffect(() => {
+    setJobCodeIds((current) => current.filter((jobCodeId) => availableJobCodes.some((job) => job.id === jobCodeId)));
+  }, [availableJobCodes]);
+
+  const handleExport = () => {
+    if (exportFormat === 'xlsx') {
+      if (selectedReportModel) downloadReportXlsx(selectedReportModel, selectedXlsxFilename);
+      return;
+    }
+    if (exportFormat === 'detailedCsv') {
+      downloadCsv(detailedFilename, detailedCsv);
+      return;
+    }
+    downloadCsv(qboFilename, qboCsv);
+  };
 
   return (
     <section className="space-y-4">
@@ -221,35 +252,44 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
         <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold.</p>
         <div className="grid gap-3 lg:grid-cols-4">
-          <select className="min-h-12 rounded-md border border-input-border bg-card px-3" value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}>
-            <option value="detailed">Detailed Timecard</option>
-            <option value="hoursByLocation">Hours by Location</option>
-            <option value="payrollSummary">Payroll Summary</option>
-            <option value="jobs">Job Hours</option>
-            <option value="overtime">Overtime</option>
-          </select>
-          <ChecklistFilter label="Employees" allLabel="All employees" selectedIds={employeeIds} options={reportPeople.map((profile) => ({ id: profile.id, label: name(profile) }))} onChange={setEmployeeIds} />
-          <ChecklistFilter label="Properties" allLabel="All properties" selectedIds={propertyIds} options={jobSites.map((site) => ({ id: site.id, label: site.name }))} onChange={setPropertyIds} />
-          <ChecklistFilter label="Jobs" allLabel="All jobs" selectedIds={jobCodeIds} options={jobCodes.map((job) => ({ id: job.id, label: jobDisplayNameById(job.id, jobById, siteById) }))} onChange={setJobCodeIds} />
+          <LabeledSelect
+            label="Report Type"
+            value={reportType}
+            onChange={(value) => setReportType(value as ReportType)}
+            options={[
+              { value: 'detailed', label: 'Detailed Timecard' },
+              { value: 'hoursByLocation', label: 'Hours by Location' },
+              { value: 'payrollSummary', label: 'Payroll Summary' },
+              { value: 'jobs', label: 'Job Hours' },
+              { value: 'overtime', label: 'Overtime' },
+            ]}
+          />
+          <ChecklistFilter filterId="employees" label="Employees" allLabel="All employees" selectedIds={employeeIds} options={reportPeople.map((profile) => ({ id: profile.id, label: name(profile) }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setEmployeeIds} />
+          <ChecklistFilter filterId="properties" label="Properties" allLabel="All properties" selectedIds={propertyIds} options={jobSites.map((site) => ({ id: site.id, label: site.name }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setPropertyIds} />
+          <ChecklistFilter filterId="jobs" label="Jobs" allLabel="All jobs" selectedIds={jobCodeIds} options={availableJobCodes.map((job) => ({ id: job.id, label: jobDisplayNameById(job.id, jobById, siteById) }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setJobCodeIds} />
         </div>
-        <p className="mt-3 text-xs font-semibold text-muted">
-          Scope: {employeeIds.length === 0 ? 'all employees' : `${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}`} · {propertyIds.length === 0 ? 'all properties' : `${propertyIds.length} propert${propertyIds.length === 1 ? 'y' : 'ies'}`} · {jobCodeIds.length === 0 ? 'all jobs' : `${jobCodeIds.length} job${jobCodeIds.length === 1 ? '' : 's'}`}
-        </p>
+        <div className="mt-4 flex flex-col gap-3 border-t border-app-border-subtle pt-4 sm:flex-row sm:items-end sm:justify-end">
+          <LabeledSelect
+            label="Export Format"
+            value={exportFormat}
+            onChange={(value) => setExportFormat(value as ExportFormat)}
+            options={[
+              { value: 'xlsx', label: 'XLSX' },
+              { value: 'detailedCsv', label: 'Detailed CSV' },
+              { value: 'qboCsv', label: 'QBO CSV' },
+            ]}
+            className="sm:w-56"
+          />
+          <button className="min-h-12 rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60 sm:w-44" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
+        </div>
       </div>
 
-      <div id="report-detail" className="scroll-mt-20 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div id="report-detail" className="scroll-mt-20 min-w-0">
         <div className="min-w-0 rounded-md border border-app-border bg-card p-4 shadow-soft">
           {selectedReportModel && <ReportPreview model={selectedReportModel} />}
           {reportType === 'jobs' && <JobReport entries={filteredEntries} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} />}
           {reportType === 'overtime' && <OvertimeReport entries={filteredEntries} profiles={reportPeople} weeklyOvertimeThresholdHours={payPeriodSettings.weeklyOvertimeThresholdHours} />}
         </div>
-        <aside id="csv-exports" className="scroll-mt-20 min-w-0 space-y-3 rounded-md border border-app-border bg-card p-4 shadow-soft">
-          <h2 className="text-xl font-bold">Exports</h2>
-          <p className="text-sm text-muted">XLSX exports use the report preview model. CSV remains available for raw data/import workflows.</p>
-          <button className="min-h-12 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={!selectedReportModel || selectedReportModel.rows.length === 0} onClick={() => selectedReportModel && downloadReportXlsx(selectedReportModel, selectedXlsxFilename)}>Download XLSX</button>
-          <button className="min-h-12 w-full rounded-md border border-input-border px-4 font-bold" type="button" onClick={() => downloadCsv(detailedFilename, detailedCsv)}>Download Detailed CSV</button>
-          <button className="min-h-12 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={blockers.length > 0 || exportableEntries.length === 0} onClick={() => downloadCsv(qboFilename, qboCsv)}>Download QBO CSV</button>
-        </aside>
       </div>
 
       <AuditTrail auditLogs={auditLogs} profiles={profiles} targetTable={auditTable} onTargetTableChange={setAuditTable} />
@@ -410,47 +450,85 @@ function ReportPreview({ model }: { model: ReportModel }) {
   );
 }
 
+function LabeledSelect({
+  label,
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`block min-w-0 rounded-md border border-input-border bg-card px-3 py-2 ${className ?? ''}`}>
+      <span className="block text-xs font-bold text-muted">{label}</span>
+      <select className="mt-1 block h-7 w-full min-w-0 bg-card text-sm font-bold text-ink outline-none" value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function ChecklistFilter({
+  filterId,
   label,
   allLabel,
   options,
   selectedIds,
+  openFilter,
+  onOpenFilterChange,
   onChange,
 }: {
+  filterId: FilterKey;
   label: string;
   allLabel: string;
   options: Array<{ id: string; label: string }>;
   selectedIds: string[];
+  openFilter: FilterKey | null;
+  onOpenFilterChange: (filter: FilterKey | null) => void;
   onChange: (ids: string[]) => void;
 }) {
   const selectedLabel = selectedIds.length === 0 ? allLabel : `${selectedIds.length} selected`;
+  const isOpen = openFilter === filterId;
   const toggle = (id: string) => {
     onChange(selectedIds.includes(id) ? selectedIds.filter((selectedId) => selectedId !== id) : [...selectedIds, id]);
   };
 
   return (
-    <details className="relative rounded-md border border-input-border bg-card">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 font-semibold marker:hidden">
+    <div className="relative">
+      <button
+        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-md border border-input-border bg-card px-3 py-2 text-left font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => onOpenFilterChange(isOpen ? null : filterId)}
+      >
         <span className="min-w-0">
-          <span className="block text-xs text-muted">{label}</span>
+          <span className="block text-xs font-bold text-muted">{label}</span>
           <span className="block truncate text-sm text-ink">{selectedLabel}</span>
         </span>
-        <span className="text-muted-light" aria-hidden="true">▾</span>
-      </summary>
-      <div className="absolute z-30 mt-2 max-h-80 w-full min-w-72 overflow-auto rounded-md border border-app-border bg-card p-2 shadow-soft">
-        <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
-          <input type="checkbox" checked={selectedIds.length === 0} onChange={() => onChange([])} />
-          {allLabel}
-        </label>
-        <div className="my-1 border-t border-app-border-subtle" />
-        {options.map((option) => (
-          <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
-            <input type="checkbox" checked={selectedIds.includes(option.id)} onChange={() => toggle(option.id)} />
-            <span className="min-w-0 truncate">{option.label}</span>
+        <span className={`text-muted-light transition ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true">▾</span>
+      </button>
+      {isOpen && (
+        <div className="absolute z-30 mt-2 max-h-80 w-full min-w-72 overflow-auto rounded-md border border-app-border bg-card p-2 shadow-soft">
+          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
+            <input type="checkbox" checked={selectedIds.length === 0} onChange={() => onChange([])} />
+            {allLabel}
           </label>
-        ))}
-      </div>
-    </details>
+          <div className="my-1 border-t border-app-border-subtle" />
+          {options.length === 0 && <p className="px-2 py-2 text-sm font-semibold text-muted">No options available.</p>}
+          {options.map((option) => (
+            <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm font-semibold hover:bg-card-alt">
+              <input type="checkbox" checked={selectedIds.includes(option.id)} onChange={() => toggle(option.id)} />
+              <span className="min-w-0 truncate">{option.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
