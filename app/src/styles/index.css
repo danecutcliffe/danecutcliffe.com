@@ -91,6 +91,91 @@
   }
 }
 
+:root[data-theme="light"] {
+  --color-paper: #f6f3ee;
+  --color-ink: #1a1a1a;
+  --color-accent: #0f766e;
+  --color-accent-hover: #0d6960;
+  --color-warning: #dc2626;
+  --color-card: #ffffff;
+  --color-card-alt: #fafaf9;
+  --color-border: #e7e5e4;
+  --color-border-subtle: #f5f5f4;
+  --color-muted: #78716c;
+  --color-muted-strong: #57534e;
+  --color-muted-light: #a8a29e;
+  --color-input-bg: #ffffff;
+  --color-input-border: #d6d3d1;
+  --color-focus-ring: rgba(15, 118, 110, 0.35);
+  --color-shadow: rgba(15, 23, 42, 0.08);
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #86efac;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #b91c1c;
+  --color-warn-bg: #fef2f2;
+  --color-warn-border: #fecaca;
+  --color-badge-neutral: #f5f5f4;
+  --color-badge-neutral-text: #57534e;
+  --color-success: #3a8a5c;
+  --color-badge-code: #1a1a1a;
+}
+
+:root[data-theme="dark"] {
+  --color-paper: #1c1917;
+  --color-ink: #e7e5e4;
+  --color-accent: #da7756;
+  --color-accent-hover: #c4684a;
+  --color-warning: #f87171;
+  --color-card: #292524;
+  --color-card-alt: #1c1917;
+  --color-border: #44403c;
+  --color-border-subtle: #292524;
+  --color-muted: #a8a29e;
+  --color-muted-strong: #d6d3d1;
+  --color-muted-light: #78716c;
+  --color-input-bg: #292524;
+  --color-input-border: #57534e;
+  --color-focus-ring: rgba(218, 119, 86, 0.4);
+  --color-shadow: rgba(0, 0, 0, 0.3);
+  --color-success-bg: #052e16;
+  --color-success-border: #166534;
+  --color-error-bg: #450a0a;
+  --color-error-border: #991b1b;
+  --color-error-text: #fca5a5;
+  --color-warn-bg: #450a0a;
+  --color-warn-border: #991b1b;
+  --color-badge-neutral: #44403c;
+  --color-badge-neutral-text: #d6d3d1;
+  --color-success: #7cb894;
+  --color-badge-code: #1a1a1a;
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background-color: var(--color-input-bg);
+  border-color: var(--color-input-border);
+  color: var(--color-ink);
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: var(--color-muted-light);
+}
+
+:root[data-theme="dark"] option {
+  background-color: var(--color-card);
+  color: var(--color-ink);
+}
+
 body {
   margin: 0;
   min-width: 320px;

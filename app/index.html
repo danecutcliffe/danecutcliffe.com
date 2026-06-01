@@ -17,6 +17,21 @@
     <title>Time Clock</title>
     <script defer src="/time/scope-admin-integration.js"></script>
     <script defer src="/time/scope-employee-integration.js"></script>
+    <script>
+      (() => {
+        try {
+          const preference = window.localStorage.getItem('time-clock-theme-preference');
+          if (preference === 'light' || preference === 'dark') {
+            document.documentElement.dataset.theme = preference;
+            document.documentElement.style.colorScheme = preference === 'dark' ? 'dark' : 'light';
+          } else {
+            document.documentElement.style.colorScheme = 'light dark';
+          }
+        } catch {
+          document.documentElement.style.colorScheme = 'light dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

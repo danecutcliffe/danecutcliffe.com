@@ -35,6 +35,7 @@ const employeeTabs: TabDef[] = [
   { id: 'scope', label: 'Scope' },
   { id: 'settings', label: 'Settings', sections: [
     { id: 'profile', label: 'Profile' },
+    { id: 'appearance', label: 'Appearance' },
     { id: 'connection', label: 'Connection' },
   ]},
 ];
@@ -54,6 +55,7 @@ const adminTabs: TabDef[] = [
   ]},
   { id: 'employees', label: 'Settings', sections: [
     { id: 'pay-period', label: 'Pay Period' },
+    { id: 'appearance', label: 'Appearance' },
     { id: 'employees', label: 'Employees' },
     { id: 'properties', label: 'Properties' },
     { id: 'job-codes', label: 'Job Codes' },

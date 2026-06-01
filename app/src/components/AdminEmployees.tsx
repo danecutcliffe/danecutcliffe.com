@@ -5,7 +5,9 @@ import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { geocodeAddress } from '../utils/geocoding';
 import { googleMapsCoordinatesUrl, googleMapsSearchUrl, isJobCodeUsed, jobPropertyName, jobSiteById } from '../utils/jobs';
+import type { ThemePreference } from '../utils/theme';
 import { formatAtlanticDate, getAtlanticDateKey } from '../utils/time';
+import { ThemePreferenceControl } from './ThemePreferenceControl';
 
 interface AdminEmployeesProps {
   profiles: Profile[];
@@ -16,13 +18,15 @@ interface AdminEmployeesProps {
   grossUpMultipliers: PayrollGrossUpMultiplier[];
   currentProfileId: string;
   service: AdminTimeClockService;
+  themePreference: ThemePreference;
+  onThemePreferenceChange: (preference: ThemePreference) => void;
   onPayPeriodSettingsChange: (settings: PayPeriodSettings, adminPassword: string) => Promise<void>;
   onGrossUpMultiplierSave: (effectiveDate: string, multiplier: number, adminPassword: string) => Promise<void>;
   onGrossUpMultiplierDelete: (id: string, adminPassword: string) => Promise<void>;
   onDataChange: () => Promise<void>;
 }
 
-export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPeriodSettings, grossUpMultipliers, currentProfileId, service, onPayPeriodSettingsChange, onGrossUpMultiplierSave, onGrossUpMultiplierDelete, onDataChange }: AdminEmployeesProps) {
+export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPeriodSettings, grossUpMultipliers, currentProfileId, service, themePreference, onThemePreferenceChange, onPayPeriodSettingsChange, onGrossUpMultiplierSave, onGrossUpMultiplierDelete, onDataChange }: AdminEmployeesProps) {
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
@@ -57,6 +61,8 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
 
         {/* Pay Period */}
         <PayPeriodSettingsPanel settings={payPeriodSettings} isBusy={isBusy} onSave={(nextSettings, adminPassword) => runAction(() => onPayPeriodSettingsChange(nextSettings, adminPassword))} />
+
+        <ThemePreferenceControl value={themePreference} onChange={onThemePreferenceChange} />
 
         {/* Employees */}
         <section id="employees" className="scroll-mt-20 rounded-md border border-app-border bg-card p-5 shadow-soft">

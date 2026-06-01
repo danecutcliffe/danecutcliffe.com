@@ -14,6 +14,7 @@ import { appConfig } from './config/env';
 import type { AppRole, AuditLog, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, TimeEntry, TimesheetApproval } from './domain/types';
 import { defaultPayPeriodSettings } from './hooks/usePayPeriodSettings';
 import { timeClockService } from './services/timeClockServiceFactory';
+import { applyThemePreference, getStoredThemePreference, storeThemePreference, type ThemePreference } from './utils/theme';
 
 const service = timeClockService;
 
@@ -41,6 +42,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stagingViewRole, setStagingViewRole] = useState<AppRole>('admin');
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => getStoredThemePreference());
+
+  useEffect(() => {
+    applyThemePreference(themePreference);
+  }, [themePreference]);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -169,6 +175,11 @@ export default function App() {
     setActiveTab(role === 'admin' ? adminDefaultTab : employeeDefaultTab);
   };
 
+  const changeThemePreference = (preference: ThemePreference) => {
+    storeThemePreference(preference);
+    setThemePreference(preference);
+  };
+
   return (
     <AppShell
       activeTab={activeTab}
@@ -205,11 +216,11 @@ export default function App() {
 
       {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'clock' && <ClockScreen profile={displayedProfile} service={service} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} openWorkEntry={displayedOpenWorkEntry} openBreakEntry={displayedOpenBreakEntry} onDataChange={refresh} />}
       {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={displayedProfile} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} approvals={displayedApprovals} payPeriodSettings={payPeriodSettings} />}
-      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
+      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
 
       {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
       {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
+      {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
       {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
       {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
 

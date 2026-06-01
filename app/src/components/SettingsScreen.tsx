@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { AppRole, Profile } from '../domain/types';
 import type { TimeClockService } from '../services/TimeClockService';
+import { ThemePreferenceControl } from './ThemePreferenceControl';
+import type { ThemePreference } from '../utils/theme';
 
 interface SettingsScreenProps {
   profile: Profile;
   service: TimeClockService;
+  themePreference: ThemePreference;
+  onThemePreferenceChange: (preference: ThemePreference) => void;
   onRoleChange?: (role: AppRole) => void;
   onSignOut?: () => Promise<void>;
 }
 
-export function SettingsScreen({ profile, service, onRoleChange, onSignOut }: SettingsScreenProps) {
+export function SettingsScreen({ profile, service, themePreference, onThemePreferenceChange, onRoleChange, onSignOut }: SettingsScreenProps) {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
@@ -42,6 +46,8 @@ export function SettingsScreen({ profile, service, onRoleChange, onSignOut }: Se
           <div className="rounded-md bg-card-alt p-3"><p className="font-semibold text-muted">Hourly rate</p><p className="mt-1 text-lg font-bold">${profile.hourlyRate.toFixed(2)}</p></div>
         </div>
       </div>
+
+      <ThemePreferenceControl value={themePreference} onChange={onThemePreferenceChange} />
 
       {onRoleChange && <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
         <h3 className="text-lg font-bold">Development role</h3>
