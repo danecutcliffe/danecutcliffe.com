@@ -151,25 +151,29 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
   const detail = buildDetailedTimecardReport(params);
   const profileByName = new Map(params.profiles.map((profile) => [`${profile.firstName} ${profile.lastName}`, profile]));
   const grouped = new Map<string, Record<string, ReportCellValue>>();
+  const employeesByGroup = new Map<string, Set<string>>();
 
   detail.rows.forEach((row) => {
     if (row.entryStatus === 'Open') return;
-    const key = `${row.property}|${row.jobCode}|${row.job}|${row.employee}`;
+    const key = `${row.property}|${row.jobCode}|${row.job}`;
     const profile = profileByName.get(String(row.employee));
     const current = grouped.get(key) ?? {
       property: row.property,
       jobCode: row.jobCode,
       job: row.job,
-      employee: row.employee,
-      employeeType: row.employeeType,
+      employeeCount: 0,
       regularHours: 0,
       otHours: 0,
       totalHours: 0,
       estPay: 0,
     };
+    const employeeSet = employeesByGroup.get(key) ?? new Set<string>();
+    employeeSet.add(String(row.employee));
+    employeesByGroup.set(key, employeeSet);
     const regularHours = Number(row.regularHours ?? 0);
     const otHours = Number(row.otHours ?? 0);
     const rate = profile?.hourlyRate ?? 0;
+    current.employeeCount = employeeSet.size;
     current.regularHours = roundHours(Number(current.regularHours ?? 0) + regularHours);
     current.otHours = roundHours(Number(current.otHours ?? 0) + otHours);
     current.totalHours = roundHours(Number(current.totalHours ?? 0) + regularHours + otHours);
@@ -177,19 +181,18 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
     grouped.set(key, current);
   });
 
-  const rows = [...grouped.values()].sort((a, b) => `${a.property}${a.jobCode}${a.employee}`.localeCompare(`${b.property}${b.jobCode}${b.employee}`));
+  const rows = [...grouped.values()].sort((a, b) => `${a.property}${a.jobCode}`.localeCompare(`${b.property}${b.jobCode}`));
   const totalHours = rows.reduce((total, row) => total + Number(row.totalHours ?? 0), 0);
   const totalPay = rows.reduce((total, row) => total + Number(row.estPay ?? 0), 0);
 
   return {
     title: 'Hours by Location',
-    subtitle: `${params.periodStart} to ${params.periodEnd} | Grouped by property, job, and employee`,
+    subtitle: `${params.periodStart} to ${params.periodEnd} | Grouped by property and job code`,
     columns: [
       { key: 'property', label: 'Property', width: 22 },
       { key: 'jobCode', label: 'Job Code', width: 12 },
       { key: 'job', label: 'Job', width: 26 },
-      { key: 'employee', label: 'Employee', width: 24 },
-      { key: 'employeeType', label: 'Employee Type', width: 15 },
+      { key: 'employeeCount', label: 'Employees', width: 12, align: 'right' },
       { key: 'regularHours', label: 'Reg', width: 10, format: 'hours', align: 'right' },
       { key: 'otHours', label: 'OT', width: 10, format: 'hours', align: 'right' },
       { key: 'totalHours', label: 'Total', width: 10, format: 'hours', align: 'right' },
@@ -207,17 +210,44 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
 }
 
 export function buildPayrollSummaryReport(params: BuildPeriodReportParams): ReportModel {
-  const hours = buildHoursByLocationReport(params);
-  const rows = hours.rows.map((row) => {
+  const detail = buildDetailedTimecardReport(params);
+  const grouped = new Map<string, Record<string, ReportCellValue>>();
+
+  detail.rows.forEach((row) => {
+    if (row.entryStatus === 'Open') return;
+    const key = `${row.employee}|${row.property}|${row.jobCode}`;
+    const current = grouped.get(key) ?? {
+      employee: row.employee,
+      employeeType: row.employeeType,
+      property: row.property,
+      jobCode: row.jobCode,
+      regularHours: 0,
+      otHours: 0,
+      totalHours: 0,
+    };
+    const regularHours = Number(row.regularHours ?? 0);
+    const otHours = Number(row.otHours ?? 0);
+    current.regularHours = roundHours(Number(current.regularHours ?? 0) + regularHours);
+    current.otHours = roundHours(Number(current.otHours ?? 0) + otHours);
+    current.totalHours = roundHours(Number(current.totalHours ?? 0) + regularHours + otHours);
+    grouped.set(key, current);
+  });
+
+  const profileByName = new Map(params.profiles.map((profile) => [`${profile.firstName} ${profile.lastName}`, profile]));
+  const rows = [...grouped.values()].sort((a, b) => `${a.employee}${a.property}${a.jobCode}`.localeCompare(`${b.employee}${b.property}${b.jobCode}`)).map((row) => {
     const [firstName, ...lastNameParts] = String(row.employee).split(' ');
+    const profile = profileByName.get(String(row.employee));
+    const regularHours = Number(row.regularHours ?? 0);
+    const otHours = Number(row.otHours ?? 0);
+    const rate = profile?.hourlyRate ?? 0;
     return {
       firstName,
       lastName: lastNameParts.join(' '),
       location: row.property,
-      regularHours: row.regularHours,
-      otHours: row.otHours,
+      regularHours,
+      otHours,
       totalHours: row.totalHours,
-      estPay: row.estPay,
+      estPay: roundMoney(regularHours * rate + otHours * rate * 1.5),
       name: row.employee,
       jobCode: row.jobCode,
       payCycleEnding: params.periodEnd,
@@ -231,7 +261,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
 
   return {
     title: 'Payroll Summary',
-    subtitle: `${params.periodStart} to ${params.periodEnd} | Buddy Punch-style payroll export`,
+    subtitle: `${params.periodStart} to ${params.periodEnd} | Payroll export`,
     columns: [
       { key: 'firstName', label: 'First Name', width: 14 },
       { key: 'lastName', label: 'Last Name', width: 18 },
@@ -252,7 +282,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
       { label: 'Estimated pay', value: formatMoney(totalPay) },
       { label: 'Job mappings', value: jobCodeRows.length.toString() },
     ],
-    exceptions: hours.exceptions,
+    exceptions: detail.exceptions,
     sheets: [
       {
         title: 'Job Codes',

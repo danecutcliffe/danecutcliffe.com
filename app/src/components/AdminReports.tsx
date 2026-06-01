@@ -32,6 +32,7 @@ type ExportFormat = 'xlsx' | 'detailedCsv' | 'qboCsv';
 export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
+  const [reportPeriodStart, setReportPeriodStart] = useState(currentPeriod.start);
   const [isLabourCostsOpen, setIsLabourCostsOpen] = useState(true);
   const [openPropertyIds, setOpenPropertyIds] = useState<Record<string, boolean>>({});
   const periodEnd = addDaysToDateKey(periodStart, payPeriodSettings.lengthDays - 1);
@@ -52,10 +53,16 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       : jobCodes.filter((job) => job.jobSiteId && propertyIds.includes(job.jobSiteId)),
     [jobCodes, propertyIds],
   );
-  const periodEntries = useMemo(() => entries.filter((entry) => {
+  const reportPeriodEnd = addDaysToDateKey(reportPeriodStart, payPeriodSettings.lengthDays - 1);
+  const payPeriodOptions = useMemo(() => buildPayPeriodOptions(payPeriodSettings, entries, currentPeriod.start, periodStart), [currentPeriod.start, entries, payPeriodSettings, periodStart]);
+  const topPeriodEntries = useMemo(() => entries.filter((entry) => {
     const key = getAtlanticDateKey(entry.clockIn);
     return key >= periodStart && key <= periodEnd;
   }), [entries, periodEnd, periodStart]);
+  const periodEntries = useMemo(() => entries.filter((entry) => {
+    const key = getAtlanticDateKey(entry.clockIn);
+    return key >= reportPeriodStart && key <= reportPeriodEnd;
+  }), [entries, reportPeriodEnd, reportPeriodStart]);
   const filteredEntries = useMemo(
     () => periodEntries.filter((entry) => {
       if (employeeIds.length > 0 && !employeeIds.includes(entry.userId)) return false;
@@ -70,7 +77,9 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   );
   const exportableEntries = useMemo(() => filteredEntries.filter((entry) => entry.clockOut), [filteredEntries]);
   const blockers = useMemo(() => buildExportBlockers(filteredEntries, profileById), [filteredEntries, profileById]);
-  const summary = useMemo(() => calculatePayrollSummary(filteredEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [filteredEntries, payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople]);
+  const topPeriodExportableEntries = useMemo(() => topPeriodEntries.filter((entry) => entry.clockOut), [topPeriodEntries]);
+  const topPeriodBlockers = useMemo(() => buildExportBlockers(topPeriodEntries, profileById), [profileById, topPeriodEntries]);
+  const topPeriodSummary = useMemo(() => calculatePayrollSummary(topPeriodEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople, topPeriodEntries]);
   const labourBreakdown = useMemo(
     () => buildLabourCostBreakdownAcrossPayPeriods({
       entries,
@@ -84,35 +93,35 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   );
   const detailedCsv = buildDetailedCsv({ entries: filteredEntries, profiles, jobSites, jobCodes });
   const qboCsv = buildQboCsv({ entries: exportableEntries, profiles, jobSites, jobCodes });
-  const detailedFilename = `time-detail-${periodStart}_to_${periodEnd}.csv`;
-  const qboFilename = `qbo-time-${periodStart}_to_${periodEnd}.csv`;
+  const detailedFilename = `time-detail-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
+  const qboFilename = `qbo-time-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
   const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
     entries: filteredEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart,
-    periodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+    periodStart: reportPeriodStart,
+    periodEnd: reportPeriodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
   const hoursByLocationModel = useMemo(() => buildHoursByLocationReport({
     entries: filteredEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart,
-    periodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+    periodStart: reportPeriodStart,
+    periodEnd: reportPeriodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
   const payrollSummaryModel = useMemo(() => buildPayrollSummaryReport({
     entries: filteredEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart,
-    periodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, periodEnd, periodStart, profiles]);
+    periodStart: reportPeriodStart,
+    periodEnd: reportPeriodEnd,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
   const selectedReportModel = reportType === 'detailed'
     ? detailedTimecardModel
     : reportType === 'hoursByLocation'
@@ -120,19 +129,20 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       : reportType === 'payrollSummary'
         ? payrollSummaryModel
         : null;
-  const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${periodStart}_to_${periodEnd}.xlsx`;
+  const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${reportPeriodStart}_to_${reportPeriodEnd}.xlsx`;
   const canExportSelectedFormat = exportFormat === 'xlsx'
     ? Boolean(selectedReportModel && selectedReportModel.rows.length > 0)
     : exportFormat === 'detailedCsv'
       ? filteredEntries.length > 0
       : blockers.length === 0 && exportableEntries.length > 0;
-  const displayedPayableHours = summary.netWorkHours;
-  const displayedGrossPay = summary.grossPay;
-  const displayedOvertimeHours = summary.overtimeHours;
+  const displayedPayableHours = topPeriodSummary.netWorkHours;
+  const displayedGrossPay = topPeriodSummary.grossPay;
+  const displayedOvertimeHours = topPeriodSummary.overtimeHours;
   const maxPropertyLoadedCost = labourBreakdown.properties[0]?.loadedCost ?? 0;
 
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
+    setReportPeriodStart(currentPeriod.start);
   }, [currentPeriod.start, payPeriodSettings.lengthDays]);
 
   useEffect(() => {
@@ -161,6 +171,11 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       return;
     }
     downloadCsv(qboFilename, qboCsv);
+  };
+
+  const changePeriodStart = (start: string) => {
+    setPeriodStart(start);
+    setReportPeriodStart(start);
   };
 
   return (
@@ -220,9 +235,9 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
             <p className="mt-1 text-sm text-muted">{formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => setPeriodStart(addDaysToDateKey(periodStart, -payPeriodSettings.lengthDays))}>Previous</button>
-            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => setPeriodStart(addDaysToDateKey(periodStart, payPeriodSettings.lengthDays))}>Next</button>
-            <button className="col-span-2 min-h-12 rounded-md bg-accent px-3 font-bold text-white" type="button" onClick={() => setPeriodStart(currentPeriod.start)}>Current Period</button>
+            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => changePeriodStart(addDaysToDateKey(periodStart, -payPeriodSettings.lengthDays))}>Previous</button>
+            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => changePeriodStart(addDaysToDateKey(periodStart, payPeriodSettings.lengthDays))}>Next</button>
+            <button className="col-span-2 min-h-12 rounded-md bg-accent px-3 font-bold text-white" type="button" onClick={() => changePeriodStart(currentPeriod.start)}>Current Period</button>
           </div>
         </div>
 
@@ -230,19 +245,19 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           <Metric label="Payable hours" value={`${displayedPayableHours.toFixed(2)}h`} />
           <Metric label="Gross payroll" value={money(displayedGrossPay)} />
           <Metric label="Overtime" value={`${displayedOvertimeHours.toFixed(2)}h`} />
-          <Metric label="Open entries" value={summary.openEntries.toString()} />
-          <Metric label="Exportable rows" value={exportableEntries.length.toString()} />
+          <Metric label="Open entries" value={topPeriodSummary.openEntries.toString()} />
+          <Metric label="Exportable rows" value={topPeriodExportableEntries.length.toString()} />
         </div>
 
-        {blockers.length > 0 && (
+        {topPeriodBlockers.length > 0 && (
           <div className="mt-4 rounded-md border border-error-border bg-error-bg p-3">
             <p className="text-sm font-bold text-error-text">Resolve before QBO export</p>
             <ul className="mt-2 space-y-1 text-sm font-semibold text-error-text">
-              {blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+              {topPeriodBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
             </ul>
           </div>
         )}
-        {blockers.length === 0 && exportableEntries.length > 0 && (
+        {topPeriodBlockers.length === 0 && topPeriodExportableEntries.length > 0 && (
           <p className="mt-4 rounded-md bg-success-bg p-3 text-sm font-bold text-success">
             This filtered pay period is ready to export. Open entries are excluded from QBO by design.
           </p>
@@ -267,8 +282,12 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           <ChecklistFilter filterId="employees" label="Employees" allLabel="All employees" selectedIds={employeeIds} options={reportPeople.map((profile) => ({ id: profile.id, label: name(profile) }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setEmployeeIds} />
           <ChecklistFilter filterId="properties" label="Properties" allLabel="All properties" selectedIds={propertyIds} options={jobSites.map((site) => ({ id: site.id, label: site.name }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setPropertyIds} />
           <ChecklistFilter filterId="jobs" label="Jobs" allLabel="All jobs" selectedIds={jobCodeIds} options={availableJobCodes.map((job) => ({ id: job.id, label: jobDisplayNameById(job.id, jobById, siteById) }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setJobCodeIds} />
-        </div>
-        <div className="mt-4 flex flex-col gap-3 border-t border-app-border-subtle pt-4 sm:flex-row sm:items-end sm:justify-end">
+          <LabeledSelect
+            label="Payroll Period"
+            value={reportPeriodStart}
+            onChange={setReportPeriodStart}
+            options={payPeriodOptions}
+          />
           <LabeledSelect
             label="Export Format"
             value={exportFormat}
@@ -278,9 +297,9 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
               { value: 'detailedCsv', label: 'Detailed CSV' },
               { value: 'qboCsv', label: 'QBO CSV' },
             ]}
-            className="sm:w-56"
           />
-          <button className="min-h-12 rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60 sm:w-44" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
+          <div className="hidden lg:block" aria-hidden="true" />
+          <button className="min-h-12 rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
         </div>
       </div>
 
@@ -464,9 +483,9 @@ function LabeledSelect({
   className?: string;
 }) {
   return (
-    <label className={`block min-w-0 rounded-md border border-input-border bg-card px-3 py-2 ${className ?? ''}`}>
+    <label className={`block min-h-12 min-w-0 rounded-md border border-input-border bg-card px-3 py-2 ${className ?? ''}`}>
       <span className="block text-xs font-bold text-muted">{label}</span>
-      <select className="mt-1 block h-7 w-full min-w-0 bg-card text-sm font-bold text-ink outline-none" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="mt-1 block h-6 w-full min-w-0 truncate bg-card text-sm font-bold text-ink outline-none" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
@@ -752,6 +771,34 @@ function reportFilenamePrefix(reportType: ReportType) {
   if (reportType === 'jobs') return 'job-hours';
   if (reportType === 'overtime') return 'overtime';
   return 'timecard-detail';
+}
+
+function buildPayPeriodOptions(settings: PayPeriodSettings, entries: TimeEntry[], currentPeriodStart: string, selectedPeriodStart: string) {
+  const lengthDays = Math.max(1, settings.lengthDays);
+  const entryDateKeys = entries.map((entry) => getAtlanticDateKey(entry.clockIn)).sort();
+  const earliestDateKey = entryDateKeys[0] ?? currentPeriodStart;
+  const earliestPeriodStart = getPayPeriodForDate(settings, earliestDateKey).start;
+  const latestStart = selectedPeriodStart > currentPeriodStart ? selectedPeriodStart : currentPeriodStart;
+  const options: Array<{ value: string; label: string }> = [];
+
+  for (let start = latestStart, count = 0; start >= earliestPeriodStart && count < 80; start = addDaysToDateKey(start, -lengthDays), count += 1) {
+    const end = addDaysToDateKey(start, lengthDays - 1);
+    const prefix = start === currentPeriodStart ? 'Current: ' : '';
+    options.push({
+      value: start,
+      label: `${prefix}${formatAtlanticDate(start)} - ${formatAtlanticDate(end)}`,
+    });
+  }
+
+  if (!options.some((option) => option.value === selectedPeriodStart)) {
+    const end = addDaysToDateKey(selectedPeriodStart, lengthDays - 1);
+    options.unshift({
+      value: selectedPeriodStart,
+      label: `${selectedPeriodStart === currentPeriodStart ? 'Current: ' : ''}${formatAtlanticDate(selectedPeriodStart)} - ${formatAtlanticDate(end)}`,
+    });
+  }
+
+  return options;
 }
 
 function formatMultiplier(value: number) {
