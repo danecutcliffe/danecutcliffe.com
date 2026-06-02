@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AlarmClock, ChevronDown, LogOut } from 'lucide-react';
 import type { AppRole, Profile } from '../domain/types';
 
@@ -80,6 +81,22 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
   const canUseScopes = currentRole === 'admin' || currentProfile?.canAccessScopes !== false;
   const tabs = currentProfile?.isActive ? (currentRole === 'admin' ? adminTabs : employeeTabs.filter((tab) => tab.id !== 'scope' || canUseScopes)) : [];
   const mobileTabs = tabs.filter((tab) => !(currentRole === 'admin' && tab.id === 'reports'));
+  const mobileNav = mobileTabs.length > 0 ? (
+    <nav className="app-mobile-bottom-nav border-t border-app-border bg-card lg:hidden" aria-label="Mobile navigation">
+      <div className={`grid ${mobileTabs.length >= 5 ? 'grid-cols-5' : mobileTabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        {mobileTabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`min-h-16 px-1 text-xs font-semibold ${activeTab === tab.id ? 'text-accent' : 'text-muted'}`}
+            type="button"
+            onClick={() => onTabChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -159,23 +176,7 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
         <main className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pb-8">{children}</main>
       )}
 
-      {/* Mobile bottom nav — unchanged */}
-      {mobileTabs.length > 0 && (
-        <nav className="app-mobile-bottom-nav fixed inset-x-0 bottom-0 z-20 border-t border-app-border bg-card lg:hidden">
-          <div className={`grid ${mobileTabs.length >= 5 ? 'grid-cols-5' : mobileTabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
-            {mobileTabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={`min-h-16 px-1 text-xs font-semibold ${activeTab === tab.id ? 'text-accent' : 'text-muted'}`}
-                type="button"
-                onClick={() => onTabChange(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
+      {mobileNav && createPortal(mobileNav, document.body)}
     </div>
   );
 }

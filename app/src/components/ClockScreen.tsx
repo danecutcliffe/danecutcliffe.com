@@ -199,7 +199,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
               <label className="text-sm font-semibold text-muted" htmlFor="shift-notes">Shift notes</label>
               <textarea id="shift-notes" className="min-h-28 rounded-md border border-input-border bg-card p-3" value={shiftNotes} onChange={(event) => setShiftNotes(event.target.value)} placeholder="Required before clocking out" />
               <p className="text-xs font-semibold text-muted">Shift notes are mandatory before clocking out.</p>
-              <button className="min-h-16 rounded-md bg-red-700 px-4 text-lg font-bold text-white disabled:opacity-60" type="button" onClick={() => runAction(async () => { const gps = await captureGps(); const at = new Date().toISOString(); if (openBreakEntry) await service.endBreak({ entryId: openBreakEntry.id, at, gps }); await service.updateEntryNotes({ entryId: openWorkEntry.id, notes: finalClockOutNote }); await service.clockOut({ entryId: openWorkEntry.id, at, gps }); })} disabled={isBusy || !finalClockOutNote}>Clock Out</button>
+              <button className="min-h-16 rounded-md bg-red-700 px-4 text-lg font-bold text-white disabled:opacity-60" type="button" onClick={() => runAction(async () => { const gps = await captureGps(); const at = new Date().toISOString(); if (openBreakEntry) await service.endBreak({ entryId: openBreakEntry.id, at, gps }); await service.clockOut({ entryId: openWorkEntry.id, at, gps, notes: finalClockOutNote }); })} disabled={isBusy || !finalClockOutNote}>Clock Out</button>
               <p className="text-center text-xs text-muted-light">GPS coordinates will be captured</p>
             </div>
           )}

@@ -71,6 +71,7 @@ export interface TimeClockService {
     entryId: string;
     at: string;
     gps?: GpsPoint | null;
+    notes?: string;
   }): Promise<TimeEntry>;
 
   startBreak(params: {

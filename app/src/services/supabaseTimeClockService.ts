@@ -240,8 +240,22 @@ class SupabaseTimeClockService implements AdminTimeClockService {
     return mapTimeEntry(row);
   }
 
-  async clockOut({ entryId, at, gps }: { entryId: string; at: string; gps?: GpsPoint | null }) {
-    const profile = await this.requireCurrentProfile();
+  async clockOut({ entryId, at, gps, notes }: { entryId: string; at: string; gps?: GpsPoint | null; notes?: string }) {
+    await this.requireCurrentProfile();
+
+    if (notes !== undefined) {
+      const row = unwrap(
+        await this.client.rpc('employee_clock_out', {
+          p_entry_id: entryId,
+          p_notes: notes,
+          p_clock_out_lat: capturedLat(gps),
+          p_clock_out_lng: capturedLng(gps),
+        }) as SupabaseResponse<TimeEntryRow>,
+        'Unable to clock out. This entry may already be closed.',
+      );
+      return mapTimeEntry(row);
+    }
+
     const row = unwrap(
       await this.client
         .from('time_entries')
@@ -249,7 +263,6 @@ class SupabaseTimeClockService implements AdminTimeClockService {
           clock_out: at,
           clock_out_lat: capturedLat(gps),
           clock_out_lng: capturedLng(gps),
-          edited_by: profile.id,
         })
         .eq('id', entryId)
         .is('clock_out', null)
@@ -286,7 +299,7 @@ class SupabaseTimeClockService implements AdminTimeClockService {
   }
 
   async endBreak({ entryId, at, gps }: { entryId: string; at: string; gps?: GpsPoint | null }) {
-    const profile = await this.requireCurrentProfile();
+    await this.requireCurrentProfile();
     const row = unwrap(
       await this.client
         .from('time_entries')
@@ -294,7 +307,6 @@ class SupabaseTimeClockService implements AdminTimeClockService {
           clock_out: at,
           clock_out_lat: capturedLat(gps),
           clock_out_lng: capturedLng(gps),
-          edited_by: profile.id,
         })
         .eq('id', entryId)
         .eq('event_type', 'break')
@@ -314,11 +326,11 @@ class SupabaseTimeClockService implements AdminTimeClockService {
   }
 
   async updateEntryNotes({ entryId, notes }: { entryId: string; notes: string }) {
-    const profile = await this.requireCurrentProfile();
+    await this.requireCurrentProfile();
     const row = unwrap(
       await this.client
         .from('time_entries')
-        .update({ notes, edited_by: profile.id, edited_at: new Date().toISOString() })
+        .update({ notes })
         .eq('id', entryId)
         .select('*')
         .single() as SupabaseResponse<TimeEntryRow>,

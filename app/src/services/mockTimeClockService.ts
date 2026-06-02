@@ -500,10 +500,11 @@ export const mockTimeClockService: AdminTimeClockService = {
     return cloneEntry(entry);
   },
 
-  async clockOut({ entryId, at, gps }) {
+  async clockOut({ entryId, at, gps, notes }) {
     await delay();
     const entry = findEntry(entryId);
     if (entry.clockOut) throw new Error('This entry is already clocked out.');
+    if (notes !== undefined) entry.notes = notes.trim();
     entry.clockOut = at;
     applyClockOutGps(entry, gps);
     return cloneEntry(entry);
