@@ -340,8 +340,11 @@ textarea:focus-visible {
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
+    box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
+    padding-bottom: calc(var(--mobile-nav-height) + 1rem);
+    scroll-padding-bottom: calc(var(--mobile-nav-height) + 1rem);
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
@@ -382,5 +385,9 @@ textarea:focus-visible {
 
   #root main.pb-28 {
     padding-bottom: 1rem !important;
+  }
+
+  #root main.app-shell-content.pb-28 {
+    padding-bottom: calc(var(--mobile-nav-height) + 1rem) !important;
   }
 }

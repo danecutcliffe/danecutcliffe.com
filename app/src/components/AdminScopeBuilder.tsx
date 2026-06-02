@@ -638,19 +638,6 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
         </div>
       </div>
 
-      <div className="sticky bottom-20 z-10 lg:hidden">
-        <button
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-black text-white shadow-soft disabled:opacity-50"
-          type="button"
-          disabled={!canSave}
-          onClick={saveChanges}
-          title="Save Changes (Command-S / Ctrl-S)"
-          aria-keyshortcuts="Meta+S Control+S"
-        >
-          <Save size={16} aria-hidden="true" />
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
     </section>
   );
 }

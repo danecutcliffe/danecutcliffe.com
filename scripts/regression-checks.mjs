@@ -47,8 +47,16 @@ if (!styles.includes('#root .app-shell') || !styles.includes('height: 100dvh')) 
 if (!styles.includes('#root .app-shell-content') || !styles.includes('-webkit-overflow-scrolling: touch')) {
   fail('Mobile content must remain the only scroll region inside the app shell.');
 }
+if (!styles.includes('scroll-padding-bottom: calc(var(--mobile-nav-height) + 1rem)')) {
+  fail('Mobile content must reserve bottom scroll space for the bottom nav.');
+}
 if (!styles.includes('.app-mobile-bottom-nav') || styles.includes('position: fixed !important')) {
   fail('Mobile bottom nav must be a normal bottom flex row, not a fixed-position overlay.');
+}
+
+const scopeBuilder = read('app/src/components/AdminScopeBuilder.tsx');
+if (scopeBuilder.includes('sticky bottom-') || scopeBuilder.includes('fixed bottom-')) {
+  fail('Scope Builder must not render a floating mobile save control above the bottom nav.');
 }
 
 const componentFiles = listFiles('app/src/components').filter((path) => path.endsWith('.tsx'));
