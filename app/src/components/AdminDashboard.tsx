@@ -72,8 +72,8 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   return (
     <section className="space-y-4">
       <div id="period-readiness" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${readinessClass(readiness)}`}>{readinessLabel(readiness)}</span>
               <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{payPeriodSettings.lengthDays}-day period</span>
@@ -105,27 +105,27 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
 
       <Panel id="working-now" title="Working now">
         {openEntries.length === 0 && <p className="text-sm text-muted">No open shifts or breaks in this period.</p>}
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {openEntries.map((entry) => (
-            <div key={entry.id} className="rounded-md border border-app-border p-3">
-              <p className="font-bold">{name(profileById.get(entry.userId))}</p>
-              <p className="text-sm text-muted">{entry.eventType === 'break' ? 'Break' : jobDisplayNameById(entry.jobCodeId, jobById, siteById)}</p>
+            <div key={entry.id} className="min-w-0 rounded-md border border-app-border p-3">
+              <p className="break-words font-bold">{name(profileById.get(entry.userId))}</p>
+              <p className="break-words text-sm text-muted">{entry.eventType === 'break' ? 'Break' : jobDisplayNameById(entry.jobCodeId, jobById, siteById)}</p>
               <p className="mt-2 text-sm font-semibold text-muted-strong">Open for {getEntryDurationHours(entry).toFixed(1)}h</p>
             </div>
           ))}
         </div>
       </Panel>
 
-      <div id="metrics" className="scroll-mt-20 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div id="metrics" className="scroll-mt-20 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Total accrued payroll this period" value={money(periodSummary.grossPay)} sublabel={lunchSummaryLabel(periodSummary.paidBreakHours, periodSummary.unpaidBreakHours)} />
         <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionFactor > 1 ? `At current pace x${projectionFactor.toFixed(1)}` : 'Period actual'} />
         <Metric label="Payable hours" value={`${periodSummary.netWorkHours.toFixed(1)}h`} />
         <Metric label="Attention items" value={flags.length.toString()} sublabel={`${blockerCount} blockers, ${reviewCount} review`} />
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <Panel id="employee-review" title="Employee review">
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {employees.map((employee) => (
               <EmployeeReviewCard
                 key={employee.id}
@@ -180,10 +180,10 @@ function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weekl
   const lastEntry = [...entries].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
   const jobSplits = getJobSplits(entries, jobById, siteById, employee);
   return (
-    <div className="rounded-md border border-app-border p-3">
+    <div className="min-w-0 rounded-md border border-app-border p-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-bold">{name(employee)}</p>
+        <div className="min-w-0">
+          <p className="break-words text-lg font-bold">{name(employee)}</p>
           <p className="text-sm text-muted">{lastEntry ? `Last punch ${formatAtlanticTime(lastEntry.clockIn)}` : 'No time this period'}</p>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-bold ${flags.length ? 'bg-warn-bg text-warning' : 'bg-success-bg text-success'}`}>
@@ -191,7 +191,7 @@ function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weekl
         </span>
       </div>
       <p className="mt-2 text-xs font-bold text-muted">{employee.paidBreaks ? `${employee.paidBreakMinutes} paid lunch minutes` : 'Unpaid lunches'}</p>
-      <div className="mt-3 grid grid-cols-4 gap-2 text-sm">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <MiniMetric label="Payable" value={`${summary.netWorkHours.toFixed(1)}h`} />
         <MiniMetric label="OT" value={`${summary.overtimeHours.toFixed(1)}h`} />
         <MiniMetric label="Entries" value={entries.length.toString()} />
@@ -200,7 +200,7 @@ function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weekl
       <div className="mt-3 space-y-1">
         {jobSplits.length === 0 && <p className="text-sm text-muted">No job allocation yet.</p>}
         {jobSplits.slice(0, 3).map((split) => (
-          <div key={split.name} className="flex items-center justify-between gap-3 text-sm">
+          <div key={split.name} className="flex min-w-0 items-center justify-between gap-3 text-sm">
             <span className="truncate text-muted">{split.name}</span>
             <span className="font-bold">{split.hours.toFixed(1)}h</span>
           </div>
@@ -271,21 +271,21 @@ function getPeriodProgress(start: string, lengthDays: number, todayKey: string) 
 
 function Metric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {
   return (
-    <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
+    <div className="min-w-0 rounded-md border border-app-border bg-card p-4 shadow-soft">
       <p className="text-sm font-semibold text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
+      <p className="mt-1 break-words text-2xl font-bold">{value}</p>
       {sublabel && <p className="mt-1 text-xs font-semibold text-muted">{sublabel}</p>}
     </div>
   );
 }
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md bg-card-alt p-2"><p className="text-xs font-semibold text-muted">{label}</p><p className="mt-1 font-bold">{value}</p></div>;
+  return <div className="min-w-0 rounded-md bg-card-alt p-2"><p className="text-xs font-semibold text-muted">{label}</p><p className="mt-1 break-words font-bold">{value}</p></div>;
 }
 
 function Panel({ id, title, action, children }: { id?: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div id={id} className="scroll-mt-20 space-y-3 rounded-md border border-app-border bg-card p-4 shadow-soft">
+    <div id={id} className="min-w-0 scroll-mt-20 space-y-3 rounded-md border border-app-border bg-card p-4 shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold">{title}</h2>
         {action}

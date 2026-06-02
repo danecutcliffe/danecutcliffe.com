@@ -116,7 +116,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
   };
 
   return (
-    <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col rounded-md border border-app-border bg-card shadow-soft lg:min-h-full">
         {/* Status header */}
         <div className="p-5 pb-0">
@@ -163,7 +163,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
           )}
 
           {openWorkEntry && (
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {openBreakEntry ? (
                 <button className="min-h-16 rounded-md bg-accent px-4 text-lg font-bold text-white disabled:opacity-60" type="button" onClick={() => runAction(async () => { const gps = await captureGps(); await service.endBreak({ entryId: openBreakEntry.id, at: new Date().toISOString(), gps }); })} disabled={isBusy}>End Break</button>
               ) : (
@@ -178,7 +178,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
 
               {isSwitchMenuOpen && !openBreakEntry && (
                 <div className="rounded-md border border-app-border bg-card-alt p-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label className="block text-sm font-semibold text-muted">
                       Property
                       <select className="mt-1.5 min-h-11 w-full rounded-md border border-input-border bg-card px-3" value={switchPropertyId} onChange={(event) => setSwitchPropertyId(event.target.value)}>

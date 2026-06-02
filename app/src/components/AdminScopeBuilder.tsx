@@ -375,7 +375,7 @@ export function AdminScopeBuilder({ service, jobSites, jobCodes }: AdminScopeBui
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="space-y-3 self-start rounded-md border border-app-border bg-card p-4 shadow-soft lg:sticky lg:top-24">
           <label className="block text-sm font-bold text-muted-strong">
             Property

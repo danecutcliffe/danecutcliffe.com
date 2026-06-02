@@ -74,7 +74,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
 
       {/* Employee selector + pay period nav */}
       <div id="ts-employee" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-muted" htmlFor="employee-select">
             Employee
             <select id="employee-select" className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3 text-base text-ink" value={employee?.id ?? ''} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
@@ -223,7 +223,7 @@ function TimesheetEntryCard({
   onEdit: () => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-md bg-card-alt p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+    <div className="grid grid-cols-1 gap-3 rounded-md bg-card-alt p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
       <div className="min-w-0">
         <span className="mb-2 inline-flex rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">{formatDurationCompact(getEntryDurationHours(entry))}</span>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -330,7 +330,7 @@ function PunchLogView({
                 const job = event.entry.jobCodeId ? jobById.get(event.entry.jobCodeId) : null;
                 const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : null;
                 return (
-                  <div key={event.id} className="grid gap-3 rounded-md bg-card-alt p-3 sm:grid-cols-[minmax(0,140px)_minmax(0,1fr)_auto] sm:items-start">
+                  <div key={event.id} className="grid grid-cols-1 gap-3 rounded-md bg-card-alt p-3 sm:grid-cols-[minmax(0,140px)_minmax(0,1fr)_auto] sm:items-start">
                     <div>
                       <p className="text-sm font-bold">{formatAtlanticDateTime(event.at)}</p>
                       <span className="mt-1 inline-flex rounded-full bg-badge-neutral px-2 py-1 text-xs font-bold text-muted">{event.direction}</span>
@@ -506,7 +506,7 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
         extraSaveDisabled={isBreak && !hasValidBreakDuration}
         validationMessage={isBreak && !hasValidBreakDuration ? 'Enter a break duration greater than 0 minutes.' : null}
         timeFields={isBreak ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm font-semibold text-muted">
               Break start
               <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="datetime-local" value={clockIn} onChange={(event) => setClockIn(event.target.value)} />
@@ -529,7 +529,7 @@ function EntryTypeControl({ value, onChange }: { value: TimeEntry['eventType']; 
   return (
     <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
       <p className="text-sm font-bold text-muted-strong">Entry type</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           className={`min-h-12 rounded-md border px-4 text-left font-bold transition ${value === 'work' ? 'border-accent bg-badge-neutral text-ink' : 'border-input-border text-muted hover:text-ink'}`}
           type="button"
@@ -605,7 +605,7 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
         <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
           <p className="text-sm font-bold text-muted-strong">{props.timeSectionLabel || 'Punch times'}</p>
           {props.timeFields ?? (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block text-sm font-semibold text-muted">
                 {props.clockInLabel || 'Punch in'}
                 <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="datetime-local" value={props.clockIn} onChange={(event) => props.setClockIn(event.target.value)} />
@@ -628,7 +628,7 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
       {props.requireClockOut && !props.clockOut && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">Break entries need a punch out time.</p>}
       {props.requireNotes && !props.notes.trim() && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">Manual entries need a short note.</p>}
       {props.validationMessage && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">{props.validationMessage}</p>}
-      <div className="grid gap-2 p-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
         <button className="min-h-12 rounded-md border border-input-border px-4 font-bold" type="button" onClick={props.onCancel}>Cancel</button>
         <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isSaveDisabled} onClick={props.onSave}>{props.submitLabel}</button>
       </div>

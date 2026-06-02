@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const read = (path) => readFileSync(resolve(root, path), 'utf8');
+const listFiles = (dir) => readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
+  const path = `${dir}/${entry.name}`;
+  if (entry.isDirectory()) return listFiles(path);
+  return path;
+});
 
 const extractMethod = (source, name) => {
   const start = source.indexOf(`async ${name}(`);
@@ -36,3 +42,25 @@ if (!styles.includes('.app-mobile-bottom-nav') || !styles.includes('position: fi
   fail('Mobile bottom nav must keep its hardened fixed-position CSS.');
 }
 
+const componentFiles = listFiles('app/src/components').filter((path) => path.endsWith('.tsx'));
+const classLiteralPattern = /(?:className=|className:\\s*)["'`]([^"'`]*?)["'`]/g;
+const breakpointGridPattern = /\b(?:sm|md|lg|xl|2xl):grid-cols-/;
+const baseGridPattern = /(?:^|\s)grid-cols-/;
+
+for (const file of componentFiles) {
+  const source = read(file);
+  for (const match of source.matchAll(classLiteralPattern)) {
+    const classes = match[1].replace(/\s+/g, ' ').trim();
+    if (!classes.includes('grid') || !/\bgap-/.test(classes)) continue;
+    if (classes.includes('place-items-center') || /\b(h|w)-\d/.test(classes)) continue;
+
+    const hasBaseGrid = baseGridPattern.test(classes);
+    const hasBreakpointGrid = breakpointGridPattern.test(classes);
+    if (!hasBaseGrid && hasBreakpointGrid) {
+      fail(`${file} has a mobile content grid with breakpoint-only columns: "${classes}". Add a base grid-cols-1 or another explicit base grid column.`);
+    }
+    if (!hasBaseGrid && !hasBreakpointGrid) {
+      fail(`${file} has a mobile content grid with implicit max-content columns: "${classes}". Add grid-cols-1 if this is a stacked content/form grid.`);
+    }
+  }
+}

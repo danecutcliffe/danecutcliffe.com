@@ -95,7 +95,7 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
 
           {employeesOpen && (
             <div id="employees-content">
-              <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)]">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)]">
                 <label className="block text-xs font-semibold text-muted" htmlFor="employee-sort">
                   Sort
                   <select
@@ -423,8 +423,8 @@ function sortProfiles(profiles: Profile[], sortMode: EmployeeSortMode) {
 }
 
 const DEFAULT_PAYROLL_LOAD_FACTOR = 1.25;
-const PAY_PERIOD_SETTINGS_GRID = 'grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
-const PAYROLL_SETTINGS_GRID = 'grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
+const PAY_PERIOD_SETTINGS_GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
+const PAYROLL_SETTINGS_GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_6rem] sm:items-end';
 const PAYROLL_SETTINGS_SAVE_BUTTON = 'h-10 w-full shrink-0 rounded-md bg-accent px-5 text-sm font-bold text-white disabled:opacity-45';
 
 function PayrollSettingsPanel({
@@ -479,7 +479,7 @@ function PayrollSettingsPanel({
       <h2 className="text-lg font-bold">Payroll Settings</h2>
 
       <div className="mt-4 divide-y divide-app-border-subtle">
-        <div className="grid gap-4 py-4 first:pt-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-end">
+        <div className="grid grid-cols-1 gap-4 py-4 first:pt-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-end">
           <div>
             <h3 className="text-sm font-bold">Pay period</h3>
             <p className="mt-1 text-xs font-semibold text-muted">Current: {formatAtlanticDate(periodPreview.start)} - {formatAtlanticDate(periodPreview.end)}</p>
@@ -533,7 +533,7 @@ function PayrollSettingsPanel({
           </div>
         </div>
 
-        <div className="grid gap-4 py-4 last:pb-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-start">
+        <div className="grid grid-cols-1 gap-4 py-4 last:pb-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-start">
           <div>
             <h3 className="text-sm font-bold">Gross-up multiplier</h3>
             <p className="mt-1 text-xs font-semibold text-muted">
@@ -685,7 +685,7 @@ function AdminPasswordDialog({
             }}
           />
         </label>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button className="min-h-11 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" disabled={isBusy} onClick={onCancel}>Cancel</button>
           <button
             className="min-h-11 rounded-md bg-accent px-4 font-bold text-white disabled:bg-app-border disabled:text-muted"
@@ -784,7 +784,7 @@ function EmployeeRow({
       {/* Expanded edit fields */}
       {isExpanded && (
         <div className="border-t border-app-border-subtle px-4 pb-4 pt-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm font-semibold text-muted">
               First name
               <input className="mt-1.5 min-h-11 w-full rounded-md border border-input-border px-3 text-base text-ink" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
@@ -942,7 +942,7 @@ function JobCodeRow({
         </div>
       </div>
       {isExpanded && (
-        <div className="grid gap-3 border-t border-app-border-subtle px-4 pb-4 pt-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 border-t border-app-border-subtle px-4 pb-4 pt-4 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-muted">
             Property
             <select className="mt-1.5 min-h-11 w-full rounded-md border border-input-border bg-card px-3 disabled:bg-card-alt disabled:text-muted-light" value={jobSiteId} onChange={(event) => setJobSiteId(event.target.value)}>
@@ -1037,7 +1037,7 @@ function JobSiteRow({ site, isBusy, onSave, onArchive }: { site: JobSite; isBusy
         </div>
       </div>
       {isExpanded && (
-        <div className="grid gap-3 border-t border-app-border-subtle px-4 pb-4 pt-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 border-t border-app-border-subtle px-4 pb-4 pt-4 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-muted">
             Property name
             <input className="mt-1.5 min-h-11 w-full rounded-md border border-input-border px-3" value={name} onChange={(event) => setName(event.target.value)} />
@@ -1160,7 +1160,7 @@ function AddJobSiteDialog({ isBusy, onCancel, onSave }: { isBusy: boolean; onCan
           </div>
           <button className="min-h-10 rounded-md border border-input-border px-3 font-bold" type="button" onClick={onCancel}>Close</button>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-muted">
             Property name
             <input className="mt-2 min-h-12 w-full rounded-md border border-input-border px-3" value={name} onChange={(event) => setName(event.target.value)} />
@@ -1192,7 +1192,7 @@ function AddJobSiteDialog({ isBusy, onCancel, onSave }: { isBusy: boolean; onCan
             }}
           />
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" onClick={onCancel}>Cancel</button>
           <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !canSave} onClick={() => onSave({ name: name.trim(), address: address.trim() || undefined, latitude: latNumber, longitude: lngNumber, geofenceRadiusMeters: radiusNumber })}>
             Save Property
@@ -1242,7 +1242,7 @@ function AddJobCodeDialog({ isBusy, jobSites, onCancel, onSave }: { isBusy: bool
           Description
           <textarea id="job-code-description" className="mt-2 min-h-24 w-full rounded-md border border-input-border p-3" value={description} onChange={(event) => setDescription(event.target.value)} />
         </label>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" onClick={onCancel}>Cancel</button>
           <button
             className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60"
@@ -1282,7 +1282,7 @@ function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean
           <button className="min-h-10 rounded-md border border-input-border px-3 font-bold" type="button" onClick={onCancel}>Close</button>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block text-sm font-semibold text-muted" htmlFor="employee-first">
             First name
             <input id="employee-first" className="mt-2 min-h-12 w-full rounded-md border border-input-border px-3" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
@@ -1337,7 +1337,7 @@ function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean
           </label>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong" type="button" onClick={onCancel}>Cancel</button>
           <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !canSave} onClick={() => onSave({ email, firstName, lastName, role, workerType, contractorHstApplicable: workerType === 'contractor' ? contractorHstApplicable : false, hourlyRate: Number(rate), paidBreaks, paidBreakMinutes: Math.max(0, Math.min(240, Number(paidBreakMinutes))), canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: true })}>
             Save Employee

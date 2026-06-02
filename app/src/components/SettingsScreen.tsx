@@ -75,7 +75,7 @@ export function SettingsScreen({ profile, service, themePreference, onThemePrefe
           </div>
           {isPasswordOpen && (
             <>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="block text-sm font-semibold text-muted">
                   Current password
                   <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border px-3" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />

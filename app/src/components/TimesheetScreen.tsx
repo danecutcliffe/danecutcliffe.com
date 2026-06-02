@@ -47,7 +47,7 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
         </div>
       </div>
 
-      <div id="week-summary" className="scroll-mt-20 grid gap-3 sm:grid-cols-3">
+      <div id="week-summary" className="scroll-mt-20 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard label="Regular" value={`${summary.regularHours.toFixed(2)}h`} />
         <SummaryCard label="Overtime" value={`${summary.overtimeHours.toFixed(2)}h`} tone={summary.overtimeHours > 0 ? 'warn' : 'default'} />
         <SummaryCard label="Est. gross" value={`$${summary.grossPay.toFixed(2)}`} />

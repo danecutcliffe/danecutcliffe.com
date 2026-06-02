@@ -229,8 +229,8 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       </div>
 
       <div id="payroll-export" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0">
             <h2 className="text-2xl font-bold leading-tight">Payroll export</h2>
             <p className="mt-1 text-sm text-muted">{formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}</p>
           </div>
@@ -241,7 +241,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Metric label="Payable hours" value={`${displayedPayableHours.toFixed(2)}h`} />
           <Metric label="Gross payroll" value={money(displayedGrossPay)} />
           <Metric label="Overtime" value={`${displayedOvertimeHours.toFixed(2)}h`} />
@@ -266,7 +266,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
         <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold.</p>
-        <div className="grid items-start gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-4">
           <LabeledSelect
             label="Report Type"
             value={reportType}
@@ -419,7 +419,7 @@ function ReportPreview({ model }: { model: ReportModel }) {
         <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{model.rows.length} row{model.rows.length === 1 ? '' : 's'}</span>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
         {model.summary.map((item) => (
           <Metric key={item.label} label={item.label} value={item.value} />
         ))}
@@ -612,7 +612,7 @@ function OvertimeReport({ entries, profiles, weeklyOvertimeThresholdHours }: { e
 }
 
 function ReportList({ title, items }: { title: string; items: Array<{ title: string; body: string }> }) {
-  return <><h2 className="text-xl font-bold">{title}</h2><div className="mt-4 grid gap-3">{items.map((item) => <div key={item.title} className="rounded-md border border-app-border p-3"><p className="font-bold">{item.title}</p><p className="text-sm text-muted">{item.body}</p></div>)}</div></>;
+  return <><h2 className="text-xl font-bold">{title}</h2><div className="mt-4 grid grid-cols-1 gap-3">{items.map((item) => <div key={item.title} className="min-w-0 rounded-md border border-app-border p-3"><p className="break-words font-bold">{item.title}</p><p className="text-sm text-muted">{item.body}</p></div>)}</div></>;
 }
 
 function AuditTrail({ auditLogs, profiles, targetTable, onTargetTableChange }: { auditLogs: AuditLog[]; profiles: Profile[]; targetTable: string; onTargetTableChange: (value: string) => void }) {
@@ -648,7 +648,7 @@ function AuditTrail({ auditLogs, profiles, targetTable, onTargetTableChange }: {
           <div className="mt-4 divide-y divide-app-border-subtle">
             {filteredLogs.length === 0 && <p className="text-sm text-muted">No audit records to show yet.</p>}
             {filteredLogs.map((log) => (
-              <div key={log.id} className="grid gap-2 py-3 first:pt-0 last:pb-0 md:grid-cols-[160px_minmax(0,1fr)]">
+              <div key={log.id} className="grid grid-cols-1 gap-2 py-3 first:pt-0 last:pb-0 md:grid-cols-[160px_minmax(0,1fr)]">
                 <p className="text-sm font-semibold text-muted">{formatAtlanticDateTime(log.createdAt)}</p>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
