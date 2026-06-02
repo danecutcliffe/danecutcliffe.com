@@ -33,13 +33,22 @@ for (const method of ['clockOut', 'endBreak', 'updateEntryNotes']) {
 }
 
 const appShell = read('app/src/components/AppShell.tsx');
-if (!appShell.includes('createPortal(mobileNav, document.body)')) {
-  fail('Mobile bottom nav must render through a document.body portal so page scroll containers cannot unpin it.');
+if (appShell.includes('createPortal') || appShell.includes('react-dom')) {
+  fail('Mobile bottom nav must stay inside the app flex shell, not a fixed document.body portal.');
+}
+if (!appShell.includes('app-shell-content') || !appShell.includes('{mobileNav}')) {
+  fail('AppShell must keep the mobile nav as the bottom row after the scrollable app-shell-content region.');
 }
 
 const styles = read('app/src/styles/index.css');
-if (!styles.includes('.app-mobile-bottom-nav') || !styles.includes('position: fixed !important')) {
-  fail('Mobile bottom nav must keep its hardened fixed-position CSS.');
+if (!styles.includes('#root .app-shell') || !styles.includes('height: 100dvh')) {
+  fail('Mobile shell must keep a dynamic-viewport flex container.');
+}
+if (!styles.includes('#root .app-shell-content') || !styles.includes('-webkit-overflow-scrolling: touch')) {
+  fail('Mobile content must remain the only scroll region inside the app shell.');
+}
+if (!styles.includes('.app-mobile-bottom-nav') || styles.includes('position: fixed !important')) {
+  fail('Mobile bottom nav must be a normal bottom flex row, not a fixed-position overlay.');
 }
 
 const componentFiles = listFiles('app/src/components').filter((path) => path.endsWith('.tsx'));

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { createPortal } from 'react-dom';
 import { AlarmClock, ChevronDown, LogOut } from 'lucide-react';
 import type { AppRole, Profile } from '../domain/types';
 
@@ -99,8 +98,8 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
   ) : null;
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-10 border-b border-app-border bg-paper backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--color-paper)_95%,transparent)]">
+    <div className="app-shell min-h-screen bg-paper text-ink">
+      <header className="app-shell-header sticky top-0 z-10 border-b border-app-border bg-paper backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--color-paper)_95%,transparent)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-accent text-white">
@@ -132,7 +131,7 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
       </header>
 
       {tabs.length > 0 ? (
-        <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
+        <div className="app-shell-content mx-auto max-w-6xl lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
           {/* Desktop sidebar */}
           <nav className="sticky top-16 hidden self-start pt-6 lg:block" aria-label="Main navigation">
             <ul className="space-y-0.5">
@@ -173,10 +172,10 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
           <main className="px-4 pb-28 pt-4 lg:pb-8 lg:pl-0 lg:pr-4 lg:pt-6">{children}</main>
         </div>
       ) : (
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pb-8">{children}</main>
+        <main className="app-shell-content mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pb-8">{children}</main>
       )}
 
-      {mobileNav && createPortal(mobileNav, document.body)}
+      {mobileNav}
     </div>
   );
 }
