@@ -301,18 +301,11 @@ class SupabaseTimeClockService implements AdminTimeClockService {
   async endBreak({ entryId, at, gps }: { entryId: string; at: string; gps?: GpsPoint | null }) {
     await this.requireCurrentProfile();
     const row = unwrap(
-      await this.client
-        .from('time_entries')
-        .update({
-          clock_out: at,
-          clock_out_lat: capturedLat(gps),
-          clock_out_lng: capturedLng(gps),
-        })
-        .eq('id', entryId)
-        .eq('event_type', 'break')
-        .is('clock_out', null)
-        .select('*')
-        .single() as SupabaseResponse<TimeEntryRow>,
+      await this.client.rpc('employee_end_break', {
+        p_entry_id: entryId,
+        p_clock_out_lat: capturedLat(gps),
+        p_clock_out_lng: capturedLng(gps),
+      }) as SupabaseResponse<TimeEntryRow>,
       'Unable to end break. This break may already be closed.',
     );
     return mapTimeEntry(row);
