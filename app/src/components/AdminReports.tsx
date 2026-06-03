@@ -192,6 +192,11 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
             <p className="mt-1 text-sm text-muted">
               {labourBreakdown.propertyCount} propert{labourBreakdown.propertyCount === 1 ? 'y' : 'ies'} · {labourBreakdown.jobCount} job code{labourBreakdown.jobCount === 1 ? '' : 's'} · {labourBreakdown.payableHours.toFixed(2)} payable hours
             </p>
+            {labourBreakdown.unattributedBreakHours > 0 && (
+              <p className="mt-2 rounded-md border border-warn-border bg-warn-bg px-3 py-2 text-sm font-bold text-warning">
+                Review needed: {labourBreakdown.unattributedBreakHours.toFixed(2)}h of unpaid break time could not be matched to a work entry.
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-3 self-start sm:self-center">
             <div className="text-left sm:text-right">

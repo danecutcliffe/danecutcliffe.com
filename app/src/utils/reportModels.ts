@@ -1,6 +1,7 @@
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
-import { getAtlanticDateKey, getAtlanticWeekStart, getEntryDurationHours } from './time';
+import { getAtlanticDateKey } from './time';
 import { jobDisplayNameById, jobPropertyName, jobSiteById } from './jobs';
+import { computeEntryHours } from './timecardHours';
 
 export type ReportCellValue = string | number | null;
 
@@ -41,12 +42,6 @@ interface BuildDetailedTimecardReportParams {
 
 interface BuildPeriodReportParams extends BuildDetailedTimecardReportParams {}
 
-interface BreakAllocation {
-  durationHours: number;
-  paidHours: number;
-  unpaidHours: number;
-}
-
 const DETAIL_COLUMNS: ReportColumn[] = [
   { key: 'date', label: 'Date', width: 13, format: 'date' },
   { key: 'employee', label: 'Employee', width: 24 },
@@ -83,22 +78,13 @@ export function buildDetailedTimecardReport({
   const workEntries = entries
     .filter((entry) => entry.eventType === 'work')
     .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
-  const breakAllocations = allocateBreaks(entries, profileById, now);
-  const cumulativePaidByUserWeek = new Map<string, number>();
+  const { byEntryId, unattributedBreakHours } = computeEntryHours(entries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
 
   const rows = workEntries.map((entry) => {
     const profile = profileById.get(entry.userId);
     const job = entry.jobCodeId ? jobById.get(entry.jobCodeId) ?? null : null;
     const site = job?.jobSiteId ? siteById.get(job.jobSiteId) ?? null : null;
-    const allocation = breakAllocations.get(entry.id) ?? { durationHours: 0, paidHours: 0, unpaidHours: 0 };
-    const shiftLength = getEntryDurationHours(entry, now);
-    const paidHours = Math.max(0, shiftLength - allocation.unpaidHours);
-    const overtimeKey = `${entry.userId}|${getAtlanticWeekStart(entry.clockIn)}`;
-    const currentCumulative = cumulativePaidByUserWeek.get(overtimeKey) ?? 0;
-    const threshold = payPeriodSettings.weeklyOvertimeThresholdHours;
-    const regularHours = Math.max(0, Math.min(paidHours, threshold - currentCumulative));
-    const otHours = Math.max(0, paidHours - regularHours);
-    cumulativePaidByUserWeek.set(overtimeKey, currentCumulative + paidHours);
+    const hours = byEntryId.get(entry.id) ?? { durationHours: 0, paidBreakHours: 0, unpaidBreakHours: 0, paidHours: 0, regularHours: 0, otHours: 0, isOpen: !entry.clockOut };
 
     return {
       date: getAtlanticDateKey(entry.clockIn),
@@ -109,12 +95,12 @@ export function buildDetailedTimecardReport({
       job: jobDisplayNameById(entry.jobCodeId, jobById, siteById),
       firstIn: entry.clockIn,
       lastOut: entry.clockOut ?? null,
-      shiftLength: roundHours(shiftLength),
-      paidBreak: roundHours(allocation.paidHours),
-      unpaidBreak: roundHours(allocation.unpaidHours),
-      regularHours: roundHours(regularHours),
-      otHours: roundHours(otHours),
-      paidHours: roundHours(paidHours),
+      shiftLength: roundHours(hours.durationHours),
+      paidBreak: roundHours(hours.paidBreakHours),
+      unpaidBreak: roundHours(hours.unpaidBreakHours),
+      regularHours: roundHours(hours.regularHours),
+      otHours: roundHours(hours.otHours),
+      paidHours: roundHours(hours.paidHours),
       gpsStatus: gpsStatus(entry),
       entryStatus: entry.clockOut ? 'Closed' : 'Open',
       notes: entry.notes ?? '',
@@ -143,6 +129,7 @@ export function buildDetailedTimecardReport({
       ...(openEntries > 0 ? [{ severity: 'blocker' as const, message: `${openEntries} open work ${openEntries === 1 ? 'entry' : 'entries'}` }] : []),
       ...(openBreaks > 0 ? [{ severity: 'blocker' as const, message: `${openBreaks} open break ${openBreaks === 1 ? 'entry' : 'entries'}` }] : []),
       ...(missingJobCodes > 0 ? [{ severity: 'review' as const, message: `${missingJobCodes} work ${missingJobCodes === 1 ? 'entry is' : 'entries are'} missing a job code` }] : []),
+      ...(unattributedBreakHours > 0 ? [{ severity: 'review' as const, message: `${roundHours(unattributedBreakHours).toFixed(2)}h of unpaid break time could not be matched to a work entry` }] : []),
     ],
   };
 }
@@ -333,61 +320,6 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
       },
     ],
   };
-}
-
-function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Profile>, now: Date) {
-  const allocations = new Map<string, BreakAllocation>();
-  const workEntries = entries.filter((entry) => entry.eventType === 'work');
-  const breakEntriesByUserDay = entries
-    .filter((entry) => entry.eventType === 'break')
-    .sort((a, b) => a.clockIn.localeCompare(b.clockIn))
-    .reduce<Map<string, TimeEntry[]>>((groups, entry) => {
-      const key = `${entry.userId}|${getAtlanticDateKey(entry.clockIn)}`;
-      groups.set(key, [...(groups.get(key) ?? []), entry]);
-      return groups;
-    }, new Map());
-
-  workEntries.forEach((entry) => {
-    allocations.set(entry.id, { durationHours: 0, paidHours: 0, unpaidHours: 0 });
-  });
-
-  breakEntriesByUserDay.forEach((breakEntries) => {
-    let paidBreakUsedByProfile = new Map<string, number>();
-
-    breakEntries.forEach((breakEntry) => {
-      const profile = profileById.get(breakEntry.userId);
-      const attributedWorkEntry = findAttributedWorkEntry(workEntries, breakEntry);
-      if (!attributedWorkEntry) return;
-
-      const durationHours = getEntryDurationHours(breakEntry, now);
-      const paidLimit = profile?.paidBreaks ? Math.max(0, profile.paidBreakMinutes / 60) : 0;
-      const paidUsed = paidBreakUsedByProfile.get(breakEntry.userId) ?? 0;
-      const paidHours = Math.max(0, Math.min(durationHours, paidLimit - paidUsed));
-      const unpaidHours = Math.max(0, durationHours - paidHours);
-      paidBreakUsedByProfile = new Map(paidBreakUsedByProfile).set(breakEntry.userId, paidUsed + paidHours);
-
-      const current = allocations.get(attributedWorkEntry.id) ?? { durationHours: 0, paidHours: 0, unpaidHours: 0 };
-      allocations.set(attributedWorkEntry.id, {
-        durationHours: current.durationHours + durationHours,
-        paidHours: current.paidHours + paidHours,
-        unpaidHours: current.unpaidHours + unpaidHours,
-      });
-    });
-  });
-
-  return allocations;
-}
-
-function findAttributedWorkEntry(workEntries: TimeEntry[], breakEntry: TimeEntry) {
-  const breakStart = new Date(breakEntry.clockIn).getTime();
-  const sameUserWorkEntries = workEntries
-    .filter((entry) => entry.userId === breakEntry.userId)
-    .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
-  return sameUserWorkEntries.find((entry) => {
-    const start = new Date(entry.clockIn).getTime();
-    const end = entry.clockOut ? new Date(entry.clockOut).getTime() : Number.POSITIVE_INFINITY;
-    return breakStart >= start && breakStart <= end;
-  }) ?? [...sameUserWorkEntries].reverse().find((entry) => entry.clockIn <= breakEntry.clockIn) ?? null;
 }
 
 function profileLabel(profile: Profile) {

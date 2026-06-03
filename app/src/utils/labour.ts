@@ -1,6 +1,7 @@
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import { jobSiteById } from './jobs';
-import { addDaysToDateKey, calculateTimesheetSummary, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
+import { addDaysToDateKey, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
+import { computeEntryHours } from './timecardHours';
 
 export interface GrossUpScheduleEntry {
   effectiveDate: string;
@@ -43,6 +44,10 @@ export interface LabourCostBreakdown {
   propertyCount: number;
   jobCount: number;
   properties: LabourCostPropertyBreakdown[];
+  // Unpaid break time that payroll deducted but could not be attached to any work
+  // entry (impossible-but-representable data). Surfaced so totals are never silently
+  // off; expected to be 0.
+  unattributedBreakHours: number;
 }
 
 interface BuildLabourCostBreakdownParams {
@@ -107,60 +112,70 @@ export function buildLabourCostBreakdown({
   let payableHours = 0;
   let overtimeHours = 0;
   let employeeCount = 0;
+  let unattributedBreakHours = 0;
 
   entriesByUser.forEach((employeeEntries, userId) => {
     const profile = profileById.get(userId);
     if (!profile || profile.role !== 'employee') return;
 
-    const workEntries = employeeEntries.filter((entry) => entry.eventType === 'work');
-    const totalWorkHours = sumEntryHours(workEntries, now);
-    if (totalWorkHours <= 0) return;
+    const rate = profile.hourlyRate;
+    const { byEntryId, unattributedBreakHours: employeeUnattributedBreakHours } = computeEntryHours(
+      employeeEntries,
+      profileById,
+      weeklyOvertimeThresholdHours,
+      now,
+    );
+    unattributedBreakHours += employeeUnattributedBreakHours;
 
+    const workEntries = employeeEntries.filter((entry) => entry.eventType === 'work');
     const includedWorkEntries = selectedJobCodeId
       ? workEntries.filter((entry) => entry.jobCodeId === selectedJobCodeId)
       : workEntries;
-    const includedWorkHours = sumEntryHours(includedWorkEntries, now);
-    if (includedWorkHours <= 0) return;
 
-    const summary = calculateTimesheetSummary(employeeEntries, profile.hourlyRate, now, {
-      paidBreaks: profile.paidBreaks,
-      paidBreakMinutes: profile.paidBreakMinutes,
-      weeklyOvertimeThresholdHours,
+    // Cost each included work entry directly from its own regular/overtime split
+    // (overtime was attributed chronologically across the full employee-week inside
+    // computeEntryHours), apply the entry-date gross-up multiplier, then aggregate by
+    // job code. No gross-pay apportionment: a job's cost equals the hours actually
+    // worked on it, so it reconciles to that job's timecard rows.
+    const jobAgg = new Map<string, { jobCodeId: string | null; grossHours: number; netHours: number; otHours: number; grossPay: number; loadedCost: number }>();
+    let employeeGrossHours = 0;
+
+    includedWorkEntries.forEach((entry) => {
+      const hours = byEntryId.get(entry.id);
+      if (!hours) return;
+      const entryMultiplier = labourCostMultiplierForProfile(profile, multiplierForDate(grossUpSchedule, getAtlanticDateKey(entry.clockIn)));
+      const entryGrossPay = hours.regularHours * rate + hours.otHours * rate * 1.5;
+      const entryLoadedCost = entryGrossPay * entryMultiplier;
+      const key = entry.jobCodeId ?? NO_JOB_KEY;
+      const agg = jobAgg.get(key) ?? { jobCodeId: entry.jobCodeId, grossHours: 0, netHours: 0, otHours: 0, grossPay: 0, loadedCost: 0 };
+      agg.grossHours += hours.durationHours;
+      agg.netHours += hours.paidHours;
+      agg.otHours += hours.otHours;
+      agg.grossPay += entryGrossPay;
+      agg.loadedCost += entryLoadedCost;
+      jobAgg.set(key, agg);
+      employeeGrossHours += hours.durationHours;
     });
-    const workerCostMultiplier = weightedWorkerMultiplier(includedWorkEntries, profile, grossUpSchedule, now);
-    const includedGrossPay = summary.grossPay * (includedWorkHours / totalWorkHours);
+
+    if (employeeGrossHours <= 0) return;
 
     employeeCount += 1;
-    grossPay += includedGrossPay;
-    loadedCost += includedGrossPay * workerCostMultiplier;
-    payableHours += summary.netWorkHours * (includedWorkHours / totalWorkHours);
-    overtimeHours += summary.overtimeHours * (includedWorkHours / totalWorkHours);
+    const employeeName = profileDisplayName(profile);
 
-    const jobHours = new Map<string, { jobCodeId: string | null; workHours: number; weightedMultSum: number }>();
-    includedWorkEntries.forEach((entry) => {
-      const key = entry.jobCodeId ?? NO_JOB_KEY;
-      const current = jobHours.get(key);
-      const hours = getEntryDurationHours(entry, now);
-      const entryMultiplier = labourCostMultiplierForProfile(profile, multiplierForDate(grossUpSchedule, getAtlanticDateKey(entry.clockIn)));
-      if (current) {
-        current.workHours += hours;
-        current.weightedMultSum += hours * entryMultiplier;
-      } else {
-        jobHours.set(key, { jobCodeId: entry.jobCodeId, workHours: hours, weightedMultSum: hours * entryMultiplier });
-      }
-    });
-
-    jobHours.forEach(({ jobCodeId, workHours: jobWorkHours, weightedMultSum }, jobKey) => {
-      const job = jobCodeId ? jobById.get(jobCodeId) ?? null : null;
+    jobAgg.forEach((agg, jobKey) => {
+      const job = agg.jobCodeId ? jobById.get(agg.jobCodeId) ?? null : null;
       const site = job?.jobSiteId ? siteById.get(job.jobSiteId) ?? null : null;
       const propertyId = site?.id ?? NO_PROPERTY_ID;
       const propertyName = site?.name ?? NO_PROPERTY_NAME;
-      const jobShare = jobWorkHours / totalWorkHours;
-      const jobGrossPay = summary.grossPay * jobShare;
-      const jobWeightedMultiplier = jobWorkHours > 0 ? weightedMultSum / jobWorkHours : workerCostMultiplier;
-      const jobLoadedCost = jobGrossPay * jobWeightedMultiplier;
-      const jobPayableHours = summary.netWorkHours * jobShare;
-      const employeeName = profileDisplayName(profile);
+      const jobGrossPay = agg.grossPay;
+      const jobLoadedCost = agg.loadedCost;
+      const jobPayableHours = agg.netHours;
+      const jobWorkHours = agg.grossHours;
+
+      grossPay += jobGrossPay;
+      loadedCost += jobLoadedCost;
+      payableHours += jobPayableHours;
+      overtimeHours += agg.otHours;
 
       let property = propertyMap.get(propertyId);
       if (!property) {
@@ -192,7 +207,7 @@ export function buildLabourCostBreakdown({
         const employees = new Map<string, EmployeeAggregate>();
         addEmployeeContribution(employees, profile.id, employeeName, jobGrossPay, jobLoadedCost);
         property.jobs.set(jobKey, {
-          jobCodeId,
+          jobCodeId: agg.jobCodeId,
           jobCodeLabel: jobReportLabel(job),
           grossPay: jobGrossPay,
           loadedCost: jobLoadedCost,
@@ -230,6 +245,7 @@ export function buildLabourCostBreakdown({
     propertyCount: properties.length,
     jobCount: properties.reduce((total, property) => total + property.jobs.length, 0),
     properties,
+    unattributedBreakHours,
   };
 }
 
@@ -288,6 +304,7 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
   let payableHours = 0;
   let overtimeHours = 0;
   let employeeCount = 0;
+  let unattributedBreakHours = 0;
 
   breakdowns.forEach((breakdown) => {
     grossPay += breakdown.grossPay;
@@ -295,6 +312,7 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
     payableHours += breakdown.payableHours;
     overtimeHours += breakdown.overtimeHours;
     employeeCount += breakdown.employeeCount;
+    unattributedBreakHours += breakdown.unattributedBreakHours;
 
     breakdown.properties.forEach((sourceProperty) => {
       let property = propertyMap.get(sourceProperty.propertyId);
@@ -363,6 +381,7 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
     propertyCount: properties.length,
     jobCount: properties.reduce((total, property) => total + property.jobs.length, 0),
     properties,
+    unattributedBreakHours,
   };
 }
 
@@ -382,10 +401,6 @@ function countEmployeesWithIncludedWork(entries: TimeEntry[], profiles: Profile[
   return employeeIds.size;
 }
 
-function sumEntryHours(entries: TimeEntry[], now: Date) {
-  return entries.reduce((total, entry) => total + getEntryDurationHours(entry, now), 0);
-}
-
 function labourCostMultiplierForProfile(profile: Profile, employeeMultiplier: number) {
   if (profile.workerType === 'contractor') return profile.contractorHstApplicable ? 1.15 : 1;
   return employeeMultiplier;
@@ -403,22 +418,6 @@ function multiplierForDate(schedule: GrossUpScheduleEntry[], dateKey: string): n
     }
   }
   return result;
-}
-
-function weightedWorkerMultiplier(entries: TimeEntry[], profile: Profile, schedule: GrossUpScheduleEntry[], now: Date): number {
-  let weighted = 0;
-  let totalHours = 0;
-  for (const entry of entries) {
-    const hours = getEntryDurationHours(entry, now);
-    if (hours <= 0) continue;
-    const base = multiplierForDate(schedule, getAtlanticDateKey(entry.clockIn));
-    weighted += hours * labourCostMultiplierForProfile(profile, base);
-    totalHours += hours;
-  }
-  if (totalHours <= 0) {
-    return labourCostMultiplierForProfile(profile, multiplierForDate(schedule, getAtlanticDateKey(now.toISOString())));
-  }
-  return weighted / totalHours;
 }
 
 function profileDisplayName(profile: Profile) {
