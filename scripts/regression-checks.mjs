@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -41,6 +41,7 @@ if (!appShell.includes('app-shell-content') || !appShell.includes('{mobileNav}')
 }
 
 const styles = read('app/src/styles/index.css');
+const appIndex = read('app/index.html');
 if (!styles.includes('#root .app-shell') || !styles.includes('height: 100dvh')) {
   fail('Mobile shell must keep a dynamic-viewport flex container.');
 }
@@ -52,6 +53,9 @@ if (!styles.includes('scroll-padding-bottom: calc(var(--mobile-nav-height) + 1re
 }
 if (!styles.includes('.app-mobile-bottom-nav') || styles.includes('position: fixed !important')) {
   fail('Mobile bottom nav must be a normal bottom flex row, not a fixed-position overlay.');
+}
+if (appIndex.includes('time-ui-overrides.css') || existsSync(resolve(root, 'app/public/time-ui-overrides.css'))) {
+  fail('Runtime CSS overrides must not bypass source CSS for mobile shell or nav behavior.');
 }
 
 const scopeBuilder = read('app/src/components/AdminScopeBuilder.tsx');
