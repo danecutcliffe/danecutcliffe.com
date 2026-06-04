@@ -123,10 +123,14 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
             ) : (
               <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !employee} onClick={() => employee && runAction(() => service.approveTimesheet({ userId: employee.id, weekStart: periodStart, weekEnd: periodDays[periodDays.length - 1], approvedBy: adminProfile.id }).then())}>Approve Period</button>
             )}
-            <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Unlock the pay period before adding entries.' : 'Add manual entry'} onClick={() => setManualOpen(true)}>Add Manual Entry</button>
+            <button className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Use Unlock Period before adding entries.' : 'Add manual entry'} onClick={() => setManualOpen(true)}>Add Manual Entry</button>
           </div>
         </div>
-        {isPeriodApproved && <p className="mt-3 rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text">This pay period is approved. Unlock it before making corrections.</p>}
+        {isPeriodApproved && (
+          <p className="mt-3 rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text">
+            This pay period is approved and locked. Use Unlock Period above, make the correction, then approve the period again when the fix is done. The database will reject edits, deletes, and manual entries until it is unlocked.
+          </p>
+        )}
         <div className="mt-4">
           {profileEntries.length === 0 && <p className="text-sm text-muted">No entries for this week.</p>}
           {viewMode === 'summary' && displayDays.map((day) => {
@@ -238,7 +242,7 @@ function TimesheetEntryCard({
         <GpsCue entry={entry} jobById={jobById} siteById={siteById} />
         <EntryTrustCue entry={entry} profileById={profileById} />
       </div>
-      <button className="timesheet-edit-button rounded-md border border-input-border px-4 font-bold disabled:opacity-40" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Unlock the pay period before editing entries.' : 'Edit entry'} onClick={onEdit}>Edit</button>
+      <button className="timesheet-edit-button rounded-md border border-input-border px-4 font-bold disabled:opacity-40" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Use Unlock Period before editing entries.' : 'Edit entry'} onClick={onEdit}>Edit</button>
     </div>
   );
 }

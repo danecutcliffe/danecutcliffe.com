@@ -6,6 +6,7 @@ import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
 import { buildReportContextEntries, buildReportWarningEntries } from '../utils/reportContext';
+import { buildPayrollExportReadiness } from '../utils/reportReadiness';
 import { downloadReportXlsx } from '../utils/xlsxReports';
 import {
   addDaysToDateKey,
@@ -86,7 +87,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   );
   const hasReportFilters = employeeIds.length > 0 || propertyIds.length > 0 || jobCodeIds.length > 0;
   const topPeriodExportableEntries = useMemo(() => topPeriodEntries.filter((entry) => entry.clockOut), [topPeriodEntries]);
-  const topPeriodBlockers = useMemo(() => buildExportBlockers(topPeriodEntries, profileById), [profileById, topPeriodEntries]);
+  const topPeriodReadiness = useMemo(() => buildPayrollExportReadiness(topPeriodEntries, profileById, payPeriodSettings), [payPeriodSettings, profileById, topPeriodEntries]);
   const topPeriodSummary = useMemo(() => calculatePayrollSummary(topPeriodEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople, topPeriodEntries]);
   const labourBreakdown = useMemo(
     () => buildLabourCostBreakdownAcrossPayPeriods({
@@ -141,6 +142,9 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       : reportType === 'payrollSummary'
         ? payrollSummaryModel
         : null;
+  const selectedReportExceptions = exportFormat === 'detailedCsv' ? detailedTimecardModel.exceptions : selectedReportModel?.exceptions ?? [];
+  const selectedReportBlockers = selectedReportExceptions.filter((exception) => exception.severity === 'blocker');
+  const selectedReportWarnings = selectedReportExceptions.filter((exception) => exception.severity === 'review');
   const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${reportPeriodStart}_to_${reportPeriodEnd}.xlsx`;
   const canExportSelectedReport = exportFormat === 'xlsx'
     ? Boolean(selectedReportModel && selectedReportModel.rows.length > 0)
@@ -260,17 +264,10 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           <Metric label="Exportable rows" value={topPeriodExportableEntries.length.toString()} />
         </div>
 
-        {topPeriodBlockers.length > 0 && (
-          <div className="mt-4 rounded-md border border-error-border bg-error-bg p-3">
-            <p className="text-sm font-bold text-error-text">Resolve before payroll report export</p>
-            <ul className="mt-2 space-y-1 text-sm font-semibold text-error-text">
-              {topPeriodBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-            </ul>
-          </div>
-        )}
-        {topPeriodBlockers.length === 0 && topPeriodExportableEntries.length > 0 && (
+        <ReadinessLists readiness={topPeriodReadiness} />
+        {topPeriodReadiness.blockers.length === 0 && topPeriodExportableEntries.length > 0 && (
           <p className="mt-4 rounded-md bg-success-bg p-3 text-sm font-bold text-success">
-            This pay period is ready for report export. Open entries are excluded from exportable report rows by design.
+            Payroll reports can be exported. Review any warnings first; open entries are listed as allowed exclusions and are omitted from payroll summary/location export rows by design.
           </p>
         )}
       </div>
@@ -282,6 +279,17 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
             Filtered rows use full employee pay-period/week context for break and overtime calculations in report previews and XLSX exports.
           </p>
         )}
+        {(selectedReportBlockers.length > 0 || selectedReportWarnings.length > 0) && (
+          <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+            {selectedReportBlockers.length > 0 && (
+              <ExceptionSummary title="Selected report blockers" tone="error" messages={selectedReportBlockers.map((exception) => exception.message)} />
+            )}
+            {selectedReportWarnings.length > 0 && (
+              <ExceptionSummary title="Selected report warnings" tone="warning" messages={selectedReportWarnings.map((exception) => exception.message)} />
+            )}
+          </div>
+        )}
+        <SelectedExportNotice reportType={reportType} exportFormat={exportFormat} hasExceptions={selectedReportExceptions.length > 0} />
         <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-4">
           <LabeledSelect
             label="Report Type"
@@ -328,6 +336,62 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
       <AuditTrail auditLogs={auditLogs} profiles={profiles} targetTable={auditTable} onTargetTableChange={setAuditTable} />
     </section>
+  );
+}
+
+function ReadinessLists({ readiness }: { readiness: ReturnType<typeof buildPayrollExportReadiness> }) {
+  if (readiness.blockers.length === 0 && readiness.warnings.length === 0 && readiness.acceptableExclusions.length === 0) return null;
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      {readiness.blockers.length > 0 && <ExceptionSummary title="Blockers" tone="error" messages={readiness.blockers} />}
+      {readiness.warnings.length > 0 && <ExceptionSummary title="Warnings" tone="warning" messages={readiness.warnings} />}
+      {readiness.acceptableExclusions.length > 0 && <ExceptionSummary title="Allowed exclusions" tone="neutral" messages={readiness.acceptableExclusions} />}
+    </div>
+  );
+}
+
+function SelectedExportNotice({ reportType, exportFormat, hasExceptions }: { reportType: ReportType; exportFormat: ExportFormat; hasExceptions: boolean }) {
+  if (exportFormat === 'detailedCsv') {
+    return (
+      <p className="mb-3 rounded-md border border-app-border bg-card-alt px-3 py-2 text-sm font-semibold text-muted-strong">
+        Detailed CSV is a raw row export. Review blockers and warnings in this screen first because CSV files do not include an Exceptions sheet.
+      </p>
+    );
+  }
+
+  if (reportType === 'detailed') {
+    return (
+      <p className="mb-3 rounded-md border border-app-border bg-card-alt px-3 py-2 text-sm font-semibold text-muted-strong">
+        Detailed Timecard XLSX includes open entries and marks them Open. Do not use it as a final payroll report until those entries are closed.
+      </p>
+    );
+  }
+
+  if (reportType === 'hoursByLocation' || reportType === 'payrollSummary') {
+    return (
+      <p className="mb-3 rounded-md border border-app-border bg-card-alt px-3 py-2 text-sm font-semibold text-muted-strong">
+        This summary export omits open entries from payroll totals and lists report issues in the XLSX Exceptions sheet{hasExceptions ? '.' : ' when they exist.'}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function ExceptionSummary({ title, tone, messages }: { title: string; tone: 'error' | 'warning' | 'neutral'; messages: string[] }) {
+  const className = tone === 'error'
+    ? 'border-error-border bg-error-bg text-error-text'
+    : tone === 'warning'
+      ? 'border-warn-border bg-warn-bg text-warning'
+      : 'border-app-border bg-card-alt text-muted-strong';
+  return (
+    <div className={`rounded-md border p-3 ${className}`}>
+      <p className="text-sm font-bold">{title}</p>
+      <ul className="mt-2 space-y-1 text-sm font-semibold">
+        {messages.map((message) => <li key={message}>{message}</li>)}
+      </ul>
+    </div>
   );
 }
 
@@ -735,25 +799,6 @@ function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[], wee
     },
     { netWorkHours: 0, overtimeHours: 0, grossPay: 0, openEntries: 0 },
   );
-}
-
-function buildExportBlockers(entries: TimeEntry[], profileById: Map<string, Profile>) {
-  const blockers: string[] = [];
-  const openCount = entries.filter((entry) => !entry.clockOut).length;
-  const missingJobCount = entries.filter((entry) => entry.eventType === 'work' && !entry.jobCodeId).length;
-  const missingProfileCount = entries.filter((entry) => !profileById.has(entry.userId)).length;
-  const missingRateNames = [...new Set(entries
-    .filter((entry) => entry.eventType === 'work')
-    .map((entry) => profileById.get(entry.userId))
-    .filter((profile): profile is Profile => profile !== undefined && profile.role === 'employee' && profile.hourlyRate <= 0)
-    .map(name))];
-
-  if (openCount > 0) blockers.push(`${openCount} open time ${openCount === 1 ? 'entry' : 'entries'}`);
-  if (missingJobCount > 0) blockers.push(`${missingJobCount} work ${missingJobCount === 1 ? 'entry is' : 'entries are'} missing a job code`);
-  if (missingProfileCount > 0) blockers.push(`${missingProfileCount} ${missingProfileCount === 1 ? 'entry has' : 'entries have'} no employee profile`);
-  if (missingRateNames.length > 0) blockers.push(`Missing pay rate: ${missingRateNames.join(', ')}`);
-
-  return blockers;
 }
 
 function name(profile?: Profile) {

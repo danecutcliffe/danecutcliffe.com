@@ -250,6 +250,41 @@ describe('filtered report context', () => {
     expect(sheet?.getRow(2).getCell(2).value).toBe('0.60h of unpaid break time could not be matched to a work entry');
   });
 
+  it('keeps open entries visible in detail while excluding them from summary totals', () => {
+    resetEntrySequence();
+    const openWork = workEntry({
+      id: 'open-report-work',
+      jobCodeId: 'job-qa0358',
+      clockIn: '2026-06-02T12:00:00.000Z',
+      hours: 0,
+      clockOut: null,
+    });
+    const params = {
+      entries: [openWork],
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-02T16:00:00.000Z'),
+    };
+
+    const detail = buildDetailedTimecardReport(params);
+    const payrollSummary = buildPayrollSummaryReport(params);
+
+    expect(detail.rows[0].entryStatus).toBe('Open');
+    expect(detail.exceptions).toContainEqual({
+      severity: 'blocker',
+      message: '1 open work entry',
+    });
+    expect(payrollSummary.rows).toEqual([]);
+    expect(payrollSummary.exceptions).toContainEqual({
+      severity: 'blocker',
+      message: '1 open work entry',
+    });
+  });
+
   it('builds detailed CSV from the canonical detailed report rows', () => {
     resetEntrySequence();
     const work = workEntry({ id: 'csv-visible-work', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8 });
