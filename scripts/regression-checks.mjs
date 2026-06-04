@@ -36,6 +36,11 @@ for (const method of ['clockOut', 'endBreak', 'updateEntryNotes']) {
   }
 }
 
+const updateTimeEntryBlock = extractMethod(service, 'updateTimeEntry');
+requireIncludes(updateTimeEntryBlock, 'await this.assertAdmin();', 'Only admin correction flow may write time-entry edit metadata.');
+requireIncludes(updateTimeEntryBlock, 'edited_by: editedBy', 'Admin correction flow must preserve who edited a time entry.');
+requireIncludes(updateTimeEntryBlock, 'edited_at: new Date().toISOString()', 'Admin correction flow must preserve when a time entry was edited.');
+
 const appShell = read('app/src/components/AppShell.tsx');
 if (appShell.includes('createPortal') || appShell.includes('react-dom')) {
   fail('Mobile bottom nav must stay inside the app flex shell, not a fixed document.body portal.');
@@ -137,6 +142,31 @@ const overlapGuardCalls = integrityMigration.match(/public\.has_closed_work_over
 if (overlapGuardCalls < 2) {
   fail('Overlap rejection must run for both insert and update paths.');
 }
+const adminBypassIndex = integrityMigration.indexOf('if public.is_admin() then');
+const metadataStripIndex = integrityMigration.indexOf('if new.edited_by is distinct from old.edited_by');
+if (adminBypassIndex === -1 || metadataStripIndex === -1 || adminBypassIndex > metadataStripIndex) {
+  fail('Time-entry update guard must preserve legitimate admin edit metadata before stripping employee self-edit noise.');
+}
+requireIncludes(
+  integrityMigration,
+  'new.edited_by := old.edited_by;',
+  'Time-entry update guard must strip employee self-edit edited_by noise.',
+);
+requireIncludes(
+  integrityMigration,
+  'new.edited_at := old.edited_at;',
+  'Time-entry update guard must strip employee self-edit edited_at noise.',
+);
+
+const switchJobMetadataMigration = read('supabase/migrations/20260604163500_employee_switch_job_no_edit_metadata.sql');
+if (switchJobMetadataMigration.includes('edited_by =') || switchJobMetadataMigration.includes('edited_at =')) {
+  fail('employee_switch_job must not mark normal job switches as edited timecard corrections.');
+}
+requireIncludes(
+  switchJobMetadataMigration,
+  'create or replace function public.employee_switch_job',
+  'Metadata cleanup migration must keep the employee_switch_job RPC replacement.',
+);
 
 const scopeBuilder = read('app/src/components/AdminScopeBuilder.tsx');
 if (scopeBuilder.includes('sticky bottom-') || scopeBuilder.includes('fixed bottom-')) {
