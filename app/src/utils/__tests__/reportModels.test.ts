@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport } from '../reportModels';
 import { buildReportContextEntries, buildReportWarningEntries } from '../reportContext';
 import { buildReportWorkbook } from '../xlsxReports';
+import { buildDetailedCsv } from '../csv';
 import {
   breakEntry,
   employeeProfile,
@@ -247,5 +248,30 @@ describe('filtered report context', () => {
 
     expect(sheet?.getRow(2).getCell(1).value).toBe('review');
     expect(sheet?.getRow(2).getCell(2).value).toBe('0.60h of unpaid break time could not be matched to a work entry');
+  });
+
+  it('builds detailed CSV from the canonical detailed report rows', () => {
+    resetEntrySequence();
+    const work = workEntry({ id: 'csv-visible-work', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8 });
+    const hiddenBreak = breakEntry({ id: 'csv-hidden-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.5 });
+    const contextEntries = buildReportContextEntries([work, hiddenBreak], [work], [work], '2026-06-01', '2026-06-14');
+    const warningEntries = buildReportWarningEntries([work, hiddenBreak], [work], [work]);
+    const report = buildDetailedTimecardReport({
+      entries: [work],
+      contextEntries,
+      warningEntries,
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+
+    const csv = buildDetailedCsv(report);
+
+    expect(csv).toContain('Paid Hours');
+    expect(csv).toContain('8.00,0.00,0.50,7.50,0.00,7.50');
   });
 });

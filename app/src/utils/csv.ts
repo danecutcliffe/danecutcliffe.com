@@ -1,8 +1,5 @@
-import type { JobCode, JobSite, Profile, TimeEntry } from '../domain/types';
-import { jobDisplayName, jobSiteById } from './jobs';
-import { calculateTimesheetSummary, formatAtlanticDateTime, getAtlanticDateKey, getEntryDurationHours } from './time';
-
-const detailedHeaders = ['Date', 'Employee', 'Property', 'Job Code', 'Job', 'Clock In', 'Clock Out', 'Hours', 'Break Hours', 'Net Hours', 'GPS Status', 'Notes'];
+import type { ReportCellValue, ReportColumn, ReportModel } from './reportModels';
+import { formatAtlanticDateTime } from './time';
 
 function escapeCsvValue(value: string | number | null | undefined): string {
   const text = value === null || value === undefined ? '' : String(value);
@@ -16,47 +13,19 @@ function toCsv(headers: string[], rows: Array<Array<string | number | null | und
   return [headers, ...rows].map((row) => row.map(escapeCsvValue).join(',')).join('\n');
 }
 
-function employeeName(profile?: Profile) {
-  return profile ? `${profile.firstName} ${profile.lastName}` : 'Unknown Employee';
+export function buildDetailedCsv(model: ReportModel): string {
+  return toCsv(
+    model.columns.map((column) => column.label),
+    model.rows.map((row) => model.columns.map((column) => formatReportCell(row[column.key], column))),
+  );
 }
 
-function getGpsStatus(entry: TimeEntry): string {
-  const clockInMissing = entry.clockInLat === null || entry.clockInLat === undefined;
-  const clockOutMissing = entry.clockOut && (entry.clockOutLat === null || entry.clockOutLat === undefined);
-  return clockInMissing || clockOutMissing ? 'No GPS' : 'GPS Captured';
-}
-
-export function buildDetailedCsv(params: {
-  entries: TimeEntry[];
-  profiles: Profile[];
-  jobSites: JobSite[];
-  jobCodes: JobCode[];
-  now?: Date;
-}): string {
-  const profileById = new Map(params.profiles.map((profile) => [profile.id, profile]));
-  const jobById = new Map(params.jobCodes.map((job) => [job.id, job]));
-  const siteById = jobSiteById(params.jobSites);
-  const rows = params.entries.map((entry) => {
-    const profile = profileById.get(entry.userId);
-    const job = entry.jobCodeId ? jobById.get(entry.jobCodeId) : undefined;
-    const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : undefined;
-    const summary = calculateTimesheetSummary([entry], profile?.hourlyRate ?? 0, params.now, { paidBreaks: profile?.paidBreaks ?? false, paidBreakMinutes: profile?.paidBreakMinutes ?? 30 });
-    return [
-      getAtlanticDateKey(entry.clockIn),
-      employeeName(profile),
-      entry.eventType === 'break' ? '' : (site?.name ?? ''),
-      entry.eventType === 'break' ? 'Break' : (job?.code ?? job?.name ?? ''),
-      entry.eventType === 'break' ? 'Break' : jobDisplayName(job, site),
-      formatAtlanticDateTime(entry.clockIn),
-      entry.clockOut ? formatAtlanticDateTime(entry.clockOut) : 'In progress',
-      getEntryDurationHours(entry, params.now).toFixed(2),
-      summary.breakHours.toFixed(2),
-      summary.netWorkHours.toFixed(2),
-      getGpsStatus(entry),
-      entry.notes ?? '',
-    ];
-  });
-  return toCsv(detailedHeaders, rows);
+function formatReportCell(value: ReportCellValue, column: ReportColumn): string | number {
+  if (value === null || value === undefined) return '';
+  if (column.format === 'time' && typeof value === 'string') return formatAtlanticDateTime(value);
+  if (column.format === 'hours' && typeof value === 'number') return value.toFixed(2);
+  if (column.format === 'currency' && typeof value === 'number') return value.toFixed(2);
+  return value;
 }
 
 export function downloadCsv(filename: string, csv: string) {

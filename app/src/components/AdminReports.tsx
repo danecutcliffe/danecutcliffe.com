@@ -99,7 +99,6 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     }),
     [entries, grossUpMultipliers, jobCodes, jobSites, payPeriodSettings, profiles],
   );
-  const detailedCsv = buildDetailedCsv({ entries: filteredEntries, profiles, jobSites, jobCodes });
   const detailedFilename = `time-detail-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
   const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
     entries: filteredEntries,
@@ -112,6 +111,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     periodStart: reportPeriodStart,
     periodEnd: reportPeriodEnd,
   }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
+  const detailedCsv = useMemo(() => buildDetailedCsv(detailedTimecardModel), [detailedTimecardModel]);
   const hoursByLocationModel = useMemo(() => buildHoursByLocationReport({
     entries: filteredEntries,
     contextEntries: reportContextEntries,

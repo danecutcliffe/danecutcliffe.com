@@ -28,6 +28,11 @@ const requireIncludes = (source, needle, message) => {
 };
 
 const service = read('app/src/services/supabaseTimeClockService.ts');
+const timeUtils = read('app/src/utils/time.ts');
+
+if (timeUtils.includes('getEntryPayableHours')) {
+  fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
+}
 
 for (const method of ['clockOut', 'endBreak', 'updateEntryNotes']) {
   const block = extractMethod(service, method);

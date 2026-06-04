@@ -150,6 +150,9 @@ export interface TimesheetSummaryOptions {
   weeklyOvertimeThresholdHours?: number;
 }
 
+// Aggregate preview helper for dashboard and timesheet summary cards. It does not
+// attribute breaks to job-coded work rows, so payroll/report/export row math should
+// use buildDetailedTimecardReport()/computeEntryHours() instead.
 export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: number, now = new Date(), options: TimesheetSummaryOptions = {}) {
   const workEntries = entries.filter((entry) => entry.eventType === 'work');
   const breakEntries = entries.filter((entry) => entry.eventType === 'break');
@@ -205,14 +208,6 @@ export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: numb
     overtimeHours: roundedOvertimeHours,
     grossPay,
   };
-}
-
-export function getEntryPayableHours(entry: TimeEntry, now = new Date(), options: TimesheetSummaryOptions = {}) {
-  const duration = getEntryDurationHours(entry, now);
-  if (entry.eventType === 'work') return duration;
-  if (!options.paidBreaks) return -duration;
-  const paidBreakLimitHours = Math.max(0, (options.paidBreakMinutes ?? 30) / 60);
-  return -Math.max(0, duration - paidBreakLimitHours);
 }
 
 export function groupEntriesByAtlanticDate(entries: TimeEntry[]) {
