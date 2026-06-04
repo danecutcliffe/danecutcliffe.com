@@ -563,16 +563,18 @@ function FormModal({ children, onClose }: { children: ReactNode; onClose?: () =>
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end overflow-hidden bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
-      <div className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-md bg-card shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-2xl">
-        {onClose && (
-          <div className="flex justify-end px-4 pt-3">
-            <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-            </button>
-          </div>
-        )}
-        {children}
+    <div className="fixed inset-0 z-[80] overflow-y-auto bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4">
+      <div className="flex min-h-full items-start sm:items-center">
+        <div className="w-full rounded-md bg-card shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-2xl sm:overflow-y-auto">
+          {onClose && (
+            <div className="flex justify-end px-4 pt-3">
+              <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );
