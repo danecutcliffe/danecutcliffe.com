@@ -23,6 +23,10 @@ const fail = (message) => {
   throw new Error(`[regression-check] ${message}`);
 };
 
+const requireIncludes = (source, needle, message) => {
+  if (!source.includes(needle)) fail(message);
+};
+
 const service = read('app/src/services/supabaseTimeClockService.ts');
 
 for (const method of ['clockOut', 'endBreak', 'updateEntryNotes']) {
@@ -56,6 +60,82 @@ if (!styles.includes('.app-mobile-bottom-nav') || styles.includes('position: fix
 }
 if (appIndex.includes('time-ui-overrides.css') || existsSync(resolve(root, 'app/public/time-ui-overrides.css'))) {
   fail('Runtime CSS overrides must not bypass source CSS for mobile shell or nav behavior.');
+}
+
+const integrityMigration = read('supabase/migrations/20260604154000_time_entry_integrity_guards.sql');
+requireIncludes(
+  integrityMigration,
+  'create or replace function public.time_entry_touches_approved_period',
+  'Time-entry integrity migration must keep approved-period detection.',
+);
+requireIncludes(
+  integrityMigration,
+  "daterange(approval.week_start, approval.week_end + 1, '[)') &&",
+  'Approved-period detection must use a range overlap, not a single clock-in date.',
+);
+requireIncludes(
+  integrityMigration,
+  "entry_clock_in at time zone 'America/Halifax'",
+  'Approved-period detection must use Atlantic calendar dates.',
+);
+requireIncludes(
+  integrityMigration,
+  'create trigger time_entries_guard_insert',
+  'Approved-period insert blocking must stay attached to time_entries.',
+);
+requireIncludes(
+  integrityMigration,
+  'before insert on public.time_entries',
+  'Approved-period insert blocking must run before insert.',
+);
+requireIncludes(
+  integrityMigration,
+  'create trigger time_entries_guard_delete',
+  'Approved-period delete blocking must stay attached to time_entries.',
+);
+requireIncludes(
+  integrityMigration,
+  'before delete on public.time_entries',
+  'Approved-period delete blocking must run before delete.',
+);
+requireIncludes(
+  integrityMigration,
+  'public.time_entry_touches_approved_period(old.user_id, old.clock_in, old.clock_out)',
+  'Approved-period update guard must protect the original entry period.',
+);
+requireIncludes(
+  integrityMigration,
+  'public.time_entry_touches_approved_period(new.user_id, new.clock_in, new.clock_out)',
+  'Approved-period update guard must block moving entries into an approved period.',
+);
+requireIncludes(
+  integrityMigration,
+  'create or replace function public.has_closed_work_overlap',
+  'Time-entry integrity migration must keep closed-work overlap detection.',
+);
+requireIncludes(
+  integrityMigration,
+  "candidate_event_type = 'work'",
+  'Overlap detection must apply only to work entries.',
+);
+requireIncludes(
+  integrityMigration,
+  'candidate_clock_out is not null',
+  'Overlap detection must target closed candidate work intervals.',
+);
+requireIncludes(
+  integrityMigration,
+  "candidate_clock_in < coalesce(existing.clock_out, 'infinity'::timestamptz)",
+  'Overlap detection must reject closed work overlapping an existing open work interval.',
+);
+requireIncludes(
+  integrityMigration,
+  'existing.clock_in < candidate_clock_out',
+  'Overlap detection must reject intersecting closed work intervals.',
+);
+const overlapGuardCalls = integrityMigration.match(/public\.has_closed_work_overlap\(new\.id, new\.user_id, new\.event_type, new\.clock_in, new\.clock_out\)/g)?.length ?? 0;
+if (overlapGuardCalls < 2) {
+  fail('Overlap rejection must run for both insert and update paths.');
 }
 
 const scopeBuilder = read('app/src/components/AdminScopeBuilder.tsx');
