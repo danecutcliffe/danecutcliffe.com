@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test:domain": "vitest run src/utils/__tests__/*.test.ts",
+    "test:domain": "vitest run src/utils/__tests__/*.test.ts src/services/__tests__/*.test.ts",
     "verify": "node ../scripts/regression-checks.mjs && npm run test:domain && tsc -b",
     "build": "npm run verify && vite build && node ../scripts/stamp-sw.mjs",
     "preview": "vite preview"

@@ -358,6 +358,17 @@ const isHistoricalApprovedEntry = (entry: TimeEntry) => {
   return timesheetApprovals.some((approval) => approval.userId === entry.userId && approval.weekStart === period.start && approval.status === 'approved');
 };
 
+const assertCanPunchFor = (userId: string) => {
+  const profile = profiles.find((candidate) => candidate.id === currentProfileId);
+  if (!profile?.isActive) throw new Error('This account is inactive. Ask an admin to reactivate it.');
+  if (profile.id !== userId) throw new Error('Employee punch actions can only be saved for the signed-in user. Use admin manual entries for corrections.');
+};
+
+const assertSelectableJobCode = (jobCodeId: string) => {
+  const job = jobCodes.find((candidate) => candidate.id === jobCodeId);
+  if (!job?.isActive || job.isArchived) throw new Error('Choose an active job code.');
+};
+
 export const mockGpsPoint = (): GpsPoint => ({
   lat: 46.2382,
   lng: -63.1311,
@@ -477,8 +488,13 @@ export const mockTimeClockService: AdminTimeClockService = {
 
   async clockIn({ userId, jobCodeId, at, gps }) {
     await delay();
+    assertCanPunchFor(userId);
+    assertSelectableJobCode(jobCodeId);
     if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'work' && !entry.clockOut)) {
       throw new Error('You are already clocked in.');
+    }
+    if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'break' && !entry.clockOut)) {
+      throw new Error('End your break before clocking in.');
     }
     const entry: TimeEntry = {
       id: makeId('entry'),
@@ -504,6 +520,9 @@ export const mockTimeClockService: AdminTimeClockService = {
     await delay();
     const entry = findEntry(entryId);
     if (entry.clockOut) throw new Error('This entry is already clocked out.');
+    if (timeEntries.some((candidate) => candidate.userId === entry.userId && candidate.eventType === 'break' && !candidate.clockOut)) {
+      throw new Error('End your break before clocking out.');
+    }
     if (notes !== undefined) entry.notes = notes.trim();
     entry.clockOut = at;
     applyClockOutGps(entry, gps);
@@ -512,8 +531,12 @@ export const mockTimeClockService: AdminTimeClockService = {
 
   async startBreak({ userId, at, gps }) {
     await delay();
+    assertCanPunchFor(userId);
     if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'break' && !entry.clockOut)) {
       throw new Error('A break is already in progress.');
+    }
+    if (!timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'work' && !entry.clockOut)) {
+      throw new Error('You must be clocked in before starting a break.');
     }
     const entry: TimeEntry = {
       id: makeId('break'),
@@ -547,6 +570,11 @@ export const mockTimeClockService: AdminTimeClockService = {
 
   async switchJob({ userId, fromEntryId, toJobCodeId, at, gps }) {
     await delay();
+    assertCanPunchFor(userId);
+    assertSelectableJobCode(toJobCodeId);
+    if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'break' && !entry.clockOut)) {
+      throw new Error('End your break before switching jobs.');
+    }
     const fromEntry = findEntry(fromEntryId);
     if (fromEntry.userId !== userId || fromEntry.eventType !== 'work' || fromEntry.clockOut) {
       throw new Error('No active work entry to switch from.');

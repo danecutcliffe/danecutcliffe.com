@@ -12,6 +12,11 @@ type SupabaseResponse<T> = {
   error: { message: string } | null;
 };
 
+interface SwitchJobRpcResult {
+  closedEntry: TimeEntryRow;
+  openedEntry: TimeEntryRow;
+}
+
 const unwrap = <T>(response: SupabaseResponse<T>, fallbackMessage = 'Supabase request failed.'): T => {
   if (response.error) {
     if (response.error.message.includes('job_codes_name_key')) {
@@ -27,7 +32,7 @@ const capturedLat = (gps?: GpsPoint | null) => (gps?.status === 'captured' ? gps
 const capturedLng = (gps?: GpsPoint | null) => (gps?.status === 'captured' ? gps.lng ?? null : null);
 const isPersistedScopeBuilderId = (id: string | undefined) => Boolean(id && !id.startsWith('draft-'));
 
-class SupabaseTimeClockService implements AdminTimeClockService {
+export class SupabaseTimeClockService implements AdminTimeClockService {
   readonly mode = 'supabase' as const;
 
   constructor(private readonly client: SupabaseClient) {}
@@ -217,24 +222,12 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
   async clockIn({ userId, jobCodeId, at, gps }: { userId: string; jobCodeId: string; at: string; gps?: GpsPoint | null }) {
     await this.assertCanPunchFor(userId);
-    const existing = await this.getOpenWorkEntry(userId);
-    if (existing) throw new Error('You are already clocked in.');
-
     const row = unwrap(
-      await this.client
-        .from('time_entries')
-        .insert({
-          user_id: userId,
-          job_code_id: jobCodeId,
-          event_type: 'work',
-          clock_in: at,
-          clock_in_lat: capturedLat(gps),
-          clock_in_lng: capturedLng(gps),
-          notes: '',
-          created_by: userId,
-        })
-        .select('*')
-        .single() as SupabaseResponse<TimeEntryRow>,
+      await this.client.rpc('employee_clock_in', {
+        p_job_code_id: jobCodeId,
+        p_clock_in_lat: capturedLat(gps),
+        p_clock_in_lng: capturedLng(gps),
+      }) as SupabaseResponse<TimeEntryRow>,
       'Unable to clock in.',
     );
     return mapTimeEntry(row);
@@ -242,32 +235,13 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
   async clockOut({ entryId, at, gps, notes }: { entryId: string; at: string; gps?: GpsPoint | null; notes?: string }) {
     await this.requireCurrentProfile();
-
-    if (notes !== undefined) {
-      const row = unwrap(
-        await this.client.rpc('employee_clock_out', {
-          p_entry_id: entryId,
-          p_notes: notes,
-          p_clock_out_lat: capturedLat(gps),
-          p_clock_out_lng: capturedLng(gps),
-        }) as SupabaseResponse<TimeEntryRow>,
-        'Unable to clock out. This entry may already be closed.',
-      );
-      return mapTimeEntry(row);
-    }
-
     const row = unwrap(
-      await this.client
-        .from('time_entries')
-        .update({
-          clock_out: at,
-          clock_out_lat: capturedLat(gps),
-          clock_out_lng: capturedLng(gps),
-        })
-        .eq('id', entryId)
-        .is('clock_out', null)
-        .select('*')
-        .single() as SupabaseResponse<TimeEntryRow>,
+      await this.client.rpc('employee_clock_out', {
+        p_entry_id: entryId,
+        p_notes: notes ?? '',
+        p_clock_out_lat: capturedLat(gps),
+        p_clock_out_lng: capturedLng(gps),
+      }) as SupabaseResponse<TimeEntryRow>,
       'Unable to clock out. This entry may already be closed.',
     );
     return mapTimeEntry(row);
@@ -277,22 +251,15 @@ class SupabaseTimeClockService implements AdminTimeClockService {
     await this.assertCanPunchFor(userId);
     const existing = await this.getOpenBreakEntry(userId);
     if (existing) throw new Error('A break is already in progress.');
+    const openWorkEntry = await this.getOpenWorkEntry(userId);
+    if (!openWorkEntry) throw new Error('You must be clocked in before starting a break.');
 
     const row = unwrap(
-      await this.client
-        .from('time_entries')
-        .insert({
-          user_id: userId,
-          job_code_id: null,
-          event_type: 'break',
-          clock_in: at,
-          clock_in_lat: capturedLat(gps),
-          clock_in_lng: capturedLng(gps),
-          notes: 'Break',
-          created_by: userId,
-        })
-        .select('*')
-        .single() as SupabaseResponse<TimeEntryRow>,
+      await this.client.rpc('employee_start_break', {
+        p_job_code_id: null,
+        p_clock_in_lat: capturedLat(gps),
+        p_clock_in_lng: capturedLng(gps),
+      }) as SupabaseResponse<TimeEntryRow>,
       'Unable to start break.',
     );
     return mapTimeEntry(row);
@@ -313,9 +280,19 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
   async switchJob({ userId, fromEntryId, toJobCodeId, at, gps }: { userId: string; fromEntryId: string; toJobCodeId: string; at: string; gps?: GpsPoint | null }) {
     await this.assertCanPunchFor(userId);
-    const closedEntry = await this.clockOut({ entryId: fromEntryId, at, gps });
-    const openedEntry = await this.clockIn({ userId, jobCodeId: toJobCodeId, at, gps });
-    return { closedEntry, openedEntry };
+    const result = unwrap(
+      await this.client.rpc('employee_switch_job', {
+        p_from_entry_id: fromEntryId,
+        p_to_job_code_id: toJobCodeId,
+        p_clock_lat: capturedLat(gps),
+        p_clock_lng: capturedLng(gps),
+      }) as SupabaseResponse<SwitchJobRpcResult>,
+      'Unable to switch jobs.',
+    );
+    return {
+      closedEntry: mapTimeEntry(result.closedEntry),
+      openedEntry: mapTimeEntry(result.openedEntry),
+    };
   }
 
   async updateEntryNotes({ entryId, notes }: { entryId: string; notes: string }) {
@@ -918,7 +895,7 @@ class SupabaseTimeClockService implements AdminTimeClockService {
 
   private async assertCanPunchFor(userId: string) {
     const profile = await this.requireCurrentProfile();
-    if (profile.role !== 'admin' && profile.id !== userId) throw new Error('You cannot punch time for another employee.');
+    if (profile.id !== userId) throw new Error('Employee punch actions can only be saved for the signed-in user. Use admin manual entries for corrections.');
   }
 
   private async assertAdmin() {
