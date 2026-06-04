@@ -69,3 +69,4 @@ cd "$APP_DIR"
 # npm run build also stamps time/sw.js with a unique per-build cache id
 # (postbuild: node ../scripts/stamp-sw.mjs), so every deploy busts stale clients.
 npm run build
+node "$ROOT_DIR/scripts/verify-time-build.mjs" "$ROOT_DIR/time" --mode production

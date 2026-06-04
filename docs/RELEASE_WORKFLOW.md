@@ -13,21 +13,23 @@ This workspace is the single source of truth for future Time Clock development a
 ## Standard Flow
 
 1. Make code or content changes in `app/`, `supabase/`, or the site root.
-2. Run `./scripts/build-time-clock.sh` from the workspace root.
-3. Review `git status` to confirm both source edits and the generated `time/` output are present.
-4. Commit the full release state in one commit.
-5. Add a deploy tag after the commit is ready to publish.
+2. Run `npm run verify` from `app/` to catch source, TypeScript, and regression issues before generating deploy output. This must pass before any tag or production deploy.
+3. Run `./scripts/build-time-clock.sh` from the workspace root. The build verifies that `time/index.html` references existing hashed assets and that `time/sw.js` has a stamped cache id.
+4. Review `git status` to confirm both source edits and the generated `time/` output are present.
+5. Commit the full release state in one commit.
+6. Add a deploy tag after the commit is ready to publish.
 
 ## Staging Flow
 
 Use staging when validating new features against a production-shaped data snapshot without publishing to the production site.
 
 1. Confirm `app/.env.staging.local` points at the staging Supabase project.
-2. Run `./scripts/build-time-clock-staging.sh`.
-3. Confirm `staging-site/time/` was regenerated and the Scope integration scripts are no-op files.
-4. Commit and push from `staging-site/`, the separate GitHub Pages repo for `staging.danecutcliffe.com`.
-5. Do not push the canonical production repo unless this is also an approved production release.
-6. Verify `http://staging.danecutcliffe.com/time/` or `https://staging.danecutcliffe.com/time/` after GitHub Pages and certificate provisioning are ready.
+2. Optionally run `npm run verify` from `app/` for an early check before generating staging artifacts.
+3. Run `./scripts/build-time-clock-staging.sh`; the staging build runs `npm run verify` and generated-asset verification automatically.
+4. Confirm `staging-site/time/` was regenerated and the Scope integration scripts are no-op files.
+5. Commit and push from `staging-site/`, the separate GitHub Pages repo for `staging.danecutcliffe.com`.
+6. Do not push the canonical production repo unless this is also an approved production release.
+7. Verify `http://staging.danecutcliffe.com/time/` or `https://staging.danecutcliffe.com/time/` after GitHub Pages and certificate provisioning are ready.
 
 ## Commit Guidance
 

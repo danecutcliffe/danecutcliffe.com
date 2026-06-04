@@ -664,8 +664,8 @@ function AdminPasswordDialog({
   const [adminPassword, setAdminPassword] = useState('');
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/50 p-0 sm:items-center sm:p-4">
-      <div className="w-full rounded-t-md bg-card p-4 shadow-soft sm:mx-auto sm:max-w-md sm:rounded-md">
+    <div className="fixed inset-0 z-40 flex items-end overflow-hidden bg-black/50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-md bg-card p-4 shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-md">
         <h3 className="text-lg font-bold">{title}</h3>
         <p className="mt-1 text-sm text-muted">{description}</p>
         <label className="mt-4 block text-sm font-semibold text-muted" htmlFor="admin-confirm-password">
@@ -1151,8 +1151,8 @@ function AddJobSiteDialog({ isBusy, onCancel, onSave }: { isBusy: boolean; onCan
   const currentLongitude = Number.isNaN(lngNumber ?? 0) ? null : lngNumber;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-auto rounded-t-md bg-card p-4 shadow-soft sm:mx-auto sm:max-w-xl sm:rounded-md">
+    <div className="fixed inset-0 z-40 flex items-end overflow-hidden bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-md bg-card p-4 shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-bold">Add property</h3>
@@ -1213,8 +1213,8 @@ function AddJobCodeDialog({ isBusy, jobSites, onCancel, onSave }: { isBusy: bool
   const canSave = name.trim().length > 0 && hasValidCode;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-auto rounded-t-md bg-card p-4 shadow-soft sm:mx-auto sm:max-w-lg sm:rounded-md">
+    <div className="fixed inset-0 z-40 flex items-end overflow-hidden bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-md bg-card p-4 shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-lg">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-bold">Add job code</h3>
@@ -1272,8 +1272,8 @@ function AddEmployeeDialog({ isBusy, mode, onCancel, onSave }: { isBusy: boolean
   const canSave = email.trim() && firstName.trim() && lastName.trim();
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-auto rounded-t-md bg-card p-4 shadow-soft sm:mx-auto sm:max-w-xl sm:rounded-md">
+    <div className="fixed inset-0 z-40 flex items-end overflow-hidden bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-md bg-card p-4 shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-bold">Add employee</h3>

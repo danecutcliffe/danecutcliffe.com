@@ -72,6 +72,24 @@ for (const file of componentFiles) {
   const source = read(file);
   for (const match of source.matchAll(classLiteralPattern)) {
     const classes = match[1].replace(/\s+/g, ' ').trim();
+    const isModalBackdrop = /\bfixed\b/.test(classes) && /\binset-0\b/.test(classes) && /\bbg-black\//.test(classes);
+    if (!isModalBackdrop) continue;
+
+    const modalSnippet = source.slice(match.index ?? 0, (match.index ?? 0) + 1_200);
+    const hasBoundedPanelHeight = modalSnippet.includes('max-h-[calc(100dvh') || modalSnippet.includes('max-h-[92vh]');
+    const hasInternalPanelScroll = modalSnippet.includes('overflow-y-auto') || modalSnippet.includes('overflow-auto');
+    const hasSafeAreaAllowance = modalSnippet.includes('safe-area-inset-top') && modalSnippet.includes('safe-area-inset-bottom');
+
+    if (/\bp-0\b/.test(classes) && !hasSafeAreaAllowance) {
+      fail(`${file} has a viewport modal overlay with p-0 and no nearby safe-area allowance: "${classes}". Mobile modals must avoid clipped top/bottom content.`);
+    }
+    if (!hasBoundedPanelHeight || !hasInternalPanelScroll) {
+      fail(`${file} has a viewport modal without a nearby bounded, scrollable panel: "${classes}". Mobile modal content must fit inside the viewport and scroll internally.`);
+    }
+  }
+
+  for (const match of source.matchAll(classLiteralPattern)) {
+    const classes = match[1].replace(/\s+/g, ' ').trim();
     if (!classes.includes('grid') || !/\bgap-/.test(classes)) continue;
     if (classes.includes('place-items-center') || /\b(h|w)-\d/.test(classes)) continue;
 

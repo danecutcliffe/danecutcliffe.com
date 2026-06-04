@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$ROOT_DIR/app"
 ENV_FILE="$APP_DIR/.env.staging.local"
 PRODUCTION_SUPABASE_HOST="akofsmmsxtfqduebetga.supabase.co"
+STAGING_SUPABASE_HOST="qumnzxzoypgpejtwbigw.supabase.co"
 STAGING_URL="https://staging.danecutcliffe.com/time/"
 
 if [[ ! -d "$APP_DIR/node_modules" ]]; then
@@ -52,6 +53,11 @@ if [[ "${VITE_SUPABASE_URL}" == *"${PRODUCTION_SUPABASE_HOST}"* ]]; then
   exit 1
 fi
 
+if [[ "${VITE_SUPABASE_URL}" != *"${STAGING_SUPABASE_HOST}"* ]]; then
+  echo "Refusing staging build because VITE_SUPABASE_URL does not point at the expected staging Supabase project."
+  exit 1
+fi
+
 if [[ "${VITE_SUPABASE_EMAIL_REDIRECT_TO}" != "${STAGING_URL}" ]]; then
   echo "Refusing staging build because VITE_SUPABASE_EMAIL_REDIRECT_TO must be ${STAGING_URL}."
   exit 1
@@ -72,3 +78,4 @@ EOF
 printf '%s\n' 'staging.danecutcliffe.com' > "$ROOT_DIR/staging-site/CNAME"
 printf '%s\n' '<!doctype html><meta http-equiv="refresh" content="0; url=/time/"><link rel="canonical" href="/time/"><title>Time Clock Staging</title>' > "$ROOT_DIR/staging-site/index.html"
 touch "$ROOT_DIR/staging-site/.nojekyll"
+node "$ROOT_DIR/scripts/verify-time-build.mjs" "$ROOT_DIR/staging-site/time" --mode staging
