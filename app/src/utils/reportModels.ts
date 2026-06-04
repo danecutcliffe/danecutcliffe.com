@@ -2,6 +2,7 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { getAtlanticDateKey } from './time';
 import { jobDisplayNameById, jobPropertyName, jobSiteById } from './jobs';
 import { computeEntryHours } from './timecardHours';
+import { calculatePayrollGrossPay, roundHours, roundMoney } from './payrollRounding';
 
 export type ReportCellValue = string | number | null;
 
@@ -171,7 +172,7 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
     const regularHours = Number(row.regularHours ?? 0);
     const otHours = Number(row.otHours ?? 0);
     const rate = profile?.hourlyRate ?? 0;
-    const estPay = regularHours * rate + otHours * rate * 1.5;
+    const estPay = calculatePayrollGrossPay({ regularHours, overtimeHours: otHours, hourlyRate: rate });
     const employeeKey = String(row.employee);
     const employee = current.employees.get(employeeKey) ?? {
       rowKind: 'detail',
@@ -279,7 +280,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
       regularHours,
       otHours,
       totalHours: row.totalHours,
-      estPay: roundMoney(regularHours * rate + otHours * rate * 1.5),
+      estPay: calculatePayrollGrossPay({ regularHours, overtimeHours: otHours, hourlyRate: rate }),
       name: row.employee,
       jobCode: row.jobCode,
       payCycleEnding: params.periodEnd,
@@ -340,14 +341,6 @@ function profileLabel(profile: Profile) {
 function gpsStatus(entry: TimeEntry) {
   if (!entry.clockInLat || (entry.clockOut && !entry.clockOutLat)) return 'No GPS';
   return 'GPS Captured';
-}
-
-function roundHours(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
 }
 
 function formatMoney(value: number) {

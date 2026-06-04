@@ -1,4 +1,5 @@
 import type { TimeEntry } from '../domain/types';
+import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 
 export const ATLANTIC_TIME_ZONE = 'America/Halifax';
 export const OVERTIME_THRESHOLD_HOURS = 48;
@@ -190,16 +191,18 @@ export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: numb
     },
     { regularHours: 0, overtimeHours: 0 },
   );
-  const grossPay = regularHours * hourlyRate + overtimeHours * hourlyRate * 1.5;
+  const roundedRegularHours = roundHours(regularHours);
+  const roundedOvertimeHours = roundHours(overtimeHours);
+  const grossPay = calculatePayrollGrossPay({ regularHours: roundedRegularHours, overtimeHours: roundedOvertimeHours, hourlyRate });
 
   return {
-    grossWorkHours,
-    breakHours,
-    paidBreakHours,
-    unpaidBreakHours,
-    netWorkHours,
-    regularHours,
-    overtimeHours,
+    grossWorkHours: roundHours(grossWorkHours),
+    breakHours: roundHours(breakHours),
+    paidBreakHours: roundHours(paidBreakHours),
+    unpaidBreakHours: roundHours(unpaidBreakHours),
+    netWorkHours: roundHours(netWorkHours),
+    regularHours: roundedRegularHours,
+    overtimeHours: roundedOvertimeHours,
     grossPay,
   };
 }

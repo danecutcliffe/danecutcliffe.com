@@ -91,4 +91,25 @@ describe('labour cost regression fixtures', () => {
     expect(qaJob?.grossPay).toBeCloseTo(134.64, 2);
     expect(qaJob?.loadedCost).toBeCloseTo(168.30, 2);
   });
+
+  it('costs labour from displayed two-decimal payable hours, not hidden precision', () => {
+    resetEntrySequence();
+    const firstWork = workEntry({ id: 'precision-labour-a', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 7.484 });
+    const secondWork = workEntry({ id: 'precision-labour-b', jobCodeId: 'job-qa0358', clockIn: '2026-06-03T12:00:00.000Z', hours: 0.335 });
+
+    const breakdown = buildLabourCostBreakdown({
+      entries: [firstWork, secondWork],
+      profiles: [employeeProfile],
+      jobSites,
+      jobCodes,
+      grossUpSchedule: [{ effectiveDate: '2026-01-01', multiplier: 1.25 }],
+      weeklyOvertimeThresholdHours: 48,
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+    const qaJob = breakdown.properties.flatMap((property) => property.jobs).find((job) => job.jobCodeLabel.includes('QA0358'));
+
+    expect(qaJob?.payableHours).toBe(7.82);
+    expect(qaJob?.grossPay).toBe(140.76);
+    expect(qaJob?.loadedCost).toBe(175.95);
+  });
 });

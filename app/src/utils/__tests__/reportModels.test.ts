@@ -154,4 +154,23 @@ describe('filtered report context', () => {
     expect(hoursByLocation.rows.find((row) => row.rowKind === 'grandTotal')?.otHours).toBeCloseTo(2, 5);
     expect(payrollSummary.rows[0].otHours).toBeCloseTo(2, 5);
   });
+
+  it('calculates exported estimated pay from displayed two-decimal hours', () => {
+    resetEntrySequence();
+    const work = workEntry({ id: 'precision-work', clockIn: '2026-06-02T12:00:00.000Z', hours: 7.484 });
+
+    const payrollSummary = buildPayrollSummaryReport({
+      entries: [work],
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+
+    expect(payrollSummary.rows[0].regularHours).toBe(7.48);
+    expect(payrollSummary.rows[0].estPay).toBe(134.64);
+  });
 });

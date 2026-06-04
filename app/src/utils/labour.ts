@@ -2,6 +2,7 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { jobSiteById } from './jobs';
 import { addDaysToDateKey, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
 import { computeEntryHours } from './timecardHours';
+import { calculateLoadedPayrollCost, calculatePayrollGrossPay, roundHours, roundMoney } from './payrollRounding';
 
 export interface GrossUpScheduleEntry {
   effectiveDate: string;
@@ -144,17 +145,20 @@ export function buildLabourCostBreakdown({
       const hours = byEntryId.get(entry.id);
       if (!hours) return;
       const entryMultiplier = labourCostMultiplierForProfile(profile, multiplierForDate(grossUpSchedule, getAtlanticDateKey(entry.clockIn)));
-      const entryGrossPay = hours.regularHours * rate + hours.otHours * rate * 1.5;
-      const entryLoadedCost = entryGrossPay * entryMultiplier;
+      const entryDurationHours = roundHours(hours.durationHours);
+      const entryPaidHours = roundHours(hours.paidHours);
+      const entryOtHours = roundHours(hours.otHours);
+      const entryGrossPay = calculatePayrollGrossPay({ regularHours: hours.regularHours, overtimeHours: hours.otHours, hourlyRate: rate });
+      const entryLoadedCost = calculateLoadedPayrollCost(entryGrossPay, entryMultiplier);
       const key = entry.jobCodeId ?? NO_JOB_KEY;
       const agg = jobAgg.get(key) ?? { jobCodeId: entry.jobCodeId, grossHours: 0, netHours: 0, otHours: 0, grossPay: 0, loadedCost: 0 };
-      agg.grossHours += hours.durationHours;
-      agg.netHours += hours.paidHours;
-      agg.otHours += hours.otHours;
-      agg.grossPay += entryGrossPay;
-      agg.loadedCost += entryLoadedCost;
+      agg.grossHours = roundHours(agg.grossHours + entryDurationHours);
+      agg.netHours = roundHours(agg.netHours + entryPaidHours);
+      agg.otHours = roundHours(agg.otHours + entryOtHours);
+      agg.grossPay = roundMoney(agg.grossPay + entryGrossPay);
+      agg.loadedCost = roundMoney(agg.loadedCost + entryLoadedCost);
       jobAgg.set(key, agg);
-      employeeGrossHours += hours.durationHours;
+      employeeGrossHours = roundHours(employeeGrossHours + entryDurationHours);
     });
 
     if (employeeGrossHours <= 0) return;
@@ -172,10 +176,10 @@ export function buildLabourCostBreakdown({
       const jobPayableHours = agg.netHours;
       const jobWorkHours = agg.grossHours;
 
-      grossPay += jobGrossPay;
-      loadedCost += jobLoadedCost;
-      payableHours += jobPayableHours;
-      overtimeHours += agg.otHours;
+      grossPay = roundMoney(grossPay + jobGrossPay);
+      loadedCost = roundMoney(loadedCost + jobLoadedCost);
+      payableHours = roundHours(payableHours + jobPayableHours);
+      overtimeHours = roundHours(overtimeHours + agg.otHours);
 
       let property = propertyMap.get(propertyId);
       if (!property) {
@@ -191,17 +195,17 @@ export function buildLabourCostBreakdown({
         propertyMap.set(propertyId, property);
       }
 
-      property.grossPay += jobGrossPay;
-      property.loadedCost += jobLoadedCost;
-      property.payableHours += jobPayableHours;
-      property.workHours += jobWorkHours;
+      property.grossPay = roundMoney(property.grossPay + jobGrossPay);
+      property.loadedCost = roundMoney(property.loadedCost + jobLoadedCost);
+      property.payableHours = roundHours(property.payableHours + jobPayableHours);
+      property.workHours = roundHours(property.workHours + jobWorkHours);
 
       const currentJob = property.jobs.get(jobKey);
       if (currentJob) {
-        currentJob.grossPay += jobGrossPay;
-        currentJob.loadedCost += jobLoadedCost;
-        currentJob.payableHours += jobPayableHours;
-        currentJob.workHours += jobWorkHours;
+        currentJob.grossPay = roundMoney(currentJob.grossPay + jobGrossPay);
+        currentJob.loadedCost = roundMoney(currentJob.loadedCost + jobLoadedCost);
+        currentJob.payableHours = roundHours(currentJob.payableHours + jobPayableHours);
+        currentJob.workHours = roundHours(currentJob.workHours + jobWorkHours);
         addEmployeeContribution(currentJob.employees, profile.id, employeeName, jobGrossPay, jobLoadedCost);
       } else {
         const employees = new Map<string, EmployeeAggregate>();
@@ -307,10 +311,10 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
   let unattributedBreakHours = 0;
 
   breakdowns.forEach((breakdown) => {
-    grossPay += breakdown.grossPay;
-    loadedCost += breakdown.loadedCost;
-    payableHours += breakdown.payableHours;
-    overtimeHours += breakdown.overtimeHours;
+    grossPay = roundMoney(grossPay + breakdown.grossPay);
+    loadedCost = roundMoney(loadedCost + breakdown.loadedCost);
+    payableHours = roundHours(payableHours + breakdown.payableHours);
+    overtimeHours = roundHours(overtimeHours + breakdown.overtimeHours);
     employeeCount += breakdown.employeeCount;
     unattributedBreakHours += breakdown.unattributedBreakHours;
 
@@ -329,19 +333,19 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
         propertyMap.set(sourceProperty.propertyId, property);
       }
 
-      property.grossPay += sourceProperty.grossPay;
-      property.loadedCost += sourceProperty.loadedCost;
-      property.payableHours += sourceProperty.payableHours;
-      property.workHours += sourceProperty.workHours;
+      property.grossPay = roundMoney(property.grossPay + sourceProperty.grossPay);
+      property.loadedCost = roundMoney(property.loadedCost + sourceProperty.loadedCost);
+      property.payableHours = roundHours(property.payableHours + sourceProperty.payableHours);
+      property.workHours = roundHours(property.workHours + sourceProperty.workHours);
 
       sourceProperty.jobs.forEach((sourceJob) => {
         const jobKey = `${sourceJob.jobCodeId ?? NO_JOB_KEY}|${sourceJob.jobCodeLabel}`;
         const job = property.jobs.get(jobKey);
         if (job) {
-          job.grossPay += sourceJob.grossPay;
-          job.loadedCost += sourceJob.loadedCost;
-          job.payableHours += sourceJob.payableHours;
-          job.workHours += sourceJob.workHours;
+          job.grossPay = roundMoney(job.grossPay + sourceJob.grossPay);
+          job.loadedCost = roundMoney(job.loadedCost + sourceJob.loadedCost);
+          job.payableHours = roundHours(job.payableHours + sourceJob.payableHours);
+          job.workHours = roundHours(job.workHours + sourceJob.workHours);
           sourceJob.employees.forEach((employee) => {
             addEmployeeContribution(job.employees, employee.profileId, employee.employeeName, employee.grossPay, employee.loadedCost);
           });
@@ -438,9 +442,9 @@ function addEmployeeContribution(
 ) {
   const current = employees.get(profileId);
   if (current) {
-    current.grossPay += grossPay;
-    current.loadedCost += loadedCost;
+    current.grossPay = roundMoney(current.grossPay + grossPay);
+    current.loadedCost = roundMoney(current.loadedCost + loadedCost);
   } else {
-    employees.set(profileId, { profileId, employeeName, grossPay, loadedCost });
+    employees.set(profileId, { profileId, employeeName, grossPay: roundMoney(grossPay), loadedCost: roundMoney(loadedCost) });
   }
 }
