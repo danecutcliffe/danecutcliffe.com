@@ -222,4 +222,30 @@ describe('filtered report context', () => {
 
     expect(qaXlsxValues).toEqual([7.48, 7.48, 134.64]);
   });
+
+  it('exports orphan unpaid break warnings to the XLSX exceptions sheet', async () => {
+    resetEntrySequence();
+    const orphanBreak = breakEntry({ id: 'orphan-export-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.6 });
+    const report = buildDetailedTimecardReport({
+      entries: [orphanBreak],
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-04T12:00:00.000Z'),
+    });
+
+    expect(report.exceptions).toContainEqual({
+      severity: 'review',
+      message: '0.60h of unpaid break time could not be matched to a work entry',
+    });
+
+    const workbook = await buildReportWorkbook(report);
+    const sheet = workbook.getWorksheet('Exceptions');
+
+    expect(sheet?.getRow(2).getCell(1).value).toBe('review');
+    expect(sheet?.getRow(2).getCell(2).value).toBe('0.60h of unpaid break time could not be matched to a work entry');
+  });
 });
