@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
 import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
-import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
+import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { addDaysToDateKey, calculateTimesheetSummary, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
 
 interface AdminTimesheetsProps {
@@ -40,6 +40,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const groupedEntries = groupEntriesByAtlanticDate(profileEntries);
   const displayDays = [...periodDays].reverse();
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
+  const selectableJobCodes = useMemo(() => jobCodes.filter(isSelectableJobCode), [jobCodes]);
   const siteById = useMemo(() => new Map(jobSites.map((site) => [site.id, site])), [jobSites]);
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const editingEntry = entries.find((entry) => entry.id === editingEntryId) ?? null;
@@ -174,7 +175,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
         </div>
       </div>
       {editingEntry && !isPeriodApproved && <EntryEditor entry={editingEntry} jobSites={jobSites} jobCodes={jobCodes} isBusy={isBusy} onCancel={() => setEditingEntryId(null)} onSave={(patch) => runAction(async () => { await service.updateTimeEntry({ entryId: editingEntry.id, patch, editedBy: adminProfile.id }); setEditingEntryId(null); })} onDelete={() => runAction(async () => { await service.deleteTimeEntry({ entryId: editingEntry.id }); setEditingEntryId(null); })} />}
-      {manualOpen && employee && !isPeriodApproved && <ManualEntryForm employee={employee} jobSites={jobSites} jobCodes={jobCodes} isBusy={isBusy} onCancel={() => setManualOpen(false)} onSave={(values) => runAction(async () => { await service.createManualEntry({ ...values, userId: employee.id, createdBy: adminProfile.id }); setManualOpen(false); })} />}
+      {manualOpen && employee && !isPeriodApproved && <ManualEntryForm employee={employee} jobSites={jobSites} jobCodes={selectableJobCodes} isBusy={isBusy} onCancel={() => setManualOpen(false)} onSave={(values) => runAction(async () => { await service.createManualEntry({ ...values, userId: employee.id, createdBy: adminProfile.id }); setManualOpen(false); })} />}
     </section>
   );
 }

@@ -297,6 +297,9 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
 
   async updateEntryNotes({ entryId, notes }: { entryId: string; notes: string }) {
     await this.requireCurrentProfile();
+    // Admin/manual correction writes intentionally stay direct: RLS limits who can
+    // write, while DB triggers enforce approved-period locks, overlap checks,
+    // metadata hygiene, and audit logging beneath every client path.
     const row = unwrap(
       await this.client
         .from('time_entries')
@@ -312,6 +315,7 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
   async createManualEntry({ userId, jobCodeId, eventType = 'work', clockIn, clockOut, notes, createdBy }: { userId: string; jobCodeId: string | null; eventType: TimeEntry['eventType']; clockIn: string; clockOut?: string | null; notes: string; createdBy: string }) {
     await this.assertAdmin();
     if (eventType === 'work' && !jobCodeId) throw new Error('Manual work entries need a job code.');
+    if (eventType === 'work' && jobCodeId) await this.assertActiveJobCode(jobCodeId);
     if (eventType === 'break' && !clockOut) throw new Error('Manual break entries need a punch out time.');
     if (clockOut && new Date(clockOut).getTime() <= new Date(clockIn).getTime()) throw new Error('Clock out must be after clock in.');
 
@@ -336,6 +340,15 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
 
   async updateTimeEntry({ entryId, patch, editedBy }: { entryId: string; patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>; editedBy: string }) {
     await this.assertAdmin();
+    if (patch.jobCodeId !== undefined) {
+      const existing = await this.getTimeEntryForAdminValidation(entryId);
+      const nextJobCodeId = patch.jobCodeId;
+      if (existing.event_type === 'work') {
+        if (!nextJobCodeId) throw new Error('Manual work entries need a job code.');
+        if (nextJobCodeId !== existing.job_code_id) await this.assertActiveJobCode(nextJobCodeId);
+      }
+    }
+
     const update: Record<string, string | null> = {
       edited_by: editedBy,
       edited_at: new Date().toISOString(),
@@ -359,11 +372,17 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
 
   async deleteTimeEntry({ entryId }: { entryId: string }) {
     await this.assertAdmin();
-    const { error } = await this.client
-      .from('time_entries')
-      .delete()
-      .eq('id', entryId);
-    if (error) throw new Error(error.message);
+    // Deletes remain admin-only direct writes so DB triggers can block approved
+    // periods and emit the canonical audit_log row for the removed entry.
+    unwrap(
+      await this.client
+        .from('time_entries')
+        .delete()
+        .eq('id', entryId)
+        .select('id')
+        .single() as SupabaseResponse<{ id: string }>,
+      'Unable to delete time entry.',
+    );
   }
 
   async updateProfile({ profileId, patch }: { profileId: string; patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>> }) {
@@ -902,6 +921,29 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     const profile = await this.requireCurrentProfile();
     if (profile.role !== 'admin') throw new Error('Admin access is required.');
     return profile;
+  }
+
+  private async getTimeEntryForAdminValidation(entryId: string) {
+    return unwrap(
+      await this.client
+        .from('time_entries')
+        .select('id,event_type,job_code_id')
+        .eq('id', entryId)
+        .single() as SupabaseResponse<{ id: string; event_type: TimeEntry['eventType']; job_code_id: string | null }>,
+      'Unable to load time entry for validation.',
+    );
+  }
+
+  private async assertActiveJobCode(jobCodeId: string) {
+    const row = unwrap(
+      await this.client
+        .from('job_codes')
+        .select('id,is_active,is_archived')
+        .eq('id', jobCodeId)
+        .single() as SupabaseResponse<{ id: string; is_active: boolean; is_archived: boolean }>,
+      'Unable to verify the selected job code.',
+    );
+    if (!row.is_active || row.is_archived) throw new Error('Choose an active job code.');
   }
 
   private async verifyCurrentUserPassword(password: string, profile?: Profile) {

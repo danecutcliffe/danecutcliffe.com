@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SupabaseTimeClockService } from '../supabaseTimeClockService';
-import type { ProfileRow, TimeEntryRow } from '../supabase/mappers';
+import type { JobCodeRow, ProfileRow, TimeEntryRow } from '../supabase/mappers';
 
 const employeeId = 'employee-1';
 
@@ -18,6 +18,24 @@ const profileRow: ProfileRow = {
   can_access_scopes: true,
   is_active: true,
   is_rejected: false,
+  created_at: '2026-01-01T12:00:00.000Z',
+};
+
+const adminProfileRow: ProfileRow = {
+  ...profileRow,
+  id: 'admin-1',
+  email: 'admin@example.com',
+  role: 'admin',
+};
+
+const activeJobCodeRow: JobCodeRow = {
+  id: 'job-1',
+  job_site_id: 'site-1',
+  code: 'QA0358',
+  name: 'Carpentry',
+  description: null,
+  is_active: true,
+  is_archived: false,
   created_at: '2026-01-01T12:00:00.000Z',
 };
 
@@ -44,12 +62,18 @@ function timeEntryRow(overrides: Partial<TimeEntryRow> = {}): TimeEntryRow {
 }
 
 function createFakeClient({
+  profile = profileRow,
   openWorkEntry = null,
   openBreakEntry = null,
+  existingTimeEntry = timeEntryRow(),
+  jobCodeRow = activeJobCodeRow,
   rpcResults = {},
 }: {
+  profile?: ProfileRow;
   openWorkEntry?: TimeEntryRow | null;
   openBreakEntry?: TimeEntryRow | null;
+  existingTimeEntry?: TimeEntryRow | null;
+  jobCodeRow?: JobCodeRow;
   rpcResults?: Record<string, unknown>;
 } = {}) {
   const rpc = vi.fn(async (name: string, params: Record<string, unknown>) => ({
@@ -62,7 +86,7 @@ function createFakeClient({
       return {
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({ data: profileRow, error: null }),
+            maybeSingle: async () => ({ data: profile, error: null }),
           }),
         }),
       };
@@ -85,14 +109,53 @@ function createFakeClient({
           const row = eventType === 'break' ? openBreakEntry : eventType === 'work' ? openWorkEntry : null;
           return { data: row, error: null };
         },
-        insert: () => {
-          throw new Error('Employee punch flow should not insert time_entries directly.');
+        single: async () => ({ data: existingTimeEntry, error: existingTimeEntry ? null : { message: 'No rows found' } }),
+        insert: (payload: Partial<TimeEntryRow>) => {
+          if (profile.role !== 'admin') {
+            throw new Error('Employee punch flow should not insert time_entries directly.');
+          }
+          return {
+            select: () => ({
+              single: async () => ({ data: timeEntryRow({ ...payload, id: 'manual-entry' }), error: null }),
+            }),
+          };
         },
-        update: () => {
-          throw new Error('Employee punch flow should not update time_entries directly.');
+        update: (payload: Partial<TimeEntryRow>) => {
+          if (profile.role !== 'admin') {
+            throw new Error('Employee punch flow should not update time_entries directly.');
+          }
+          return {
+            eq: () => ({
+              select: () => ({
+                single: async () => ({ data: timeEntryRow({ ...existingTimeEntry, ...payload }), error: null }),
+              }),
+            }),
+          };
+        },
+        delete: () => {
+          if (profile.role !== 'admin') {
+            throw new Error('Employee punch flow should not delete time_entries directly.');
+          }
+          return {
+            eq: () => ({
+              select: () => ({
+                single: async () => ({ data: existingTimeEntry ? { id: existingTimeEntry.id } : null, error: existingTimeEntry ? null : { message: 'No rows found' } }),
+              }),
+            }),
+          };
         },
       };
       return query;
+    }
+
+    if (table === 'job_codes') {
+      return {
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: jobCodeRow, error: null }),
+          }),
+        }),
+      };
     }
 
     throw new Error(`Unexpected table: ${table}`);
@@ -216,5 +279,80 @@ describe('SupabaseTimeClockService employee punch guardrails', () => {
     })).rejects.toThrow('Employee punch actions can only be saved for the signed-in user.');
 
     expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('SupabaseTimeClockService admin time-entry writes', () => {
+  it('keeps admin manual entries as direct audited writes after validating the job code', async () => {
+    const { service, from } = createFakeClient({ profile: adminProfileRow });
+
+    const entry = await service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: 'job-1',
+      eventType: 'work',
+      clockIn: '2026-06-04T12:00:00.000Z',
+      clockOut: '2026-06-04T16:00:00.000Z',
+      notes: 'Admin correction',
+      createdBy: adminProfileRow.id,
+    });
+
+    expect(entry.id).toBe('manual-entry');
+    expect(from).toHaveBeenCalledWith('job_codes');
+    expect(from).toHaveBeenCalledWith('time_entries');
+  });
+
+  it('rejects inactive or archived job codes before creating admin manual work entries', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      jobCodeRow: { ...activeJobCodeRow, is_active: false },
+    });
+
+    await expect(service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: 'job-1',
+      eventType: 'work',
+      clockIn: '2026-06-04T12:00:00.000Z',
+      clockOut: '2026-06-04T16:00:00.000Z',
+      notes: 'Admin correction',
+      createdBy: adminProfileRow.id,
+    })).rejects.toThrow('Choose an active job code.');
+  });
+
+  it('rejects moving an existing work entry onto an inactive or archived job code', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      jobCodeRow: { ...activeJobCodeRow, is_archived: true },
+    });
+
+    await expect(service.updateTimeEntry({
+      entryId: 'entry-1',
+      patch: { jobCodeId: 'job-2' },
+      editedBy: adminProfileRow.id,
+    })).rejects.toThrow('Choose an active job code.');
+  });
+
+  it('allows editing historical work entries that already reference an archived job code', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      existingTimeEntry: timeEntryRow({ job_code_id: 'archived-job' }),
+      jobCodeRow: { ...activeJobCodeRow, id: 'archived-job', is_archived: true },
+    });
+
+    const entry = await service.updateTimeEntry({
+      entryId: 'entry-1',
+      patch: { jobCodeId: 'archived-job', notes: 'Corrected note' },
+      editedBy: adminProfileRow.id,
+    });
+
+    expect(entry.notes).toBe('Corrected note');
+  });
+
+  it('requires delete readback so missing time entries are not silent no-ops', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      existingTimeEntry: null,
+    });
+
+    await expect(service.deleteTimeEntry({ entryId: 'missing-entry' })).rejects.toThrow('No rows found');
   });
 });
