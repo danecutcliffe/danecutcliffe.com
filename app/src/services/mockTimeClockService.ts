@@ -314,6 +314,120 @@ let timeEntries: TimeEntry[] = [
   },
 ];
 
+if (import.meta.env.VITE_TIME_CLOCK_STRESS_DATA === 'true') {
+  profiles = [
+    ...profiles,
+    {
+      id: 'profile-stress-long',
+      email: 'alexandria.cascading-long-name@example.com',
+      firstName: 'Alexandria-Cassandra',
+      lastName: 'Van Der Extremely Long Renovation Notes',
+      role: 'employee',
+      workerType: 'employee',
+      contractorHstApplicable: false,
+      hourlyRate: 33.33,
+      paidBreaks: true,
+      paidBreakMinutes: 30,
+      canAccessScopes: true,
+      isActive: true,
+      createdAt: iso(new Date('2026-01-03T12:00:00Z')),
+    },
+    {
+      id: 'profile-stress-empty',
+      email: 'empty.state.long-name@example.com',
+      firstName: 'No-Entries-Yet',
+      lastName: 'Stress Fixture With A Very Long Surname',
+      role: 'employee',
+      workerType: 'contractor',
+      contractorHstApplicable: true,
+      hourlyRate: 41.25,
+      paidBreaks: false,
+      paidBreakMinutes: 30,
+      canAccessScopes: false,
+      isActive: true,
+      createdAt: iso(new Date('2026-01-04T12:00:00Z')),
+    },
+  ];
+  jobSites = [
+    ...jobSites,
+    {
+      id: 'site-stress-long',
+      name: 'Stress Property With An Unreasonably Long Name For Mobile Cards And Reports',
+      address: '123 Extremely Long Renovation Site Address, Charlottetown, PE',
+      latitude: 46.2401,
+      longitude: -63.1301,
+      geofenceRadiusMeters: 250,
+      isActive: true,
+      isArchived: false,
+      createdAt: iso(new Date('2026-01-03T12:00:00Z')),
+    },
+  ];
+  jobCodes = [
+    ...jobCodes,
+    {
+      id: 'job-stress-long',
+      jobSiteId: 'site-stress-long',
+      code: 'STRESS-LONG-JOB-CODE-0001',
+      name: 'Long job code label for report dropdown wrapping and table containment',
+      description: 'Stress job used only by Playwright smoke tests.',
+      isActive: true,
+      isArchived: false,
+      createdAt: iso(new Date('2026-01-03T12:00:00Z')),
+    },
+  ];
+  timeEntries = [
+    ...timeEntries,
+    {
+      id: 'entry-stress-long-closed',
+      userId: 'profile-stress-long',
+      jobCodeId: 'job-stress-long',
+      eventType: 'work',
+      clockIn: daysAgoAt(0, 8, 5),
+      clockOut: daysAgoAt(0, 15, 42),
+      clockInLat: 46.2401,
+      clockInLng: -63.1301,
+      clockOutLat: null,
+      clockOutLng: null,
+      notes: 'Stress note with lots of details: cabinet delivery delayed, hallway staging crowded, tenant access window changed, and this sentence intentionally keeps going so report rows and cards must wrap safely instead of widening the mobile shell.',
+      isAutoClockedOut: false,
+      createdBy: 'profile-stress-long',
+      createdAt: daysAgoAt(0, 8, 5),
+    },
+    {
+      id: 'entry-stress-long-break',
+      userId: 'profile-stress-long',
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: daysAgoAt(0, 12, 10),
+      clockOut: daysAgoAt(0, 12, 45),
+      clockInLat: 46.2401,
+      clockInLng: -63.1301,
+      clockOutLat: null,
+      clockOutLng: null,
+      notes: 'Stress break entry',
+      isAutoClockedOut: false,
+      createdBy: 'profile-stress-long',
+      createdAt: daysAgoAt(0, 12, 10),
+    },
+    {
+      id: 'entry-stress-long-open',
+      userId: 'profile-stress-long',
+      jobCodeId: 'job-stress-long',
+      eventType: 'work',
+      clockIn: hoursAgo(2),
+      clockOut: null,
+      clockInLat: 46.2401,
+      clockInLng: -63.1301,
+      clockOutLat: null,
+      clockOutLng: null,
+      notes: 'Open stress entry to prove dashboard and export readiness keep open rows visible without counting them as final payroll.',
+      isAutoClockedOut: false,
+      createdBy: 'profile-stress-long',
+      createdAt: hoursAgo(2),
+    },
+  ];
+}
+
 const delay = async () => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };

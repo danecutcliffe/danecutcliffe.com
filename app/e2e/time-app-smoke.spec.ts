@@ -75,14 +75,30 @@ test.describe('Time app smoke and layout contract', () => {
     await expectNoDocumentOverflow(page);
     if (isMobile) await expectMobileShellContract(page);
 
+    if (!isMobile) {
+      await clickAppTab(page, 'Reports', isMobile);
+      await expect(page.locator('#payroll-export')).toBeVisible();
+      await expect(page.getByText('STRESS-LONG-JOB-CODE-0001').first()).toBeVisible();
+      await expectNoDocumentOverflow(page);
+    }
+
     await clickAppTab(page, 'Timesheets', isMobile);
     await expect(page.locator('#ts-summary')).toBeVisible();
     await expectNoDocumentOverflow(page);
 
-    if (!isMobile) {
-      await clickAppTab(page, 'Reports', isMobile);
-      await expect(page.locator('#payroll-export')).toBeVisible();
-      await expectNoDocumentOverflow(page);
-    }
+    await page.locator('#employee-select').selectOption('profile-stress-long');
+    await expect(page.locator('#employee-select')).toHaveValue('profile-stress-long');
+    await expectNoDocumentOverflow(page);
+
+    await page.locator('#employee-select').selectOption('profile-stress-empty');
+    await expect(page.getByText('No entries for this week.')).toBeVisible();
+    await expectNoDocumentOverflow(page);
+
+    await page.getByRole('button', { name: 'Add Manual Entry' }).click();
+    await expect(page.getByRole('heading', { name: /Manual entry for No-Entries-Yet/ })).toBeVisible();
+    await page.locator('.fixed').getByRole('combobox').selectOption('job-stress-long');
+    await expectNoDocumentOverflow(page);
+    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page.locator('.fixed')).toHaveCount(0);
   });
 });

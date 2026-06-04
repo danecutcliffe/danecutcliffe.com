@@ -32,6 +32,8 @@ const timeUtils = read('app/src/utils/time.ts');
 const verifyTimeBuild = read('scripts/verify-time-build.mjs');
 const releaseWorkflow = read('docs/RELEASE_WORKFLOW.md');
 const changeSafety = read('docs/TIME_APP_CHANGE_SAFETY.md');
+const playwrightConfig = read('app/playwright.config.ts');
+const mockService = read('app/src/services/mockTimeClockService.ts');
 
 if (timeUtils.includes('getEntryPayableHours')) {
   fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
@@ -123,6 +125,26 @@ requireIncludes(
   changeSafety,
   'After each implemented change, give the user a plain-language explanation',
   'Change safety contract must preserve the user ELI5 explanation rule.',
+);
+requireIncludes(
+  playwrightConfig,
+  "VITE_TIME_CLOCK_STRESS_DATA: 'true'",
+  'Playwright smoke tests must keep stress data enabled.',
+);
+requireIncludes(
+  playwrightConfig,
+  "serviceWorkers: 'block'",
+  'Playwright smoke tests must block service workers to avoid stale PWA cache flake.',
+);
+requireIncludes(
+  mockService,
+  'profile-stress-long',
+  'Mock service must keep opt-in long-name stress profile coverage.',
+);
+requireIncludes(
+  mockService,
+  'profile-stress-empty',
+  'Mock service must keep opt-in empty-state stress profile coverage.',
 );
 
 const integrityMigration = read('supabase/migrations/20260604154000_time_entry_integrity_guards.sql');
