@@ -19,6 +19,13 @@ This workspace is the single source of truth for future Time Clock development a
 5. Commit the full release state in one commit.
 6. Add a deploy tag after the commit is ready to publish.
 
+## Generated Asset Hygiene
+
+- `app/` is the source of truth; `time/` and `staging-site/time/` are generated deploy outputs.
+- Do not run formatters, whitespace normalizers, or hand edits over `time/assets/` after Vite builds. The hashed filenames should describe the Vite-authored bundle output, not a post-processed copy.
+- If checking whitespace before a release, check source files and docs, or exclude generated deploy assets such as `time/assets/*` and `staging-site/time/assets/*`.
+- Use `scripts/verify-time-build.mjs` as the deploy-artifact guard: it verifies the expected generated directory, hashed asset references, service worker stamp, environment target, and absence of runtime CSS override files.
+
 ## Staging Flow
 
 Use staging when validating new features against a production-shaped data snapshot without publishing to the production site.

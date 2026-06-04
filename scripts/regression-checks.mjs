@@ -29,6 +29,8 @@ const requireIncludes = (source, needle, message) => {
 
 const service = read('app/src/services/supabaseTimeClockService.ts');
 const timeUtils = read('app/src/utils/time.ts');
+const verifyTimeBuild = read('scripts/verify-time-build.mjs');
+const releaseWorkflow = read('docs/RELEASE_WORKFLOW.md');
 
 if (timeUtils.includes('getEntryPayableHours')) {
   fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
@@ -71,6 +73,31 @@ if (!styles.includes('.app-mobile-bottom-nav') || styles.includes('position: fix
 if (appIndex.includes('time-ui-overrides.css') || existsSync(resolve(root, 'app/public/time-ui-overrides.css'))) {
   fail('Runtime CSS overrides must not bypass source CSS for mobile shell or nav behavior.');
 }
+requireIncludes(
+  verifyTimeBuild,
+  'expectedProductionBuildDir',
+  'Deploy verification must keep production builds tied to the canonical generated time/ directory.',
+);
+requireIncludes(
+  verifyTimeBuild,
+  'expectedStagingBuildDir',
+  'Deploy verification must keep staging builds tied to staging-site/time.',
+);
+requireIncludes(
+  verifyTimeBuild,
+  'nonHashedRuntimeCssRefs',
+  'Deploy verification must reject non-generated runtime CSS references.',
+);
+requireIncludes(
+  releaseWorkflow,
+  'Do not run formatters, whitespace normalizers, or hand edits over `time/assets/` after Vite builds.',
+  'Release workflow must preserve the generated-asset whitespace policy.',
+);
+requireIncludes(
+  releaseWorkflow,
+  'Commit the full release state in one commit.',
+  'Release workflow must keep source and generated time/ deploy artifacts committed together.',
+);
 
 const integrityMigration = read('supabase/migrations/20260604154000_time_entry_integrity_guards.sql');
 requireIncludes(
