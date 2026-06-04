@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AuditLog, JobCode, JobSite, PayPeriodSettings, PayrollGrossUpMultiplier, Profile, TimeEntry } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
-import { buildDetailedCsv, buildQboCsv, downloadCsv } from '../utils/csv';
+import { buildDetailedCsv, downloadCsv } from '../utils/csv';
 import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
@@ -27,7 +27,7 @@ interface AdminReportsProps {
 
 type ReportType = 'detailed' | 'hoursByLocation' | 'payrollSummary' | 'jobs' | 'overtime';
 type FilterKey = 'employees' | 'properties' | 'jobs';
-type ExportFormat = 'xlsx' | 'detailedCsv' | 'qboCsv';
+type ExportFormat = 'xlsx' | 'detailedCsv';
 
 export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
@@ -92,9 +92,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     [entries, grossUpMultipliers, jobCodes, jobSites, payPeriodSettings, profiles],
   );
   const detailedCsv = buildDetailedCsv({ entries: filteredEntries, profiles, jobSites, jobCodes });
-  const qboCsv = buildQboCsv({ entries: exportableEntries, profiles, jobSites, jobCodes });
   const detailedFilename = `time-detail-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
-  const qboFilename = `qbo-time-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
   const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
     entries: filteredEntries,
     profiles,
@@ -130,11 +128,9 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
         ? payrollSummaryModel
         : null;
   const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${reportPeriodStart}_to_${reportPeriodEnd}.xlsx`;
-  const canExportSelectedFormat = exportFormat === 'xlsx'
+  const canExportSelectedReport = exportFormat === 'xlsx'
     ? Boolean(selectedReportModel && selectedReportModel.rows.length > 0)
-    : exportFormat === 'detailedCsv'
-      ? filteredEntries.length > 0
-      : blockers.length === 0 && exportableEntries.length > 0;
+    : filteredEntries.length > 0;
   const displayedPayableHours = topPeriodSummary.netWorkHours;
   const displayedGrossPay = topPeriodSummary.grossPay;
   const displayedOvertimeHours = topPeriodSummary.overtimeHours;
@@ -162,15 +158,11 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   }, [availableJobCodes]);
 
   const handleExport = () => {
-    if (exportFormat === 'xlsx') {
-      if (selectedReportModel) downloadReportXlsx(selectedReportModel, selectedXlsxFilename);
-      return;
-    }
     if (exportFormat === 'detailedCsv') {
       downloadCsv(detailedFilename, detailedCsv);
       return;
     }
-    downloadCsv(qboFilename, qboCsv);
+    if (selectedReportModel) downloadReportXlsx(selectedReportModel, selectedXlsxFilename);
   };
 
   const changePeriodStart = (start: string) => {
@@ -236,7 +228,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       <div id="payroll-export" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold leading-tight">Payroll export</h2>
+            <h2 className="text-2xl font-bold leading-tight">Payroll report period</h2>
             <p className="mt-1 text-sm text-muted">{formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -256,7 +248,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
         {topPeriodBlockers.length > 0 && (
           <div className="mt-4 rounded-md border border-error-border bg-error-bg p-3">
-            <p className="text-sm font-bold text-error-text">Resolve before QBO export</p>
+            <p className="text-sm font-bold text-error-text">Resolve before payroll report export</p>
             <ul className="mt-2 space-y-1 text-sm font-semibold text-error-text">
               {topPeriodBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
             </ul>
@@ -264,7 +256,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
         )}
         {topPeriodBlockers.length === 0 && topPeriodExportableEntries.length > 0 && (
           <p className="mt-4 rounded-md bg-success-bg p-3 text-sm font-bold text-success">
-            This filtered pay period is ready to export. Open entries are excluded from QBO by design.
+            This pay period is ready for report export. Open entries are excluded from exportable report rows by design.
           </p>
         )}
       </div>
@@ -299,12 +291,11 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
             onChange={(value) => setExportFormat(value as ExportFormat)}
             options={[
               { value: 'xlsx', label: 'XLSX' },
-              { value: 'detailedCsv', label: 'Detailed CSV' },
-              { value: 'qboCsv', label: 'QBO CSV' },
+              { value: 'detailedCsv', label: 'Detailed Time Entries CSV' },
             ]}
           />
           <div className="hidden lg:block" aria-hidden="true" />
-          <button className="min-h-12 self-start rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedFormat} onClick={handleExport}>Export</button>
+          <button className="min-h-12 self-start rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedReport} onClick={handleExport}>Export</button>
         </div>
       </div>
 

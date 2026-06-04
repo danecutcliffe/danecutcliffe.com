@@ -1,9 +1,8 @@
 import type { JobCode, JobSite, Profile, TimeEntry } from '../domain/types';
 import { jobDisplayName, jobSiteById } from './jobs';
-import { calculateTimesheetSummary, formatAtlanticDateTime, getAtlanticDateKey, getEntryDurationHours, getEntryPayableHours } from './time';
+import { calculateTimesheetSummary, formatAtlanticDateTime, getAtlanticDateKey, getEntryDurationHours } from './time';
 
 const detailedHeaders = ['Date', 'Employee', 'Property', 'Job Code', 'Job', 'Clock In', 'Clock Out', 'Hours', 'Break Hours', 'Net Hours', 'GPS Status', 'Notes'];
-const qboHeaders = ['TxnDate', 'Name', 'Time', 'StartTime', 'EndTime', 'Description', 'BillableStatus', 'Customer', 'ServiceItem', 'HourlyRate', 'Taxable', 'Class', 'Location'];
 
 function escapeCsvValue(value: string | number | null | undefined): string {
   const text = value === null || value === undefined ? '' : String(value);
@@ -58,60 +57,6 @@ export function buildDetailedCsv(params: {
     ];
   });
   return toCsv(detailedHeaders, rows);
-}
-
-export function buildQboCsv(params: {
-  entries: TimeEntry[];
-  profiles: Profile[];
-  jobSites: JobSite[];
-  jobCodes: JobCode[];
-  now?: Date;
-}): string {
-  const profileById = new Map(params.profiles.map((profile) => [profile.id, profile]));
-  const jobById = new Map(params.jobCodes.map((job) => [job.id, job]));
-  const siteById = jobSiteById(params.jobSites);
-  const groupedMinutes = new Map<string, { employeeName: string; date: string; propertyName: string; jobName: string; minutes: number; notes: string[]; rate: number }>();
-
-  params.entries.forEach((entry) => {
-    if (!entry.jobCodeId) return;
-    const profile = profileById.get(entry.userId);
-    const job = jobById.get(entry.jobCodeId);
-    const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : undefined;
-    const date = getAtlanticDateKey(entry.clockIn);
-    const key = `${entry.userId}|${date}|${entry.jobCodeId}`;
-    const existing = groupedMinutes.get(key) ?? {
-      employeeName: employeeName(profile),
-      date,
-      propertyName: site?.name ?? '',
-      jobName: job?.code ?? job?.name ?? '',
-      minutes: 0,
-      notes: [],
-      rate: profile?.hourlyRate ?? 0,
-    };
-    existing.minutes += Math.round(getEntryPayableHours(entry, params.now, { paidBreaks: profile?.paidBreaks ?? false, paidBreakMinutes: profile?.paidBreakMinutes ?? 30 }) * 60);
-    if (entry.notes && entry.eventType === 'work') existing.notes.push(entry.notes);
-    groupedMinutes.set(key, existing);
-  });
-
-  const rows = Array.from(groupedMinutes.values())
-    .filter((row) => row.minutes > 0)
-    .sort((a, b) => `${a.employeeName}|${a.date}|${a.jobName}`.localeCompare(`${b.employeeName}|${b.date}|${b.jobName}`))
-    .map((row) => [
-      row.date,
-      row.employeeName,
-      (row.minutes / 60).toFixed(2),
-      '',
-      '',
-      row.notes.join(' | '),
-      'Billable',
-      row.propertyName,
-      row.jobName,
-      row.rate ? row.rate.toFixed(2) : '',
-      'FALSE',
-      '',
-      '',
-    ]);
-  return toCsv(qboHeaders, rows);
 }
 
 export function downloadCsv(filename: string, csv: string) {

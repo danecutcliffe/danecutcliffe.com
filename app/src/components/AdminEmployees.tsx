@@ -917,7 +917,7 @@ function JobCodeRow({
             <span className="max-w-full rounded-full bg-badge-neutral px-2 py-1 text-xs font-bold text-muted">{jobPropertyName(job, job.jobSiteId ? siteById.get(job.jobSiteId) : null)}</span>
           </div>
           {job.description && <p className="mt-0.5 break-words text-sm text-muted">{job.description}</p>}
-          {isUsed && <p className="mt-1 text-xs font-semibold text-accent">Used on time records. Title and property can still be corrected until payroll is approved/exported.</p>}
+          {isUsed && <p className="mt-1 text-xs font-semibold text-accent">Used on time records. Title and property can still be corrected until payroll is approved.</p>}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
           <div className="mr-auto flex items-center gap-2 sm:mr-0">

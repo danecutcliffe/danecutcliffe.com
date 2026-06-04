@@ -80,7 +80,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
               <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Employee lunch rules</span>
               <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">OT after {payPeriodSettings.weeklyOvertimeThresholdHours}h/week</span>
             </div>
-            <h2 className="mt-3 text-2xl font-bold leading-tight">Is this pay period ready to export?</h2>
+            <h2 className="mt-3 text-2xl font-bold leading-tight">Is this pay period ready for payroll review?</h2>
             <p className="mt-1 text-sm text-muted">
               {formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}
             </p>
@@ -296,9 +296,9 @@ function Panel({ id, title, action, children }: { id?: string; title: string; ac
 }
 
 function readinessLabel(readiness: 'ready' | 'review' | 'blocked') {
-  if (readiness === 'ready') return 'Ready to export';
-  if (readiness === 'review') return 'Review before export';
-  return 'Not ready to export';
+  if (readiness === 'ready') return 'Ready for review';
+  if (readiness === 'review') return 'Review needed';
+  return 'Not ready for payroll';
 }
 
 function readinessClass(readiness: 'ready' | 'review' | 'blocked') {

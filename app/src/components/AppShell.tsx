@@ -62,9 +62,8 @@ const adminTabs: TabDef[] = [
   ]},
   { id: 'reports', label: 'Reports', sections: [
     { id: 'labour-costs', label: 'Payroll Costs' },
-    { id: 'payroll-export', label: 'Payroll Export' },
+    { id: 'payroll-export', label: 'Payroll Reports' },
     { id: 'report-detail', label: 'Reports' },
-    { id: 'csv-exports', label: 'CSV Exports' },
     { id: 'audit-trail', label: 'Audit Trail' },
   ]},
   { id: 'scope-builder', label: 'Scope Builder', sections: [

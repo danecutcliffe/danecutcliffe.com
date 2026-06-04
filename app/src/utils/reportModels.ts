@@ -283,7 +283,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
 
   return {
     title: 'Payroll Summary',
-    subtitle: `${params.periodStart} to ${params.periodEnd} | Payroll export`,
+    subtitle: `${params.periodStart} to ${params.periodEnd} | Payroll review`,
     columns: [
       { key: 'firstName', label: 'First Name', width: 14 },
       { key: 'lastName', label: 'Last Name', width: 18 },
@@ -308,7 +308,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
     sheets: [
       {
         title: 'Job Codes',
-        subtitle: 'Property and job code mapping exported with the payroll workbook.',
+        subtitle: 'Property and job code mapping included with the payroll workbook.',
         columns: [
           { key: 'property', label: 'Property', width: 24 },
           { key: 'jobCode', label: 'Job Code', width: 12 },
