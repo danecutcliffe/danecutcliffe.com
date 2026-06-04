@@ -18,6 +18,7 @@ export interface Profile {
   canAccessScopes: boolean;
   isActive: boolean;
   isRejected?: boolean;
+  signupPending?: boolean;
   createdAt: string;
 }
 

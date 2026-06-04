@@ -690,7 +690,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     await delay();
     const profile = profiles.find((candidate) => candidate.id === profileId);
     if (!profile) throw new Error('Signup request not found.');
-    if (profile.isActive || timeEntries.some((entry) => entry.userId === profileId)) throw new Error('Only inactive signup requests with no time history can be rejected.');
+    if (!profile.signupPending || profile.isActive || timeEntries.some((entry) => entry.userId === profileId)) throw new Error('Only pending signup requests with no time history can be rejected.');
     profiles = profiles.filter((candidate) => candidate.id !== profileId);
     logAudit({ userId: currentProfileId, action: 'signup_rejected', targetTable: 'profiles', targetId: profile.id, oldValues: { ...profile }, newValues: null });
   },
@@ -715,6 +715,7 @@ export const mockTimeClockService: AdminTimeClockService = {
       paidBreakMinutes,
       canAccessScopes,
       isActive,
+      signupPending: false,
       createdAt: new Date().toISOString(),
     };
     profiles = [...profiles, profile];

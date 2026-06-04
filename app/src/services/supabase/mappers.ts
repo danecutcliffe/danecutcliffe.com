@@ -14,6 +14,7 @@ export interface ProfileRow {
   can_access_scopes?: boolean;
   is_active: boolean;
   is_rejected?: boolean;
+  signup_pending?: boolean;
   created_at: string;
 }
 
@@ -130,6 +131,7 @@ export const mapProfile = (row: ProfileRow): Profile => ({
   canAccessScopes: row.can_access_scopes ?? true,
   isActive: row.is_active,
   isRejected: row.is_rejected ?? false,
+  signupPending: row.signup_pending ?? false,
   createdAt: row.created_at,
 });
 

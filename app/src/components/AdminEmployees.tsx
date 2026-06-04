@@ -47,7 +47,7 @@ export function AdminEmployees({ profiles, jobSites, jobCodes, entries, payPerio
   const archivedJobCodes = jobCodes.filter((job) => job.isArchived);
   const workingJobSections = buildJobCodeSections(workingJobCodes, jobSites);
   const archivedJobSections = buildJobCodeSections(archivedJobCodes, jobSites);
-  const pendingProfiles = profiles.filter((profile) => !profile.isActive && !profile.isRejected);
+  const pendingProfiles = profiles.filter((profile) => profile.signupPending && !profile.isActive && !profile.isRejected);
   const visibleProfiles = profiles.filter((profile) => !profile.isRejected);
   const displayedProfiles = sortProfiles(
     visibleProfiles.filter((profile) => employeeTypeFilter === 'all' || profileType(profile) === employeeTypeFilter),
