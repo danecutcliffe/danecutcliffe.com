@@ -103,6 +103,11 @@ requireIncludes(
 );
 requireIncludes(
   releaseWorkflow,
+  'Required format: `deploy-YYYY-MM-DD-NN`',
+  'Release workflow must require production deploy tags in deploy-YYYY-MM-DD-NN format.',
+);
+requireIncludes(
+  releaseWorkflow,
   'npm run test:smoke',
   'Release workflow must keep the Playwright smoke/layout gate documented for affected UI deploys.',
 );

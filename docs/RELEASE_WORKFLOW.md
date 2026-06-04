@@ -52,15 +52,11 @@ Use staging when validating new features against a production-shaped data snapsh
 
 ## Tag Guidance
 
-Tag every deployable release so the published state is easy to recover later.
+Tag every production deploy so the published state is easy to recover later.
 
-Suggested formats:
+Required format: `deploy-YYYY-MM-DD-NN`, where `NN` is the two-digit production deploy number for that date.
 
-- `deploy-2026-05-29`
-- `deploy-2026-05-29-01`
-- `v1.0.0`
-
-Pick one format and stay consistent.
+Example: `deploy-2026-05-29-01`
 
 ## Rollback Model
 
