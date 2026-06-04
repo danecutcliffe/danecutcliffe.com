@@ -5,6 +5,7 @@ import { buildDetailedCsv, downloadCsv } from '../utils/csv';
 import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
+import { buildReportContextEntries, buildReportWarningEntries } from '../utils/reportContext';
 import { downloadReportXlsx } from '../utils/xlsxReports';
 import {
   addDaysToDateKey,
@@ -753,45 +754,6 @@ function buildExportBlockers(entries: TimeEntry[], profileById: Map<string, Prof
   if (missingRateNames.length > 0) blockers.push(`Missing pay rate: ${missingRateNames.join(', ')}`);
 
   return blockers;
-}
-
-function buildReportContextEntries(entries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[], periodStart: string, periodEnd: string) {
-  const userIds = new Set(visibleWorkEntries.map((entry) => entry.userId));
-  const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
-  if (userIds.size === 0) return visibleWorkEntries;
-
-  const contextStart = weekStartForDateKey(periodStart);
-  const contextEnd = addDaysToDateKey(weekStartForDateKey(periodEnd), 6);
-
-  return entries.filter((entry) => {
-    if (!userIds.has(entry.userId)) return false;
-    const dateKey = getAtlanticDateKey(entry.clockIn);
-    if (dateKey < contextStart || dateKey > contextEnd) return false;
-
-    // Closed hidden rows are useful OT context. Open hidden rows are volatile, so
-    // only include an open row when it is itself visible in the selected report.
-    return Boolean(entry.clockOut) || visibleEntryIds.has(entry.id);
-  });
-}
-
-function buildReportWarningEntries(periodEntries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[]) {
-  const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
-  const visibleUserDays = new Set<string>();
-  visibleWorkEntries.forEach((entry) => {
-    visibleUserDays.add(`${entry.userId}|${getAtlanticDateKey(entry.clockIn)}`);
-    if (entry.clockOut) visibleUserDays.add(`${entry.userId}|${getAtlanticDateKey(entry.clockOut)}`);
-  });
-
-  return periodEntries.filter((entry) => (
-    visibleEntryIds.has(entry.id) || visibleUserDays.has(`${entry.userId}|${getAtlanticDateKey(entry.clockIn)}`)
-  ));
-}
-
-function weekStartForDateKey(dateKey: string) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  const utcDate = new Date(Date.UTC(year, month - 1, day));
-  const daysSinceMonday = (utcDate.getUTCDay() + 6) % 7;
-  return addDaysToDateKey(dateKey, -daysSinceMonday);
 }
 
 function name(profile?: Profile) {

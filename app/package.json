@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "verify": "node ../scripts/regression-checks.mjs && tsc -b",
+    "test:domain": "vitest run src/utils/__tests__/*.test.ts",
+    "verify": "node ../scripts/regression-checks.mjs && npm run test:domain && tsc -b",
     "build": "npm run verify && vite build && node ../scripts/stamp-sw.mjs",
     "preview": "vite preview"
   },
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.1.9",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.18"
+    "tailwindcss": "^3.4.18",
+    "vitest": "^4.1.8"
   }
 }

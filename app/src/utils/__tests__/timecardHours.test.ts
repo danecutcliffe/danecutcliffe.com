@@ -1,0 +1,94 @@
+import { describe, expect, it } from 'vitest';
+import { buildLabourCostBreakdown } from '../labour';
+import { computeEntryHours } from '../timecardHours';
+import {
+  breakEntry,
+  employeeProfile,
+  jobCodes,
+  jobSites,
+  paidBreakProfile,
+  resetEntrySequence,
+  workEntry,
+} from '../../test/fixtures/timeMathFixtures';
+
+function profilesById(profiles = [employeeProfile]) {
+  return new Map(profiles.map((profile) => [profile.id, profile]));
+}
+
+describe('computeEntryHours', () => {
+  it('charges a break at a job switch to the preceding same-day work entry', () => {
+    resetEntrySequence();
+    const firstJob = workEntry({ id: 'work-a', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T11:00:00.000Z', hours: 4 });
+    const breakAtSwitch = breakEntry({ id: 'break-at-switch', clockIn: '2026-06-02T15:00:00.000Z', hours: 0.5 });
+    const secondJob = workEntry({ id: 'work-b', jobCodeId: 'job-other', clockIn: '2026-06-02T15:30:00.000Z', hours: 4.5 });
+
+    const result = computeEntryHours([firstJob, breakAtSwitch, secondJob], profilesById(), 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(result.byEntryId.get(firstJob.id)?.unpaidBreakHours).toBeCloseTo(0.5, 5);
+    expect(result.byEntryId.get(firstJob.id)?.paidHours).toBeCloseTo(3.5, 5);
+    expect(result.byEntryId.get(secondJob.id)?.paidHours).toBeCloseTo(4.5, 5);
+  });
+
+  it('lets orphan breaks consume paid allowance before later attributed breaks', () => {
+    resetEntrySequence();
+    const orphanPaidBreak = breakEntry({ id: 'orphan-paid', userId: paidBreakProfile.id, clockIn: '2026-06-02T11:00:00.000Z', hours: 20 / 60 });
+    const work = workEntry({ id: 'paid-work', userId: paidBreakProfile.id, clockIn: '2026-06-02T12:00:00.000Z', hours: 2 });
+    const attributedBreak = breakEntry({ id: 'paid-break', userId: paidBreakProfile.id, clockIn: '2026-06-02T13:00:00.000Z', hours: 0.5 });
+
+    const result = computeEntryHours([orphanPaidBreak, work, attributedBreak], profilesById([paidBreakProfile]), 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(result.unattributedBreakHours).toBeCloseTo(0, 5);
+    expect(result.byEntryId.get(work.id)?.paidBreakHours).toBeCloseTo(10 / 60, 5);
+    expect(result.byEntryId.get(work.id)?.unpaidBreakHours).toBeCloseTo(20 / 60, 5);
+    expect(result.byEntryId.get(work.id)?.paidHours).toBeCloseTo(5 / 3, 5);
+  });
+
+  it('surfaces unpaid orphan break time instead of silently absorbing it', () => {
+    resetEntrySequence();
+    const orphanBreak = breakEntry({ id: 'orphan-unpaid', clockIn: '2026-06-02T13:00:00.000Z', hours: 0.5 });
+
+    const result = computeEntryHours([orphanBreak], profilesById(), 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(result.unattributedBreakHours).toBeCloseTo(0.5, 5);
+  });
+
+  it('attributes weekly overtime chronologically across entries', () => {
+    resetEntrySequence();
+    const first = workEntry({ id: 'first-eight', clockIn: '2026-06-01T12:00:00.000Z', hours: 8 });
+    const second = workEntry({ id: 'second-four', jobCodeId: 'job-other', clockIn: '2026-06-02T12:00:00.000Z', hours: 4 });
+
+    const result = computeEntryHours([first, second], profilesById(), 8, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(result.byEntryId.get(first.id)?.regularHours).toBeCloseTo(8, 5);
+    expect(result.byEntryId.get(first.id)?.otHours).toBeCloseTo(0, 5);
+    expect(result.byEntryId.get(second.id)?.regularHours).toBeCloseTo(0, 5);
+    expect(result.byEntryId.get(second.id)?.otHours).toBeCloseTo(4, 5);
+  });
+});
+
+describe('labour cost regression fixtures', () => {
+  it('costs Emmanuel QA0358 from QA0358 net hours, not a gross-hour share of all jobs', () => {
+    resetEntrySequence();
+    const qaWork = workEntry({ id: 'emmanuel-qa', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8.08 });
+    const qaBreak = breakEntry({ id: 'emmanuel-qa-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.6 });
+    const otherWorkA = workEntry({ id: 'emmanuel-other-a', jobCodeId: 'job-qs0358', clockIn: '2026-05-28T12:00:00.000Z', hours: 8 });
+    const otherBreakA = breakEntry({ id: 'emmanuel-other-break-a', clockIn: '2026-05-28T16:00:00.000Z', hours: 0.5 });
+    const otherWorkB = workEntry({ id: 'emmanuel-other-b', jobCodeId: 'job-other', clockIn: '2026-06-01T12:00:00.000Z', hours: 8 });
+    const otherBreakB = breakEntry({ id: 'emmanuel-other-break-b', clockIn: '2026-06-01T16:00:00.000Z', hours: 0.5 });
+
+    const breakdown = buildLabourCostBreakdown({
+      entries: [otherWorkA, otherBreakA, otherWorkB, otherBreakB, qaWork, qaBreak],
+      profiles: [employeeProfile],
+      jobSites,
+      jobCodes,
+      grossUpSchedule: [{ effectiveDate: '2026-01-01', multiplier: 1.25 }],
+      weeklyOvertimeThresholdHours: 48,
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+    const qaJob = breakdown.properties.flatMap((property) => property.jobs).find((job) => job.jobCodeLabel.includes('QA0358'));
+
+    expect(qaJob?.payableHours).toBeCloseTo(7.48, 5);
+    expect(qaJob?.grossPay).toBeCloseTo(134.64, 2);
+    expect(qaJob?.loadedCost).toBeCloseTo(168.30, 2);
+  });
+});
