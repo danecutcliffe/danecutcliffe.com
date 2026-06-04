@@ -31,6 +31,8 @@ export interface ReportModel {
 
 interface BuildDetailedTimecardReportParams {
   entries: TimeEntry[];
+  contextEntries?: TimeEntry[];
+  warningEntries?: TimeEntry[];
   profiles: Profile[];
   jobSites: JobSite[];
   jobCodes: JobCode[];
@@ -64,6 +66,8 @@ const DETAIL_COLUMNS: ReportColumn[] = [
 
 export function buildDetailedTimecardReport({
   entries,
+  contextEntries,
+  warningEntries,
   profiles,
   jobSites,
   jobCodes,
@@ -78,7 +82,13 @@ export function buildDetailedTimecardReport({
   const workEntries = entries
     .filter((entry) => entry.eventType === 'work')
     .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
-  const { byEntryId, unattributedBreakHours } = computeEntryHours(entries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const calculationEntries = contextEntries ?? entries;
+  const warningScopeEntries = warningEntries ?? entries;
+  const hoursResult = computeEntryHours(calculationEntries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const warningResult = warningScopeEntries === calculationEntries
+    ? hoursResult
+    : computeEntryHours(warningScopeEntries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const { byEntryId } = hoursResult;
 
   const rows = workEntries.map((entry) => {
     const profile = profileById.get(entry.userId);
@@ -111,7 +121,7 @@ export function buildDetailedTimecardReport({
   const totalRegularHours = rows.reduce((total, row) => total + Number(row.regularHours ?? 0), 0);
   const totalOvertimeHours = rows.reduce((total, row) => total + Number(row.otHours ?? 0), 0);
   const openEntries = workEntries.filter((entry) => !entry.clockOut).length;
-  const openBreaks = entries.filter((entry) => entry.eventType === 'break' && !entry.clockOut).length;
+  const openBreaks = warningScopeEntries.filter((entry) => entry.eventType === 'break' && !entry.clockOut).length;
   const missingJobCodes = workEntries.filter((entry) => !entry.jobCodeId).length;
 
   return {
@@ -129,7 +139,7 @@ export function buildDetailedTimecardReport({
       ...(openEntries > 0 ? [{ severity: 'blocker' as const, message: `${openEntries} open work ${openEntries === 1 ? 'entry' : 'entries'}` }] : []),
       ...(openBreaks > 0 ? [{ severity: 'blocker' as const, message: `${openBreaks} open break ${openBreaks === 1 ? 'entry' : 'entries'}` }] : []),
       ...(missingJobCodes > 0 ? [{ severity: 'review' as const, message: `${missingJobCodes} work ${missingJobCodes === 1 ? 'entry is' : 'entries are'} missing a job code` }] : []),
-      ...(unattributedBreakHours > 0 ? [{ severity: 'review' as const, message: `${roundHours(unattributedBreakHours).toFixed(2)}h of unpaid break time could not be matched to a work entry` }] : []),
+      ...(warningResult.unattributedBreakHours > 0 ? [{ severity: 'review' as const, message: `${roundHours(warningResult.unattributedBreakHours).toFixed(2)}h of unpaid break time could not be matched to a work entry` }] : []),
     ],
   };
 }

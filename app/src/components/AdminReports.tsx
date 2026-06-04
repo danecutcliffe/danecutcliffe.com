@@ -12,7 +12,6 @@ import {
   formatAtlanticDate,
   formatAtlanticDateTime,
   getAtlanticDateKey,
-  getEntryDurationHours,
 } from '../utils/time';
 
 interface AdminReportsProps {
@@ -75,8 +74,16 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     }),
     [employeeIds, jobById, jobCodeIds, periodEntries, propertyIds],
   );
-  const exportableEntries = useMemo(() => filteredEntries.filter((entry) => entry.clockOut), [filteredEntries]);
-  const blockers = useMemo(() => buildExportBlockers(filteredEntries, profileById), [filteredEntries, profileById]);
+  const filteredWorkEntries = useMemo(() => filteredEntries.filter((entry) => entry.eventType === 'work'), [filteredEntries]);
+  const reportContextEntries = useMemo(
+    () => buildReportContextEntries(entries, filteredEntries, filteredWorkEntries, reportPeriodStart, reportPeriodEnd),
+    [entries, filteredEntries, filteredWorkEntries, reportPeriodEnd, reportPeriodStart],
+  );
+  const reportWarningEntries = useMemo(
+    () => buildReportWarningEntries(periodEntries, filteredEntries, filteredWorkEntries),
+    [filteredEntries, filteredWorkEntries, periodEntries],
+  );
+  const hasReportFilters = employeeIds.length > 0 || propertyIds.length > 0 || jobCodeIds.length > 0;
   const topPeriodExportableEntries = useMemo(() => topPeriodEntries.filter((entry) => entry.clockOut), [topPeriodEntries]);
   const topPeriodBlockers = useMemo(() => buildExportBlockers(topPeriodEntries, profileById), [profileById, topPeriodEntries]);
   const topPeriodSummary = useMemo(() => calculatePayrollSummary(topPeriodEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople, topPeriodEntries]);
@@ -95,31 +102,37 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const detailedFilename = `time-detail-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
   const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
     entries: filteredEntries,
+    contextEntries: reportContextEntries,
+    warningEntries: reportWarningEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
     periodStart: reportPeriodStart,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
   const hoursByLocationModel = useMemo(() => buildHoursByLocationReport({
     entries: filteredEntries,
+    contextEntries: reportContextEntries,
+    warningEntries: reportWarningEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
     periodStart: reportPeriodStart,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
   const payrollSummaryModel = useMemo(() => buildPayrollSummaryReport({
     entries: filteredEntries,
+    contextEntries: reportContextEntries,
+    warningEntries: reportWarningEntries,
     profiles,
     jobSites,
     jobCodes,
     payPeriodSettings,
     periodStart: reportPeriodStart,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportPeriodEnd, reportPeriodStart, profiles]);
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
   const selectedReportModel = reportType === 'detailed'
     ? detailedTimecardModel
     : reportType === 'hoursByLocation'
@@ -262,7 +275,12 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       </div>
 
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
-        <p className="mb-3 text-sm font-semibold text-muted">Reports and exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold.</p>
+        <p className="mb-3 text-sm font-semibold text-muted">Report previews and XLSX exports use each employee's paid lunch setting and the {payPeriodSettings.weeklyOvertimeThresholdHours}h weekly overtime threshold. Detailed Time Entries CSV is a raw row-level export.</p>
+        {hasReportFilters && (
+          <p className="mb-3 rounded-md border border-app-border bg-card-alt px-3 py-2 text-sm font-semibold text-muted-strong">
+            Filtered rows use full employee pay-period/week context for break and overtime calculations in report previews and XLSX exports.
+          </p>
+        )}
         <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-4">
           <LabeledSelect
             label="Report Type"
@@ -302,8 +320,8 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       <div id="report-detail" className="scroll-mt-20 min-w-0">
         <div className="min-w-0 rounded-md border border-app-border bg-card p-4 shadow-soft">
           {selectedReportModel && <ReportPreview model={selectedReportModel} />}
-          {reportType === 'jobs' && <JobReport entries={filteredEntries} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} />}
-          {reportType === 'overtime' && <OvertimeReport entries={filteredEntries} profiles={reportPeople} weeklyOvertimeThresholdHours={payPeriodSettings.weeklyOvertimeThresholdHours} />}
+          {reportType === 'jobs' && <JobReport model={detailedTimecardModel} />}
+          {reportType === 'overtime' && <OvertimeReport model={detailedTimecardModel} profiles={reportPeople} />}
         </div>
       </div>
 
@@ -596,15 +614,38 @@ function HoursReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entr
   return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes, weeklyOvertimeThresholdHours }).netWorkHours.toFixed(2)} payable hours` }))} />;
 }
 
-function JobReport({ entries, profiles, jobSites, jobCodes }: { entries: TimeEntry[]; profiles: Profile[]; jobSites: JobSite[]; jobCodes: JobCode[] }) {
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const siteById = jobSiteById(jobSites);
-  const jobById = new Map(jobCodes.map((job) => [job.id, job]));
-  return <ReportList title="Job hours" items={jobCodes.map((job) => ({ title: jobDisplayNameById(job.id, jobById, siteById), body: `${calculateJobPayableHours(entries.filter((entry) => entry.jobCodeId === job.id), profileById).toFixed(2)} payable hours` }))} />;
+function JobReport({ model }: { model: ReportModel }) {
+  const jobHours = new Map<string, { title: string; paidHours: number }>();
+
+  model.rows.forEach((row) => {
+    if (row.entryStatus === 'Open') return;
+    const key = `${row.property}|${row.jobCode}|${row.job}`;
+    const title = `${row.property} · ${row.jobCode} · ${row.job}`;
+    const current = jobHours.get(key) ?? { title, paidHours: 0 };
+    current.paidHours += Number(row.paidHours ?? 0);
+    jobHours.set(key, current);
+  });
+
+  const items = [...jobHours.values()]
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map((job) => ({ title: job.title, body: `${job.paidHours.toFixed(2)} payable hours` }));
+
+  return <ReportList title="Job hours" items={items} />;
 }
 
-function OvertimeReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entries: TimeEntry[]; profiles: Profile[]; weeklyOvertimeThresholdHours: number }) {
-  return <ReportList title="Overtime" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes, weeklyOvertimeThresholdHours }).overtimeHours.toFixed(2)} overtime hours` }))} />;
+function OvertimeReport({ model, profiles }: { model: ReportModel; profiles: Profile[] }) {
+  const overtimeByEmployee = new Map<string, number>();
+
+  model.rows.forEach((row) => {
+    if (row.entryStatus === 'Open') return;
+    const employee = String(row.employee ?? 'Unknown');
+    overtimeByEmployee.set(employee, (overtimeByEmployee.get(employee) ?? 0) + Number(row.otHours ?? 0));
+  });
+
+  return <ReportList title="Overtime" items={profiles.map((profile) => {
+    const employeeName = name(profile);
+    return { title: employeeName, body: `${(overtimeByEmployee.get(employeeName) ?? 0).toFixed(2)} overtime hours` };
+  })} />;
 }
 
 function ReportList({ title, items }: { title: string; items: Array<{ title: string; body: string }> }) {
@@ -714,6 +755,45 @@ function buildExportBlockers(entries: TimeEntry[], profileById: Map<string, Prof
   return blockers;
 }
 
+function buildReportContextEntries(entries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[], periodStart: string, periodEnd: string) {
+  const userIds = new Set(visibleWorkEntries.map((entry) => entry.userId));
+  const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
+  if (userIds.size === 0) return visibleWorkEntries;
+
+  const contextStart = weekStartForDateKey(periodStart);
+  const contextEnd = addDaysToDateKey(weekStartForDateKey(periodEnd), 6);
+
+  return entries.filter((entry) => {
+    if (!userIds.has(entry.userId)) return false;
+    const dateKey = getAtlanticDateKey(entry.clockIn);
+    if (dateKey < contextStart || dateKey > contextEnd) return false;
+
+    // Closed hidden rows are useful OT context. Open hidden rows are volatile, so
+    // only include an open row when it is itself visible in the selected report.
+    return Boolean(entry.clockOut) || visibleEntryIds.has(entry.id);
+  });
+}
+
+function buildReportWarningEntries(periodEntries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[]) {
+  const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
+  const visibleUserDays = new Set<string>();
+  visibleWorkEntries.forEach((entry) => {
+    visibleUserDays.add(`${entry.userId}|${getAtlanticDateKey(entry.clockIn)}`);
+    if (entry.clockOut) visibleUserDays.add(`${entry.userId}|${getAtlanticDateKey(entry.clockOut)}`);
+  });
+
+  return periodEntries.filter((entry) => (
+    visibleEntryIds.has(entry.id) || visibleUserDays.has(`${entry.userId}|${getAtlanticDateKey(entry.clockIn)}`)
+  ));
+}
+
+function weekStartForDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const daysSinceMonday = (utcDate.getUTCDay() + 6) % 7;
+  return addDaysToDateKey(dateKey, -daysSinceMonday);
+}
+
 function name(profile?: Profile) {
   return profile ? `${profile.firstName} ${profile.lastName}` : 'Unknown';
 }
@@ -763,18 +843,6 @@ function summarizeFields(values: Record<string, unknown> | null | undefined, pre
   const fields = Object.keys(values).filter((key) => !['id', 'updated_at', 'created_at'].includes(key)).slice(0, 5);
   if (fields.length === 0) return `${prefix} no captured details.`;
   return `${prefix} ${fields.map(formatFieldName).join(', ')}.`;
-}
-
-function calculateJobPayableHours(entries: TimeEntry[], profileById: Map<string, Profile>) {
-  return Math.max(0, entries.reduce((total, entry) => {
-    const profile = profileById.get(entry.userId);
-    const duration = getEntryDurationHours(entry);
-    if (entry.eventType === 'break') {
-      const unpaidBreakHours = profile?.paidBreaks ? Math.max(0, duration - profile.paidBreakMinutes / 60) : duration;
-      return total - unpaidBreakHours;
-    }
-    return total + duration;
-  }, 0));
 }
 
 function money(value: number) {
