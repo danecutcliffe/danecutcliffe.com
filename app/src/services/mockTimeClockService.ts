@@ -315,7 +315,7 @@ let timeEntries: TimeEntry[] = [
 ];
 
 const delay = async () => {
-  await new Promise((resolve) => window.setTimeout(resolve, 120));
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };
 
 const makeId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -351,11 +351,48 @@ const logAudit = (params: Omit<AuditLog, 'id' | 'createdAt'>) => {
   auditLogs = [{ id: makeId('audit'), createdAt: new Date().toISOString(), ...params }, ...auditLogs];
 };
 
-const isHistoricalApprovedEntry = (entry: TimeEntry) => {
-  const entryDate = getAtlanticDateKey(entry.clockIn);
-  if (entryDate >= getAtlanticDateKey(new Date())) return false;
-  const period = getPayPeriodForDate(payPeriodSettings, entryDate);
-  return timesheetApprovals.some((approval) => approval.userId === entry.userId && approval.weekStart === period.start && approval.status === 'approved');
+const isApprovedTimeEntry = (entry: TimeEntry) => {
+  return timeEntryTouchesApprovedPeriod(entry.userId, entry.clockIn, entry.clockOut);
+};
+
+const timeEntryTouchesApprovedPeriod = (userId: string, clockIn: string, clockOut?: string | null) => {
+  const entryStart = getAtlanticDateKey(clockIn);
+  const entryEnd = getAtlanticDateKey(clockOut ?? clockIn);
+  return timesheetApprovals.some((approval) => (
+    approval.userId === userId
+    && approval.status === 'approved'
+    && entryStart <= approval.weekEnd
+    && entryEnd >= approval.weekStart
+  ));
+};
+
+const assertTimeEntryUnlocked = (userId: string, clockIn: string, clockOut?: string | null, action = 'editing') => {
+  if (!timeEntryTouchesApprovedPeriod(userId, clockIn, clockOut)) return;
+  throw new Error(`This week has been approved. Unlock it before ${action} entries.`);
+};
+
+const hasClosedWorkOverlap = ({
+  id,
+  userId,
+  eventType,
+  clockIn,
+  clockOut,
+}: Pick<TimeEntry, 'id' | 'userId' | 'eventType' | 'clockIn' | 'clockOut'>) => {
+  if (eventType !== 'work' || !clockOut) return false;
+  const candidateStart = new Date(clockIn).getTime();
+  const candidateEnd = new Date(clockOut).getTime();
+  return timeEntries.some((entry) => {
+    if (entry.id === id || entry.userId !== userId || entry.eventType !== 'work') return false;
+    const existingStart = new Date(entry.clockIn).getTime();
+    const existingEnd = entry.clockOut ? new Date(entry.clockOut).getTime() : Number.POSITIVE_INFINITY;
+    return candidateStart < existingEnd && existingStart < candidateEnd;
+  });
+};
+
+const assertNoClosedWorkOverlap = (entry: Pick<TimeEntry, 'id' | 'userId' | 'eventType' | 'clockIn' | 'clockOut'>) => {
+  if (hasClosedWorkOverlap(entry)) {
+    throw new Error('This work entry overlaps another closed work entry for the same employee.');
+  }
 };
 
 const assertCanPunchFor = (userId: string) => {
@@ -490,6 +527,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     await delay();
     assertCanPunchFor(userId);
     assertSelectableJobCode(jobCodeId);
+    assertTimeEntryUnlocked(userId, at, null, 'adding time');
     if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'work' && !entry.clockOut)) {
       throw new Error('You are already clocked in.');
     }
@@ -520,9 +558,12 @@ export const mockTimeClockService: AdminTimeClockService = {
     await delay();
     const entry = findEntry(entryId);
     if (entry.clockOut) throw new Error('This entry is already clocked out.');
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'editing');
     if (timeEntries.some((candidate) => candidate.userId === entry.userId && candidate.eventType === 'break' && !candidate.clockOut)) {
       throw new Error('End your break before clocking out.');
     }
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, at, 'editing');
+    assertNoClosedWorkOverlap({ ...entry, clockOut: at });
     if (notes !== undefined) entry.notes = notes.trim();
     entry.clockOut = at;
     applyClockOutGps(entry, gps);
@@ -532,6 +573,7 @@ export const mockTimeClockService: AdminTimeClockService = {
   async startBreak({ userId, at, gps }) {
     await delay();
     assertCanPunchFor(userId);
+    assertTimeEntryUnlocked(userId, at, null, 'adding time');
     if (timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'break' && !entry.clockOut)) {
       throw new Error('A break is already in progress.');
     }
@@ -563,6 +605,8 @@ export const mockTimeClockService: AdminTimeClockService = {
     const entry = findEntry(entryId);
     if (entry.eventType !== 'break') throw new Error('Only break entries can be ended here.');
     if (entry.clockOut) throw new Error('This break is already ended.');
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'editing');
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, at, 'editing');
     entry.clockOut = at;
     applyClockOutGps(entry, gps);
     return cloneEntry(entry);
@@ -579,6 +623,10 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (fromEntry.userId !== userId || fromEntry.eventType !== 'work' || fromEntry.clockOut) {
       throw new Error('No active work entry to switch from.');
     }
+    assertTimeEntryUnlocked(fromEntry.userId, fromEntry.clockIn, fromEntry.clockOut, 'editing');
+    assertTimeEntryUnlocked(fromEntry.userId, fromEntry.clockIn, at, 'editing');
+    assertTimeEntryUnlocked(userId, at, null, 'adding time');
+    assertNoClosedWorkOverlap({ ...fromEntry, clockOut: at });
     fromEntry.clockOut = at;
     applyClockOutGps(fromEntry, gps);
     const openedEntry: TimeEntry = {
@@ -604,7 +652,7 @@ export const mockTimeClockService: AdminTimeClockService = {
   async updateEntryNotes({ entryId, notes }) {
     await delay();
     const entry = findEntry(entryId);
-    if (isHistoricalApprovedEntry(entry)) throw new Error('This week has been approved. Ask an admin to unlock it before editing.');
+    if (isApprovedTimeEntry(entry)) throw new Error('This week has been approved. Ask an admin to unlock it before editing.');
     entry.notes = notes;
     return cloneEntry(entry);
   },
@@ -614,6 +662,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (eventType === 'work' && !jobCodeId) throw new Error('Manual work entries need a job code.');
     if (eventType === 'break' && !clockOut) throw new Error('Manual break entries need a punch out time.');
     if (clockOut && new Date(clockOut).getTime() <= new Date(clockIn).getTime()) throw new Error('Clock out must be after clock in.');
+    assertTimeEntryUnlocked(userId, clockIn, clockOut, 'adding time');
     const entry: TimeEntry = {
       id: makeId('manual'),
       userId,
@@ -630,6 +679,7 @@ export const mockTimeClockService: AdminTimeClockService = {
       createdBy,
       createdAt: new Date().toISOString(),
     };
+    assertNoClosedWorkOverlap(entry);
     timeEntries = [...timeEntries, entry];
     logAudit({ userId: createdBy, action: 'manual_entry_created', targetTable: 'time_entries', targetId: entry.id, oldValues: null, newValues: { ...entry } });
     return cloneEntry(entry);
@@ -638,16 +688,19 @@ export const mockTimeClockService: AdminTimeClockService = {
   async updateTimeEntry({ entryId, patch, editedBy }) {
     await delay();
     const entry = findEntry(entryId);
-    if (isHistoricalApprovedEntry(entry)) throw new Error('This week has been approved. Unlock it before editing entries.');
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'editing');
     const oldValues = cloneEntry(entry);
-    if (patch.clockIn) entry.clockIn = patch.clockIn;
-    if (patch.clockOut !== undefined) entry.clockOut = patch.clockOut;
-    if (patch.jobCodeId !== undefined) entry.jobCodeId = patch.jobCodeId;
-    if (patch.notes !== undefined) entry.notes = patch.notes;
-    if (entry.clockOut && new Date(entry.clockOut).getTime() <= new Date(entry.clockIn).getTime()) {
-      Object.assign(entry, oldValues);
+    const candidate = { ...entry };
+    if (patch.clockIn) candidate.clockIn = patch.clockIn;
+    if (patch.clockOut !== undefined) candidate.clockOut = patch.clockOut;
+    if (patch.jobCodeId !== undefined) candidate.jobCodeId = patch.jobCodeId;
+    if (patch.notes !== undefined) candidate.notes = patch.notes;
+    if (candidate.clockOut && new Date(candidate.clockOut).getTime() <= new Date(candidate.clockIn).getTime()) {
       throw new Error('Clock out must be after clock in.');
     }
+    assertTimeEntryUnlocked(candidate.userId, candidate.clockIn, candidate.clockOut, 'editing');
+    assertNoClosedWorkOverlap(candidate);
+    Object.assign(entry, candidate);
     entry.editedBy = editedBy;
     entry.editedAt = new Date().toISOString();
     logAudit({ userId: editedBy, action: 'time_entry_edited', targetTable: 'time_entries', targetId: entry.id, oldValues: { ...oldValues }, newValues: { ...cloneEntry(entry) } });
@@ -659,7 +712,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     const idx = timeEntries.findIndex((e: TimeEntry) => e.id === entryId);
     if (idx === -1) throw new Error('Time entry not found.');
     const entry = timeEntries[idx];
-    if (isHistoricalApprovedEntry(entry)) throw new Error('This week has been approved. Unlock it before deleting entries.');
+    assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'deleting');
     logAudit({ userId: currentProfileId, action: 'time_entry_deleted', targetTable: 'time_entries', targetId: entry.id, oldValues: { ...cloneEntry(entry) }, newValues: null });
     timeEntries.splice(idx, 1);
   },
