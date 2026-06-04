@@ -14,10 +14,11 @@ This workspace is the single source of truth for future Time Clock development a
 
 1. Make code or content changes in `app/`, `supabase/`, or the site root.
 2. Run `npm run verify` from `app/` to catch source, TypeScript, and regression issues before generating deploy output. This must pass before any tag or production deploy.
-3. Run `./scripts/build-time-clock.sh` from the workspace root. The build verifies that `time/index.html` references existing hashed assets and that `time/sw.js` has a stamped cache id.
-4. Review `git status` to confirm both source edits and the generated `time/` output are present.
-5. Commit the full release state in one commit.
-6. Add a deploy tag after the commit is ready to publish.
+3. Run `npm run test:smoke` from `app/` for frontend UI, mobile layout, navigation, reports/export UI, shell/nav, modal, dashboard, settings, or deploy-readiness changes.
+4. Run `./scripts/build-time-clock.sh` from the workspace root. The build verifies that `time/index.html` references existing hashed assets and that `time/sw.js` has a stamped cache id.
+5. Review `git status` to confirm both source edits and the generated `time/` output are present.
+6. Commit the full release state in one commit.
+7. Add a deploy tag after the commit is ready to publish.
 
 ## Generated Asset Hygiene
 
@@ -25,6 +26,10 @@ This workspace is the single source of truth for future Time Clock development a
 - Do not run formatters, whitespace normalizers, or hand edits over `time/assets/` after Vite builds. The hashed filenames should describe the Vite-authored bundle output, not a post-processed copy.
 - If checking whitespace before a release, check source files and docs, or exclude generated deploy assets such as `time/assets/*` and `staging-site/time/assets/*`.
 - Use `scripts/verify-time-build.mjs` as the deploy-artifact guard: it verifies the expected generated directory, hashed asset references, service worker stamp, environment target, and absence of runtime CSS override files.
+
+## Change Safety
+
+Before implementing substantive changes, use `docs/TIME_APP_CHANGE_SAFETY.md` to identify the change type, impacted app areas, environment/build surfaces, regression risk, required checks, review-agent angles, and user explanation. This keeps future features from accidentally breaking payroll math, reports, Supabase guardrails, mobile layout, Scope, or deploy artifacts.
 
 ## Staging Flow
 

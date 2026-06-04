@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test:domain": "vitest run src/utils/__tests__/*.test.ts src/services/__tests__/*.test.ts",
+    "test:smoke": "playwright test",
     "verify": "node ../scripts/regression-checks.mjs && npm run test:domain && tsc -b",
     "build": "npm run verify && vite build && node ../scripts/stamp-sw.mjs",
     "preview": "vite preview"
@@ -21,6 +22,7 @@
     "vite": "^7.1.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "autoprefixer": "^10.4.21",

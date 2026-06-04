@@ -31,6 +31,7 @@ const service = read('app/src/services/supabaseTimeClockService.ts');
 const timeUtils = read('app/src/utils/time.ts');
 const verifyTimeBuild = read('scripts/verify-time-build.mjs');
 const releaseWorkflow = read('docs/RELEASE_WORKFLOW.md');
+const changeSafety = read('docs/TIME_APP_CHANGE_SAFETY.md');
 
 if (timeUtils.includes('getEntryPayableHours')) {
   fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
@@ -97,6 +98,31 @@ requireIncludes(
   releaseWorkflow,
   'Commit the full release state in one commit.',
   'Release workflow must keep source and generated time/ deploy artifacts committed together.',
+);
+requireIncludes(
+  releaseWorkflow,
+  'npm run test:smoke',
+  'Release workflow must keep the Playwright smoke/layout gate documented for affected UI deploys.',
+);
+requireIncludes(
+  changeSafety,
+  'Every future change should name its change type before implementation',
+  'Change safety contract must require future updates to identify the change type before implementation.',
+);
+requireIncludes(
+  changeSafety,
+  'Keep one mobile scroll region: `.app-shell-content` owns vertical scrolling.',
+  'Change safety contract must preserve the protected mobile shell scroll rule.',
+);
+requireIncludes(
+  changeSafety,
+  'Skeptical Claude Challenger',
+  'Change safety contract must preserve the skeptical recurring review-agent role.',
+);
+requireIncludes(
+  changeSafety,
+  'After each implemented change, give the user a plain-language explanation',
+  'Change safety contract must preserve the user ELI5 explanation rule.',
 );
 
 const integrityMigration = read('supabase/migrations/20260604154000_time_entry_integrity_guards.sql');
