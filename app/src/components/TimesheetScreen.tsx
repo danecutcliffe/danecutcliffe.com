@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
 import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { employeeJobDisplayName, jobSiteById } from '../utils/jobs';
-import { addDaysToDateKey, calculateTimesheetSummary, formatAtlanticDate, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate } from '../utils/time';
+import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
+import { addDaysToDateKey, formatAtlanticDate, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate } from '../utils/time';
 
 interface TimesheetScreenProps {
   profile: Profile;
@@ -22,11 +23,7 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
   const periodEntries = entries.filter((entry) => periodDays.includes(getAtlanticDateKey(entry.clockIn)));
   const periodApproval = approvals.find((approval) => approval.userId === profile.id && approval.weekStart === periodStart && approval.status === 'approved');
   const groupedEntries = groupEntriesByAtlanticDate(periodEntries);
-  const summary = calculateTimesheetSummary(periodEntries, profile.hourlyRate, new Date(), {
-    paidBreaks: profile.paidBreaks,
-    paidBreakMinutes: profile.paidBreakMinutes,
-    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-  });
+  const summary = computeTimeSummary(periodEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
   const displayDays = [...periodDays].reverse();
 
   useEffect(() => {
@@ -56,11 +53,7 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
       <div id="daily-breakdown" className="scroll-mt-20 rounded-md border border-app-border bg-card shadow-soft">
         {displayDays.map((day) => {
           const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-          const daySummary = calculateTimesheetSummary(dayEntries, profile.hourlyRate, new Date(), {
-            paidBreaks: profile.paidBreaks,
-            paidBreakMinutes: profile.paidBreakMinutes,
-            weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-          });
+          const daySummary = computeTimeSummary(dayEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
           return (
             <div key={day} className="time-day-panel p-4">
               <div className="flex items-center justify-between gap-3">
@@ -110,7 +103,7 @@ function DailyBreakdown({
   isOpen,
   showPaidLunchCredit,
 }: {
-  summary: ReturnType<typeof calculateTimesheetSummary>;
+  summary: TimeSummary;
   isOpen: boolean;
   showPaidLunchCredit: boolean;
 }) {

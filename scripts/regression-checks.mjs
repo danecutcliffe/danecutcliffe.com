@@ -212,6 +212,10 @@ const baseGridPattern = /(?:^|\s)grid-cols-/;
 
 for (const file of componentFiles) {
   const source = read(file);
+  if (source.includes('calculateTimesheetSummary')) {
+    fail(`${file} must not use legacy calculateTimesheetSummary for payroll-facing UI totals. Use computeTimeSummary()/computeEntryHours() instead.`);
+  }
+
   for (const match of source.matchAll(classLiteralPattern)) {
     const classes = match[1].replace(/\s+/g, ' ').trim();
     const isModalBackdrop = /\bfixed\b/.test(classes) && /\binset-0\b/.test(classes) && /\bbg-black\//.test(classes);

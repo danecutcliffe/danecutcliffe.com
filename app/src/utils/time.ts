@@ -150,9 +150,9 @@ export interface TimesheetSummaryOptions {
   weeklyOvertimeThresholdHours?: number;
 }
 
-// Aggregate preview helper for dashboard and timesheet summary cards. It does not
-// attribute breaks to job-coded work rows, so payroll/report/export row math should
-// use buildDetailedTimecardReport()/computeEntryHours() instead.
+// Legacy aggregate helper retained for non-authoritative experimentation only.
+// Payroll-facing UI, reports, exports, and labour costing should use
+// computeTimeSummary(), buildDetailedTimecardReport(), or computeEntryHours().
 export function calculateTimesheetSummary(entries: TimeEntry[], hourlyRate: number, now = new Date(), options: TimesheetSummaryOptions = {}) {
   const workEntries = entries.filter((entry) => entry.eventType === 'work');
   const breakEntries = entries.filter((entry) => entry.eventType === 'break');

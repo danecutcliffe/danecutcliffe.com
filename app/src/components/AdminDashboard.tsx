@@ -4,7 +4,8 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildPayrollExportReadiness } from '../utils/reportReadiness';
-import { addDaysToDateKey, calculateTimesheetSummary, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
+import { computeTimeSummary } from '../utils/timecardHours';
+import { addDaysToDateKey, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
 
 interface AdminDashboardProps {
   profiles: Profile[];
@@ -42,11 +43,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const periodSummary = employees.reduce(
     (total, employee) => {
       const employeeEntries = periodEntries.filter((entry) => entry.userId === employee.id);
-      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), {
-        paidBreaks: employee.paidBreaks,
-        paidBreakMinutes: employee.paidBreakMinutes,
-        weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-      });
+      const summary = computeTimeSummary(employeeEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours);
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,
@@ -209,11 +206,7 @@ function DashboardReadinessList({ title, tone, messages }: { title: string; tone
 }
 
 function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weeklyOvertimeThresholdHours, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; weeklyOvertimeThresholdHours: number; onOpenTimesheets?: () => void }) {
-  const summary = calculateTimesheetSummary(entries, employee.hourlyRate, new Date(), {
-    paidBreaks: employee.paidBreaks,
-    paidBreakMinutes: employee.paidBreakMinutes,
-    weeklyOvertimeThresholdHours,
-  });
+  const summary = computeTimeSummary(entries, employee, weeklyOvertimeThresholdHours);
   const lastEntry = [...entries].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
   const jobSplits = getJobSplits(entries, jobById, siteById, employee);
   return (

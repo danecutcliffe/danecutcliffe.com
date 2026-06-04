@@ -3,7 +3,8 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, Timesheet
 import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
-import { addDaysToDateKey, calculateTimesheetSummary, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
+import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
+import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
 
 interface AdminTimesheetsProps {
   adminProfile: Profile;
@@ -32,11 +33,9 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const employee = employees.find((profile) => profile.id === selectedEmployeeId) ?? employees[0];
   const periodDays = getPayPeriodDays(payPeriodSettings, periodStart);
   const profileEntries = entries.filter((entry) => entry.userId === employee?.id && periodDays.includes(getAtlanticDateKey(entry.clockIn)));
-  const summary = calculateTimesheetSummary(profileEntries, employee?.hourlyRate ?? 0, new Date(), {
-    paidBreaks: employee?.paidBreaks ?? false,
-    paidBreakMinutes: employee?.paidBreakMinutes ?? 30,
-    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-  });
+  const summary = employee
+    ? computeTimeSummary(profileEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
+    : emptyTimeSummary();
   const groupedEntries = groupEntriesByAtlanticDate(profileEntries);
   const displayDays = [...periodDays].reverse();
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
@@ -136,11 +135,9 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           {viewMode === 'summary' && displayDays.map((day) => {
               const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
               if (dayEntries.length === 0) return null;
-              const daySummary = calculateTimesheetSummary(dayEntries, employee?.hourlyRate ?? 0, new Date(), {
-                paidBreaks: employee?.paidBreaks ?? false,
-                paidBreakMinutes: employee?.paidBreakMinutes ?? 30,
-                weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-              });
+              const daySummary = employee
+                ? computeTimeSummary(dayEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
+                : emptyTimeSummary();
               const isOpen = dayEntries.some((entry) => !entry.clockOut);
 
               return (
@@ -252,7 +249,7 @@ function DailyBreakdown({
   isOpen,
   showPaidLunchCredit,
 }: {
-  summary: ReturnType<typeof calculateTimesheetSummary>;
+  summary: TimeSummary;
   isOpen: boolean;
   showPaidLunchCredit: boolean;
 }) {
@@ -645,6 +642,20 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
 
 function name(profile?: Profile | null) {
   return profile ? `${profile.firstName} ${profile.lastName}` : 'unknown admin';
+}
+
+function emptyTimeSummary(): TimeSummary {
+  return {
+    grossWorkHours: 0,
+    breakHours: 0,
+    paidBreakHours: 0,
+    unpaidBreakHours: 0,
+    netWorkHours: 0,
+    regularHours: 0,
+    overtimeHours: 0,
+    grossPay: 0,
+    unattributedBreakHours: 0,
+  };
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

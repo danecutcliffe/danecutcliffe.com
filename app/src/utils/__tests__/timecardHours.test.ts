@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildLabourCostBreakdown } from '../labour';
-import { computeEntryHours } from '../timecardHours';
+import { computeEntryHours, computeTimeSummary } from '../timecardHours';
 import {
   breakEntry,
   employeeProfile,
@@ -63,6 +63,48 @@ describe('computeEntryHours', () => {
     expect(result.byEntryId.get(first.id)?.otHours).toBeCloseTo(0, 5);
     expect(result.byEntryId.get(second.id)?.regularHours).toBeCloseTo(0, 5);
     expect(result.byEntryId.get(second.id)?.otHours).toBeCloseTo(4, 5);
+  });
+});
+
+describe('computeTimeSummary', () => {
+  it('summarizes payroll-facing UI totals from canonical entry hours', () => {
+    resetEntrySequence();
+    const qaWork = workEntry({ id: 'summary-qa-work', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8.08 });
+    const qaBreak = breakEntry({ id: 'summary-qa-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.6 });
+
+    const summary = computeTimeSummary([qaWork, qaBreak], employeeProfile, 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(summary.grossWorkHours).toBe(8.08);
+    expect(summary.breakHours).toBe(0.6);
+    expect(summary.unpaidBreakHours).toBe(0.6);
+    expect(summary.netWorkHours).toBe(7.48);
+    expect(summary.regularHours).toBe(7.48);
+    expect(summary.grossPay).toBe(134.64);
+  });
+
+  it('surfaces orphan unpaid break time without hiding it in net work hours', () => {
+    resetEntrySequence();
+    const orphanBreak = breakEntry({ id: 'summary-orphan-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.5 });
+
+    const summary = computeTimeSummary([orphanBreak], employeeProfile, 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(summary.netWorkHours).toBe(0);
+    expect(summary.unpaidBreakHours).toBe(0.5);
+    expect(summary.unattributedBreakHours).toBe(0.5);
+  });
+
+  it('summarizes paid-break allowance consumption through orphan and attributed breaks', () => {
+    resetEntrySequence();
+    const orphanPaidBreak = breakEntry({ id: 'summary-orphan-paid', userId: paidBreakProfile.id, clockIn: '2026-06-02T11:00:00.000Z', hours: 20 / 60 });
+    const work = workEntry({ id: 'summary-paid-work', userId: paidBreakProfile.id, clockIn: '2026-06-02T12:00:00.000Z', hours: 2 });
+    const attributedBreak = breakEntry({ id: 'summary-paid-break', userId: paidBreakProfile.id, clockIn: '2026-06-02T13:00:00.000Z', hours: 0.5 });
+
+    const summary = computeTimeSummary([orphanPaidBreak, work, attributedBreak], paidBreakProfile, 48, new Date('2026-06-03T12:00:00.000Z'));
+
+    expect(summary.breakHours).toBe(0.83);
+    expect(summary.paidBreakHours).toBe(0.5);
+    expect(summary.unpaidBreakHours).toBe(0.33);
+    expect(summary.netWorkHours).toBe(1.67);
   });
 });
 

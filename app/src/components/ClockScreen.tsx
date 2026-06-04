@@ -4,7 +4,8 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import type { TimeClockService } from '../services/TimeClockService';
 import { requestGpsPoint } from '../utils/gps';
 import { employeeJobDisplayName, getEntryGpsVerification, isSelectableJobCode, isSelectableJobSite, jobCodeLabel, jobSiteById } from '../utils/jobs';
-import { calculateTimesheetSummary, formatAtlanticDateTime, formatAtlanticTime, formatDuration, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
+import { computeTimeSummary } from '../utils/timecardHours';
+import { formatAtlanticDateTime, formatAtlanticTime, formatDuration, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
 
 interface ClockScreenProps {
   profile: Profile;
@@ -57,11 +58,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
   const activeSite = activeJob?.jobSiteId ? siteById.get(activeJob.jobSiteId) : null;
   const todayKey = getAtlanticDateKey(now);
   const todaysEntries = entries.filter((entry) => getAtlanticDateKey(entry.clockIn) === todayKey).sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-  const todaySummary = calculateTimesheetSummary(todaysEntries, profile.hourlyRate, now, {
-    paidBreaks: profile.paidBreaks,
-    paidBreakMinutes: profile.paidBreakMinutes,
-    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
-  });
+  const todaySummary = computeTimeSummary(todaysEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours, now);
   const finalClockOutNote = shiftNotes.trim();
 
   useEffect(() => {

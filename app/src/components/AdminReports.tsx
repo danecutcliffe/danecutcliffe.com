@@ -7,10 +7,10 @@ import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakd
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
 import { buildReportContextEntries, buildReportWarningEntries } from '../utils/reportContext';
 import { buildPayrollExportReadiness } from '../utils/reportReadiness';
+import { computeTimeSummary } from '../utils/timecardHours';
 import { downloadReportXlsx } from '../utils/xlsxReports';
 import {
   addDaysToDateKey,
-  calculateTimesheetSummary,
   formatAtlanticDate,
   formatAtlanticDateTime,
   getAtlanticDateKey,
@@ -676,7 +676,7 @@ function DetailedReport({ entries, profileById, jobById, siteById }: { entries: 
 }
 
 function HoursReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entries: TimeEntry[]; profiles: Profile[]; weeklyOvertimeThresholdHours: number }) {
-  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${calculateTimesheetSummary(entries.filter((entry) => entry.userId === profile.id), profile.hourlyRate, new Date(), { paidBreaks: profile.paidBreaks, paidBreakMinutes: profile.paidBreakMinutes, weeklyOvertimeThresholdHours }).netWorkHours.toFixed(2)} payable hours` }))} />;
+  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${computeTimeSummary(entries.filter((entry) => entry.userId === profile.id), profile, weeklyOvertimeThresholdHours).netWorkHours.toFixed(2)} payable hours` }))} />;
 }
 
 function JobReport({ model }: { model: ReportModel }) {
@@ -785,11 +785,7 @@ function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[], wee
   return employees.reduce(
     (total, employee) => {
       const employeeEntries = entries.filter((entry) => entry.userId === employee.id);
-      const summary = calculateTimesheetSummary(employeeEntries, employee.hourlyRate, new Date(), {
-        paidBreaks: employee.paidBreaks,
-        paidBreakMinutes: employee.paidBreakMinutes,
-        weeklyOvertimeThresholdHours,
-      });
+      const summary = computeTimeSummary(employeeEntries, employee, weeklyOvertimeThresholdHours);
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,

@@ -1,5 +1,6 @@
 import type { Profile, TimeEntry } from '../domain/types';
 import { OVERTIME_THRESHOLD_HOURS, getAtlanticDateKey, getAtlanticWeekStart, getEntryDurationHours } from './time';
+import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 
 // Single source of truth for per-work-entry hour accounting. Both the detailed
 // timecard report (reportModels.ts) and labour-cost reporting (labour.ts) consume
@@ -34,6 +35,18 @@ export interface EntryHoursResult {
   // Total unpaid break time that could not be attached to any work entry. This is
   // an impossible-but-representable data state (a break with no surrounding shift);
   // callers should surface it rather than let totals silently absorb it.
+  unattributedBreakHours: number;
+}
+
+export interface TimeSummary {
+  grossWorkHours: number;
+  breakHours: number;
+  paidBreakHours: number;
+  unpaidBreakHours: number;
+  netWorkHours: number;
+  regularHours: number;
+  overtimeHours: number;
+  grossPay: number;
   unattributedBreakHours: number;
 }
 
@@ -77,8 +90,8 @@ export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Pr
     let paidBreakUsedByProfile = new Map<string, number>();
 
     breakEntries.forEach((breakEntry) => {
-      // Apply the daily paid-break allowance in chronological order to EVERY break
-      // (matching calculateTimesheetSummary's per-day paid cap), so an unattributable
+      // Apply the daily paid-break allowance in chronological order to EVERY break,
+      // so an unattributable
       // break still consumes its share of the allowance and can't leave extra for a
       // later break to double-count.
       const profile = profileById.get(breakEntry.userId);
@@ -147,4 +160,42 @@ export function computeEntryHours(
   });
 
   return { byEntryId, unattributedBreakHours };
+}
+
+export function computeTimeSummary(
+  entries: TimeEntry[],
+  profile: Profile,
+  weeklyOvertimeThresholdHours: number | undefined,
+  now = new Date(),
+): TimeSummary {
+  const profileById = new Map([[profile.id, profile]]);
+  const { byEntryId, unattributedBreakHours } = computeEntryHours(entries, profileById, weeklyOvertimeThresholdHours, now);
+  const workEntryHours = entries
+    .filter((entry) => entry.eventType === 'work')
+    .map((entry) => byEntryId.get(entry.id))
+    .filter((hours): hours is EntryHours => hours !== undefined);
+  const grossWorkHours = workEntryHours.reduce((total, hours) => total + hours.durationHours, 0);
+  const breakHours = entries
+    .filter((entry) => entry.eventType === 'break')
+    .reduce((total, entry) => total + getEntryDurationHours(entry, now), 0);
+  const attributedPaidBreakHours = workEntryHours.reduce((total, hours) => total + hours.paidBreakHours, 0);
+  const attributedUnpaidBreakHours = workEntryHours.reduce((total, hours) => total + hours.unpaidBreakHours, 0);
+  const paidBreakHours = Math.max(0, breakHours - attributedUnpaidBreakHours - unattributedBreakHours);
+  const regularHours = workEntryHours.reduce((total, hours) => total + hours.regularHours, 0);
+  const overtimeHours = workEntryHours.reduce((total, hours) => total + hours.otHours, 0);
+  const netWorkHours = workEntryHours.reduce((total, hours) => total + hours.paidHours, 0);
+  const roundedRegularHours = roundHours(regularHours);
+  const roundedOvertimeHours = roundHours(overtimeHours);
+
+  return {
+    grossWorkHours: roundHours(grossWorkHours),
+    breakHours: roundHours(breakHours),
+    paidBreakHours: roundHours(Math.max(attributedPaidBreakHours, paidBreakHours)),
+    unpaidBreakHours: roundHours(attributedUnpaidBreakHours + unattributedBreakHours),
+    netWorkHours: roundHours(netWorkHours),
+    regularHours: roundedRegularHours,
+    overtimeHours: roundedOvertimeHours,
+    grossPay: calculatePayrollGrossPay({ regularHours: roundedRegularHours, overtimeHours: roundedOvertimeHours, hourlyRate: profile.hourlyRate }),
+    unattributedBreakHours: roundHours(unattributedBreakHours),
+  };
 }
