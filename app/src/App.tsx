@@ -191,40 +191,42 @@ export default function App() {
       onViewRoleChange={canUseStagingViewSwitch ? changeStagingViewRole : undefined}
       onSignOut={service.signOut ? signOut : undefined}
     >
-      {appConfig.isStaging && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 shadow-soft">
-          STAGING - test environment at staging.danecutcliffe.com. Do not use for live payroll.
-        </div>
-      )}
-      {appConfig.isStagingUsingProductionSupabase && (
-        <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">
-          Staging is pointed at the production Supabase project. Stop testing and update the staging environment variables.
-        </div>
-      )}
-      {isLoading && !profile && <div className="rounded-md border border-app-border bg-card p-6 text-center shadow-soft"><p className="font-semibold text-muted">Loading time clock...</p></div>}
-      {loadError && <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">{loadError}</div>}
-      {appConfig.isSupabaseRequestedButMissingConfig && (
-        <div className="rounded-md border border-warn-border bg-warn-bg p-4 text-sm font-semibold text-warning">
-          Live data mode is selected, but env credentials are missing. The app is using mock data.
-        </div>
-      )}
-      {!isLoading && !profile && service.signIn && <AuthScreen service={service} onSignedIn={refresh} />}
+      <div className="space-y-4">
+        {appConfig.isStaging && (
+          <div className="environment-notice rounded-md border px-4 py-3 text-sm font-bold shadow-soft">
+            STAGING - test environment at staging.danecutcliffe.com. Do not use for live payroll.
+          </div>
+        )}
+        {appConfig.isStagingUsingProductionSupabase && (
+          <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">
+            Staging is pointed at the production Supabase project. Stop testing and update the staging environment variables.
+          </div>
+        )}
+        {isLoading && !profile && <div className="rounded-md border border-app-border bg-card p-6 text-center shadow-soft"><p className="font-semibold text-muted">Loading time clock...</p></div>}
+        {loadError && <div className="rounded-md border border-error-border bg-error-bg p-4 font-semibold text-error-text">{loadError}</div>}
+        {appConfig.isSupabaseRequestedButMissingConfig && (
+          <div className="rounded-md border border-warn-border bg-warn-bg p-4 text-sm font-semibold text-warning">
+            Live data mode is selected, but env credentials are missing. The app is using mock data.
+          </div>
+        )}
+        {!isLoading && !profile && service.signIn && <AuthScreen service={service} onSignedIn={refresh} />}
 
-      {profile && !profile.isActive && <InactiveAccountScreen profile={profile} onSignOut={service.signOut ? signOut : undefined} />}
+        {profile && !profile.isActive && <InactiveAccountScreen profile={profile} onSignOut={service.signOut ? signOut : undefined} />}
 
-      {profile && profile.isActive && <PasskeySetupPrompt profile={profile} service={service} />}
+        {profile && profile.isActive && <PasskeySetupPrompt profile={profile} service={service} />}
 
-      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'clock' && <ClockScreen profile={displayedProfile} service={service} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} openWorkEntry={displayedOpenWorkEntry} openBreakEntry={displayedOpenBreakEntry} payPeriodSettings={payPeriodSettings} onDataChange={refresh} />}
-      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={displayedProfile} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} approvals={displayedApprovals} payPeriodSettings={payPeriodSettings} />}
-      {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
+        {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'clock' && <ClockScreen profile={displayedProfile} service={service} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} openWorkEntry={displayedOpenWorkEntry} openBreakEntry={displayedOpenBreakEntry} payPeriodSettings={payPeriodSettings} onDataChange={refresh} />}
+        {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={displayedProfile} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} approvals={displayedApprovals} payPeriodSettings={payPeriodSettings} />}
+        {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
 
-      {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
-      {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
 
-      {displayedProfile && displayedProfile.isActive && hasScopeAccess(displayedProfile) && activeTab === 'scope' && <div id="scope-content-root" />}
+        {displayedProfile && displayedProfile.isActive && hasScopeAccess(displayedProfile) && activeTab === 'scope' && <div id="scope-content-root" />}
+      </div>
     </AppShell>
   );
 }
