@@ -71,13 +71,15 @@ A future update is safe to deploy only when:
 
 ## Standard Review Agents
 
-Use a recurring review panel for substantive features:
+Run a recurring review panel before staging or production promotion for substantive features, bug fixes, Supabase changes, report/payroll changes, mobile layout changes, and deployment workflow changes. Use actual available subagents or multi-agent tooling when callable in the session. If agent tooling is unavailable, perform separate named review passes and state clearly that they were manual review passes rather than independent agent runs.
 
 - Implementation Reviewer: checks code structure, typing, data flow, and maintainability.
 - Payroll/Data Integrity Reviewer: checks time math, rounding, report reconciliation, Supabase constraints, and auditability.
 - Mobile/Shell Reviewer: checks app-shell scrolling, bottom navigation, modals, cards, tables, and responsive stress cases.
 - Deployment Reviewer: checks generated assets, service worker stamp, environment targeting, staging/prod separation, and rollback.
 - Skeptical Claude Challenger: reviews the proposal as if it came from a competing AI system and looks specifically for overconfidence, hidden coupling, missing tests, and "sounds right but breaks in production" failure modes.
+
+Report material findings before deploy. Do not promote if a P0/P1 reviewer concern remains unresolved unless Dane explicitly accepts the risk.
 
 ## User Explanation Rule
 
