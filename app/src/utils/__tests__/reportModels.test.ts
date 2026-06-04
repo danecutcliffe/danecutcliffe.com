@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport } from '../reportModels';
 import { buildReportContextEntries, buildReportWarningEntries } from '../reportContext';
+import { buildReportWorkbook } from '../xlsxReports';
 import {
   breakEntry,
   employeeProfile,
@@ -172,5 +173,53 @@ describe('filtered report context', () => {
 
     expect(payrollSummary.rows[0].regularHours).toBe(7.48);
     expect(payrollSummary.rows[0].estPay).toBe(134.64);
+  });
+
+  it('reconciles detailed, location, payroll summary, and XLSX outputs on unpaid-break scenarios', async () => {
+    resetEntrySequence();
+    const qaWork = workEntry({ id: 'reconcile-qa-work', jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8.08 });
+    const qaBreak = breakEntry({ id: 'reconcile-qa-break', clockIn: '2026-06-02T16:00:00.000Z', hours: 0.6 });
+    const otherWork = workEntry({ id: 'reconcile-other-work', jobCodeId: 'job-other', clockIn: '2026-06-03T12:00:00.000Z', hours: 2 });
+    const periodEntries = [qaWork, qaBreak, otherWork];
+    const reportParams = {
+      entries: periodEntries,
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-04T12:00:00.000Z'),
+    };
+
+    const detail = buildDetailedTimecardReport(reportParams);
+    const hoursByLocation = buildHoursByLocationReport(reportParams);
+    const payrollSummary = buildPayrollSummaryReport(reportParams);
+    const qaDetailRow = detail.rows.find((row) => row.jobCode === 'QA0358');
+    const otherDetailRow = detail.rows.find((row) => row.jobCode === 'EX0814');
+    const grandTotal = hoursByLocation.rows.find((row) => row.rowKind === 'grandTotal');
+    const qaPayrollRow = payrollSummary.rows.find((row) => row.jobCode === 'QA0358');
+    const otherPayrollRow = payrollSummary.rows.find((row) => row.jobCode === 'EX0814');
+
+    expect(qaDetailRow?.paidHours).toBe(7.48);
+    expect(otherDetailRow?.paidHours).toBe(2);
+    expect(grandTotal?.totalHours).toBe(9.48);
+    expect(grandTotal?.estPay).toBe(170.64);
+    expect(qaPayrollRow?.totalHours).toBe(7.48);
+    expect(qaPayrollRow?.estPay).toBe(134.64);
+    expect(otherPayrollRow?.totalHours).toBe(2);
+    expect(otherPayrollRow?.estPay).toBe(36);
+
+    const workbook = await buildReportWorkbook(payrollSummary);
+    const sheet = workbook.getWorksheet('Payroll Summary');
+    if (!sheet) throw new Error('Payroll Summary worksheet was not generated.');
+    const qaXlsxValues: unknown[] = [];
+    sheet.eachRow((row) => {
+      if (row.getCell(9).value === 'QA0358') {
+        qaXlsxValues.push(row.getCell(4).value, row.getCell(6).value, row.getCell(7).value);
+      }
+    });
+
+    expect(qaXlsxValues).toEqual([7.48, 7.48, 134.64]);
   });
 });
