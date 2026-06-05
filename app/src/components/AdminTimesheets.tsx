@@ -15,14 +15,16 @@ interface AdminTimesheetsProps {
   approvals: TimesheetApproval[];
   payPeriodSettings: PayPeriodSettings;
   service: AdminTimeClockService;
+  initialEmployeeId?: string;
   onDataChange: () => Promise<void>;
 }
 
 type AdminTimesheetView = 'summary' | 'punch-log';
 
-export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, entries, approvals, payPeriodSettings, service, onDataChange }: AdminTimesheetsProps) {
+export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, entries, approvals, payPeriodSettings, service, initialEmployeeId, onDataChange }: AdminTimesheetsProps) {
   const employees = profiles.filter((profile) => profile.role === 'employee');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(employees[0]?.id ?? '');
+  const [appliedInitialEmployeeId, setAppliedInitialEmployeeId] = useState<string | undefined>();
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -45,6 +47,23 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const editingEntry = entries.find((entry) => entry.id === editingEntryId) ?? null;
   const periodApproval = employee ? approvals.find((approval) => approval.userId === employee.id && approval.weekStart === periodStart) : null;
   const isPeriodApproved = periodApproval?.status === 'approved';
+
+  useEffect(() => {
+    if (!initialEmployeeId || initialEmployeeId === appliedInitialEmployeeId) return;
+    if (!employees.some((profile) => profile.id === initialEmployeeId)) return;
+    setSelectedEmployeeId(initialEmployeeId);
+    setAppliedInitialEmployeeId(initialEmployeeId);
+  }, [appliedInitialEmployeeId, employees, initialEmployeeId]);
+
+  useEffect(() => {
+    if (!employees.length) {
+      if (selectedEmployeeId) setSelectedEmployeeId('');
+      return;
+    }
+    if (!employees.some((profile) => profile.id === selectedEmployeeId)) {
+      setSelectedEmployeeId(employees[0].id);
+    }
+  }, [employees, selectedEmployeeId]);
 
   useEffect(() => {
     setEditingEntryId(null);

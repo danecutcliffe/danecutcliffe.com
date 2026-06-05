@@ -4,7 +4,7 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary } from '../utils/timecardHours';
-import { addDaysToDateKey, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
+import { addDaysToDateKey, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
 
 interface AdminDashboardProps {
   profiles: Profile[];
@@ -12,7 +12,7 @@ interface AdminDashboardProps {
   jobCodes: JobCode[];
   entries: TimeEntry[];
   payPeriodSettings: PayPeriodSettings;
-  onOpenTimesheets?: () => void;
+  onOpenTimesheets?: (employeeId: string) => void;
 }
 
 type FlagSeverity = 'blocker' | 'review';
@@ -23,6 +23,14 @@ interface ReviewFlag {
   title: string;
   detail: string;
   entry?: TimeEntry;
+}
+
+interface WorkingNowItem {
+  employee: Profile;
+  state: 'working' | 'break';
+  workEntry?: TimeEntry;
+  breakEntry?: TimeEntry;
+  jobLabel: string;
 }
 
 export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPeriodSettings, onOpenTimesheets }: AdminDashboardProps) {
@@ -68,7 +76,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const periodProgress = getPeriodProgress(periodStart, payPeriodSettings.lengthDays, todayKey);
   const projectionFactor = periodProgress.elapsedDays > 0 && periodProgress.isCurrentOrFuture ? payPeriodSettings.lengthDays / periodProgress.elapsedDays : 1;
   const projectedPayroll = periodSummary.grossPay * projectionFactor;
-  const openEntries = periodEntries.filter((entry) => !entry.clockOut);
+  const workingNowItems = useMemo(() => buildWorkingNowItems({ entries, employees, jobById, siteById }), [employees, entries, jobById, siteById]);
 
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
@@ -107,10 +115,19 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
 
   return (
     <section className="space-y-4">
-      <div id="period-readiness" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
+      <Panel id="working-now" title="Working now">
+        {workingNowItems.length === 0 && <p className="text-sm text-muted">No one is currently clocked in.</p>}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {workingNowItems.map((item) => (
+            <WorkingNowCard key={item.employee.id} item={item} onOpenTimesheets={onOpenTimesheets} />
+          ))}
+        </div>
+      </Panel>
+
+      <Panel id="pay-period-snapshot" title="Pay period snapshot">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold leading-tight">Is this pay period ready for payroll review?</h2>
+            <h3 className="text-lg font-bold leading-tight">Current pay period</h3>
             <p className="mt-1 text-sm text-muted">
               {formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}
             </p>
@@ -131,27 +148,14 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
             <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${periodProgress.percent}%` }} />
           </div>
         </div>
-      </div>
 
-      <Panel id="working-now" title="Working now">
-        {openEntries.length === 0 && <p className="text-sm text-muted">No open shifts or breaks in this period.</p>}
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {openEntries.map((entry) => (
-            <div key={entry.id} className="min-w-0 rounded-md border border-app-border p-3">
-              <p className="break-words font-bold">{name(profileById.get(entry.userId))}</p>
-              <p className="break-words text-sm text-muted">{entry.eventType === 'break' ? 'Break' : jobDisplayNameById(entry.jobCodeId, jobById, siteById)}</p>
-              <p className="mt-2 text-sm font-semibold text-muted-strong">Open for {getEntryDurationHours(entry).toFixed(1)}h</p>
-            </div>
-          ))}
+        <div id="metrics" className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Total accrued payroll this period" value={money(periodSummary.grossPay)} sublabel={lunchSummaryLabel(periodSummary.paidBreakHours, periodSummary.unpaidBreakHours)} />
+          <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionFactor > 1 ? `At current pace x${projectionFactor.toFixed(1)}` : 'Period actual'} />
+          <Metric label="Payable hours" value={`${periodSummary.netWorkHours.toFixed(1)}h`} />
+          <Metric label="Needs review" value={visibleFlags.length.toString()} sublabel={`${visibleBlockerCount} visible blockers, ${visibleReviewCount} visible review${dismissedFlagCount ? `, ${hiddenBlockerCount} hidden blockers, ${hiddenReviewCount} hidden review` : ''}`} />
         </div>
       </Panel>
-
-      <div id="metrics" className="scroll-mt-20 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Total accrued payroll this period" value={money(periodSummary.grossPay)} sublabel={lunchSummaryLabel(periodSummary.paidBreakHours, periodSummary.unpaidBreakHours)} />
-        <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionFactor > 1 ? `At current pace x${projectionFactor.toFixed(1)}` : 'Period actual'} />
-        <Metric label="Payable hours" value={`${periodSummary.netWorkHours.toFixed(1)}h`} />
-        <Metric label="Visible attention items" value={visibleFlags.length.toString()} sublabel={`${visibleBlockerCount} visible blockers, ${visibleReviewCount} visible review${dismissedFlagCount ? `, ${hiddenBlockerCount} hidden blockers, ${hiddenReviewCount} hidden review` : ''}`} />
-      </div>
 
       <div className="grid grid-cols-1 gap-4">
         <Panel id="employee-review" title="Employee review">
@@ -172,8 +176,8 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
         </Panel>
 
         <Panel
-          id="attention"
-          title="Attention queue"
+          id="needs-review"
+          title="Needs Review"
           action={(
             <button className="min-h-9 rounded-md border border-input-border px-3 text-sm font-bold text-muted-strong" type="button" onClick={() => setIsAttentionOpen(!isAttentionOpen)}>
               {isAttentionOpen ? 'Collapse' : 'Expand'}
@@ -182,10 +186,10 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
         >
           {isAttentionOpen && (
             <>
-              {flags.length === 0 && <p className="text-sm text-muted">No issues found for this pay period.</p>}
+              {flags.length === 0 && <p className="text-sm text-muted">No items need review for this pay period.</p>}
               {flags.length > 0 && visibleFlags.length === 0 && (
                 <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm font-semibold text-muted-strong">
-                  All attention items for this pay period are hidden.
+                  All review items for this pay period are hidden.
                 </p>
               )}
               <div className="space-y-2">
@@ -213,7 +217,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
               )}
             </>
           )}
-          {!isAttentionOpen && <p className="text-sm text-muted">{visibleFlags.length} visible attention item{visibleFlags.length === 1 ? '' : 's'} hidden.</p>}
+          {!isAttentionOpen && <p className="text-sm text-muted">{visibleFlags.length} visible review item{visibleFlags.length === 1 ? '' : 's'} hidden.</p>}
         </Panel>
       </div>
 
@@ -221,7 +225,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   );
 }
 
-function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weeklyOvertimeThresholdHours, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; weeklyOvertimeThresholdHours: number; onOpenTimesheets?: () => void }) {
+function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weeklyOvertimeThresholdHours, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; weeklyOvertimeThresholdHours: number; onOpenTimesheets?: (employeeId: string) => void }) {
   const summary = computeTimeSummary(entries, employee, weeklyOvertimeThresholdHours);
   const lastEntry = [...entries].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
   const jobSplits = getJobSplits(entries, jobById, siteById, employee);
@@ -253,12 +257,84 @@ function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weekl
         ))}
       </div>
       {onOpenTimesheets && (
-        <button className="mt-3 min-h-11 w-full rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={onOpenTimesheets}>
+        <button className="mt-3 min-h-11 w-full rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => onOpenTimesheets(employee.id)}>
           Review Timesheet
         </button>
       )}
     </div>
   );
+}
+
+function WorkingNowCard({ item, onOpenTimesheets }: { item: WorkingNowItem; onOpenTimesheets?: (employeeId: string) => void }) {
+  const activeEntry = item.state === 'break' ? item.breakEntry : item.workEntry;
+  const activeHours = activeEntry ? getEntryDurationHours(activeEntry) : 0;
+  const workHours = item.workEntry ? getEntryDurationHours(item.workEntry) : 0;
+  const statusClass = item.state === 'break' ? 'bg-warn-bg text-warning' : 'bg-success-bg text-success';
+
+  return (
+    <div className="min-w-0 rounded-md border border-app-border bg-card-alt p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words text-lg font-bold">{name(item.employee)}</p>
+          <p className="break-words text-sm text-muted">{item.jobLabel}</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>
+          {item.state === 'break' ? 'On break' : 'Working'}
+        </span>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-muted-strong">
+        {item.state === 'break' ? `On break for ${formatDurationCompact(activeHours)}` : `Working for ${formatDurationCompact(activeHours)}`}
+      </p>
+      {item.state === 'break' && item.workEntry && (
+        <p className="mt-1 text-xs font-semibold text-muted">Shift open for {formatDurationCompact(workHours)}</p>
+      )}
+      {onOpenTimesheets && (
+        <button className="mt-3 min-h-10 w-full rounded-md border border-input-border px-3 text-sm font-bold text-muted-strong" type="button" onClick={() => onOpenTimesheets(item.employee.id)}>
+          Review Timesheet
+        </button>
+      )}
+    </div>
+  );
+}
+
+function buildWorkingNowItems({ entries, employees, jobById, siteById }: { entries: TimeEntry[]; employees: Profile[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite> }): WorkingNowItem[] {
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+  const openEntries = entries.filter((entry) => !entry.clockOut);
+  const openWorkByEmployee = new Map<string, TimeEntry[]>();
+  const openBreakByEmployee = new Map<string, TimeEntry[]>();
+
+  for (const entry of openEntries) {
+    const map = entry.eventType === 'break' ? openBreakByEmployee : openWorkByEmployee;
+    map.set(entry.userId, [...(map.get(entry.userId) ?? []), entry]);
+  }
+
+  const userIds = new Set([...openWorkByEmployee.keys(), ...openBreakByEmployee.keys()]);
+  return [...userIds]
+    .map((userId): WorkingNowItem | null => {
+      const employee = employeeById.get(userId);
+      if (!employee) return null;
+      const workEntries = [...(openWorkByEmployee.get(userId) ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
+      const breakEntry = [...(openBreakByEmployee.get(userId) ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
+      const workEntry = breakEntry
+        ? workEntries.find((entry) => entry.clockIn <= breakEntry.clockIn) ?? workEntries[0]
+        : workEntries[0];
+      const state = breakEntry ? 'break' : 'working';
+      const jobEntry = workEntry ?? breakEntry;
+      if (!jobEntry) return null;
+      return {
+        employee,
+        state,
+        workEntry,
+        breakEntry,
+        jobLabel: jobDisplayNameById(jobEntry?.jobCodeId, jobById, siteById),
+      };
+    })
+    .filter((item): item is WorkingNowItem => Boolean(item))
+    .sort((a, b) => {
+      const aEntry = a.state === 'break' ? a.breakEntry : a.workEntry;
+      const bEntry = b.state === 'break' ? b.breakEntry : b.workEntry;
+      return (aEntry?.clockIn ?? '').localeCompare(bEntry?.clockIn ?? '');
+    });
 }
 
 function buildReviewFlags({ entries, profileById, jobById, siteById }: { entries: TimeEntry[]; profileById: Map<string, Profile>; jobById: Map<string, JobCode>; siteById: Map<string, JobSite> }): ReviewFlag[] {
@@ -330,7 +406,7 @@ function getPeriodProgress(start: string, lengthDays: number, todayKey: string) 
 
 function Metric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-app-border bg-card p-4 shadow-soft">
+    <div className="min-w-0 rounded-md border border-app-border bg-card-alt p-4">
       <p className="text-sm font-semibold text-muted">{label}</p>
       <p className="mt-1 break-words text-2xl font-bold">{value}</p>
       {sublabel && <p className="mt-1 text-xs font-semibold text-muted">{sublabel}</p>}

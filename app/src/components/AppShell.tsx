@@ -42,11 +42,10 @@ const employeeTabs: TabDef[] = [
 
 const adminTabs: TabDef[] = [
   { id: 'dashboard', label: 'Dashboard', sections: [
-    { id: 'period-readiness', label: 'Period Readiness' },
     { id: 'working-now', label: 'Working Now' },
-    { id: 'metrics', label: 'Metrics' },
+    { id: 'pay-period-snapshot', label: 'Pay Period' },
     { id: 'employee-review', label: 'Employee Review' },
-    { id: 'attention', label: 'Attention Queue' },
+    { id: 'needs-review', label: 'Needs Review' },
   ]},
   { id: 'timesheets', label: 'Timesheets', sections: [
     { id: 'ts-employee', label: 'Employee' },

@@ -40,6 +40,7 @@ const playwrightConfig = read('app/playwright.config.ts');
 const mockService = read('app/src/services/mockTimeClockService.ts');
 const adminReports = read('app/src/components/AdminReports.tsx');
 const adminDashboard = read('app/src/components/AdminDashboard.tsx');
+const appShell = read('app/src/components/AppShell.tsx');
 const projectAgents = readOptional('../../../../AGENTS.md');
 const sourceAppAgents = readOptional('../source-app/AGENTS.md');
 
@@ -59,7 +60,6 @@ requireIncludes(updateTimeEntryBlock, 'await this.assertAdmin();', 'Only admin c
 requireIncludes(updateTimeEntryBlock, 'edited_by: editedBy', 'Admin correction flow must preserve who edited a time entry.');
 requireIncludes(updateTimeEntryBlock, 'edited_at: new Date().toISOString()', 'Admin correction flow must preserve when a time entry was edited.');
 
-const appShell = read('app/src/components/AppShell.tsx');
 if (appShell.includes('createPortal') || appShell.includes('react-dom')) {
   fail('Mobile bottom nav must stay inside the app flex shell, not a fixed document.body portal.');
 }
@@ -185,7 +185,8 @@ if (adminDashboard.includes('Report blockers') || adminDashboard.includes('Repor
   fail('Dashboard must not reintroduce persistent payroll report blocker/warning/exclusion cards.');
 }
 if (
-  adminDashboard.includes('Review needed')
+  adminDashboard.includes('Is this pay period ready for payroll review?')
+  || adminDashboard.includes('Review needed')
   || adminDashboard.includes('Ready for review')
   || adminDashboard.includes('Not ready for payroll')
   || adminDashboard.includes('-day period')
@@ -193,6 +194,42 @@ if (
   || adminDashboard.includes('OT after')
 ) {
   fail('Dashboard must not reintroduce persistent readiness/rules pills.');
+}
+if (adminDashboard.includes('Attention queue') || appShell.includes('Attention Queue')) {
+  fail('Dashboard navigation and panels must use Needs Review, not Attention Queue.');
+}
+requireIncludes(
+  adminDashboard,
+  'buildWorkingNowItems',
+  'Dashboard must keep employee-level Working Now grouping instead of rendering raw open entries.',
+);
+requireIncludes(
+  adminDashboard,
+  'buildWorkingNowItems({ entries, employees',
+  'Dashboard Working Now must use live entries, not the selected pay-period entries.',
+);
+requireIncludes(
+  adminDashboard,
+  "breakEntry ? 'break' : 'working'",
+  'Dashboard Working Now must preserve the On break state for employees with open breaks.',
+);
+requireIncludes(
+  adminDashboard,
+  'onOpenTimesheets(item.employee.id)',
+  'Dashboard Working Now cards must deep-link Review Timesheet to the selected employee.',
+);
+requireIncludes(
+  appShell,
+  "{ id: 'pay-period-snapshot', label: 'Pay Period' }",
+  'Dashboard shell navigation must keep Pay period snapshot as a single nested section.',
+);
+requireIncludes(
+  adminDashboard,
+  'title="Needs Review"',
+  'Dashboard must keep the review queue renamed to Needs Review.',
+);
+if (adminDashboard.indexOf('title="Working now"') > adminDashboard.indexOf('title="Pay period snapshot"')) {
+  fail('Dashboard must keep Working Now above the pay-period snapshot.');
 }
 requireIncludes(
   playwrightConfig,

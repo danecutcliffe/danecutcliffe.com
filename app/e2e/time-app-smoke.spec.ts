@@ -71,9 +71,16 @@ test.describe('Time app smoke and layout contract', () => {
   test('loads admin dashboard and payroll-facing reports without page-level overflow', async ({ page, isMobile }) => {
     await waitForApp(page);
     await page.getByRole('button', { name: 'admin' }).click();
-    await expect(page.locator('#period-readiness')).toBeVisible();
+    await expect(page.locator('#working-now')).toBeVisible();
+    await expect(page.locator('#pay-period-snapshot')).toBeVisible();
+    await expect(page.locator('#needs-review')).toBeVisible();
+    await expect(page.getByText('Is this pay period ready for payroll review?')).toHaveCount(0);
     await expectNoDocumentOverflow(page);
     if (isMobile) await expectMobileShellContract(page);
+
+    await page.locator('#working-now').getByRole('button', { name: 'Review Timesheet' }).first().click();
+    await expect(page.locator('#employee-select')).toHaveValue('profile-stress-long');
+    await clickAppTab(page, 'Dashboard', isMobile);
 
     if (!isMobile) {
       await clickAppTab(page, 'Reports', isMobile);

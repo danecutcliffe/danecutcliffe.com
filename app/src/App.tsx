@@ -42,6 +42,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stagingViewRole, setStagingViewRole] = useState<AppRole>('admin');
+  const [adminTimesheetEmployeeId, setAdminTimesheetEmployeeId] = useState<string | undefined>();
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => getStoredThemePreference());
 
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function App() {
   const signOut = async () => {
     if (!service.signOut) return;
     await service.signOut();
+    setAdminTimesheetEmployeeId(undefined);
     setActiveTab(employeeDefaultTab);
     setStagingViewRole('admin');
     await refresh();
@@ -171,13 +173,24 @@ export default function App() {
   const canSwitchRole = Boolean(service.setMockRole);
 
   const changeStagingViewRole = (role: AppRole) => {
+    setAdminTimesheetEmployeeId(undefined);
     setStagingViewRole(role);
     setActiveTab(role === 'admin' ? adminDefaultTab : employeeDefaultTab);
+  };
+
+  const changeTab = (tab: AppTab) => {
+    setAdminTimesheetEmployeeId(undefined);
+    setActiveTab(tab);
   };
 
   const changeThemePreference = (preference: ThemePreference) => {
     storeThemePreference(preference);
     setThemePreference(preference);
+  };
+
+  const openAdminTimesheets = (employeeId?: string) => {
+    setAdminTimesheetEmployeeId(employeeId);
+    setActiveTab('timesheets');
   };
 
   return (
@@ -186,7 +199,7 @@ export default function App() {
       currentProfile={displayedProfile}
       signedInProfile={profile}
       isLoading={isLoading}
-      onTabChange={setActiveTab}
+      onTabChange={changeTab}
       onRoleChange={canSwitchRole ? changeRole : undefined}
       onViewRoleChange={canUseStagingViewSwitch ? changeStagingViewRole : undefined}
       onSignOut={service.signOut ? signOut : undefined}
@@ -219,8 +232,8 @@ export default function App() {
         {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'timesheets' && <TimesheetScreen profile={displayedProfile} jobSites={jobSites} jobCodes={jobCodes} entries={displayedEntries} approvals={displayedApprovals} payPeriodSettings={payPeriodSettings} />}
         {displayedProfile && displayedProfile.isActive && !isAdmin && activeTab === 'settings' && <SettingsScreen profile={displayedProfile} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onRoleChange={canSwitchRole ? changeRole : undefined} onSignOut={service.signOut ? signOut : undefined} />}
 
-        {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={() => setActiveTab('timesheets')} />}
-        {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} onDataChange={refresh} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'dashboard' && <AdminDashboard profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} onOpenTimesheets={openAdminTimesheets} />}
+        {profile && profile.isActive && isAdmin && activeTab === 'timesheets' && <AdminTimesheets adminProfile={profile} profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} approvals={timesheetApprovals} payPeriodSettings={payPeriodSettings} service={service} initialEmployeeId={adminTimesheetEmployeeId} onDataChange={refresh} />}
         {profile && profile.isActive && isAdmin && activeTab === 'employees' && <AdminEmployees profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} currentProfileId={profile.id} service={service} themePreference={themePreference} onThemePreferenceChange={changeThemePreference} onPayPeriodSettingsChange={updatePayPeriodSettings} onGrossUpMultiplierSave={saveGrossUpMultiplier} onGrossUpMultiplierDelete={removeGrossUpMultiplier} onDataChange={refresh} />}
         {profile && profile.isActive && isAdmin && activeTab === 'reports' && <AdminReports profiles={profiles} jobSites={jobSites} jobCodes={jobCodes} entries={entries} auditLogs={auditLogs} payPeriodSettings={payPeriodSettings} grossUpMultipliers={grossUpMultipliers} />}
         {profile && profile.isActive && isAdmin && activeTab === 'scope-builder' && <AdminScopeBuilder service={service} jobSites={jobSites} jobCodes={jobCodes} />}
