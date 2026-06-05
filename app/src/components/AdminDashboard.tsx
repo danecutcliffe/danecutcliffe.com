@@ -42,7 +42,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const appStorageScope = typeof window === 'undefined' ? 'server' : `${window.location.host}:${window.location.pathname}`;
   const dismissalStorageKey = `time-admin-attention-dismissed:${appStorageScope}:${periodStart}:${periodEnd}`;
   const [dismissedFlagIds, setDismissedFlagIds] = useState<string[]>([]);
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
   const todayKey = getAtlanticDateKey(now);
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
@@ -83,6 +83,11 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
   }, [currentPeriod.start, payPeriodSettings.lengthDays]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     try {

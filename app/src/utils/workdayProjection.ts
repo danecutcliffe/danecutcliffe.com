@@ -4,7 +4,7 @@ export interface WorkdayProgress {
   elapsedWorkdays: number;
   totalWorkdays: number;
   percent: number;
-  isCurrentOrFuture: boolean;
+  isAfterPeriodEnd: boolean;
 }
 
 export function getWorkdayProgress(start: string, lengthDays: number, now: Date): WorkdayProgress {
@@ -24,12 +24,12 @@ export function getWorkdayProgress(start: string, lengthDays: number, now: Date)
     elapsedWorkdays,
     totalWorkdays: workdays.length,
     percent: workdays.length > 0 ? Math.round((elapsedWorkdays / workdays.length) * 100) : 100,
-    isCurrentOrFuture: todayKey <= end,
+    isAfterPeriodEnd: todayKey > end,
   };
 }
 
 export function getWorkdayProjectionFactor(progress: WorkdayProgress) {
-  if (progress.elapsedWorkdays <= 0 || !progress.isCurrentOrFuture) return 1;
+  if (progress.elapsedWorkdays <= 0 || progress.isAfterPeriodEnd) return 1;
   if (progress.totalWorkdays <= 0) return 1;
   return progress.totalWorkdays / progress.elapsedWorkdays;
 }

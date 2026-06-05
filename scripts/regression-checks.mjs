@@ -239,6 +239,11 @@ requireIncludes(
   'Dashboard projected payroll must use the reviewed workday projection factor helper.',
 );
 requireIncludes(
+  adminDashboard,
+  'setInterval(() => setNow(new Date()), 60_000)',
+  'Dashboard workday projection must refresh while the page remains open.',
+);
+requireIncludes(
   read('app/src/utils/workdayProjection.ts'),
   'formatAtlanticDateTimeInput',
   'Dashboard workday projection must use Atlantic local time for partial current-workday progress.',
@@ -250,7 +255,7 @@ requireIncludes(
 );
 requireIncludes(
   adminDashboard,
-  'className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"',
+  'id="metrics" className="mt-7',
   'Dashboard metrics need breathing room below the pay-period progress bar.',
 );
 if (adminDashboard.includes('payPeriodSettings.lengthDays / periodProgress.elapsedDays')) {
