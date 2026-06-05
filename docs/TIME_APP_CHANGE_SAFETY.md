@@ -71,7 +71,7 @@ A future update is safe to deploy only when:
 
 ## Standard Review Agents
 
-Run a recurring review panel before staging or production promotion for substantive features, bug fixes, Supabase changes, report/payroll changes, mobile layout changes, and deployment workflow changes. Use actual available subagents or multi-agent tooling when callable in the session. If agent tooling is unavailable, perform separate named review passes and state clearly that they were manual review passes rather than independent agent runs.
+Run a recurring review panel before staging or production promotion for substantive features, bug fixes, Supabase changes, report/payroll changes, mobile layout changes, and deployment workflow changes. For code revisions, use actual available subagents or multi-agent tooling throughout the work: review the plan before implementation, review the diff after implementation, and review release/deploy risk before promotion. Do not defer all review to the tail end of the task. If agent tooling is genuinely unavailable or at capacity, state that limitation and perform separate named review passes instead, but treat that as a fallback rather than the normal path.
 
 - Builder/Implementation Reviewer: checks code structure, typing, data flow, maintainability, hidden coupling, and whether the implementation is simple enough to trust.
 - Product/Data Integrity Reviewer: checks payroll math, rounding, report reconciliation, Supabase constraints, RLS, auditability, mobile layout, user-facing behavior, and real-world edge cases.

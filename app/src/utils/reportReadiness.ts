@@ -18,7 +18,6 @@ export function buildPayrollExportReadiness(
   const openBreakCount = entries.filter((entry) => entry.eventType === 'break' && !entry.clockOut).length;
   const missingJobCount = entries.filter((entry) => entry.eventType === 'work' && !entry.jobCodeId).length;
   const missingProfileCount = entries.filter((entry) => !profileById.has(entry.userId)).length;
-  const manualOrEditedCount = entries.filter((entry) => entry.editedAt || (entry.createdBy && entry.createdBy !== entry.userId)).length;
   const inactiveNames = uniqueNames(entries
     .map((entry) => profileById.get(entry.userId))
     .filter((profile): profile is Profile => profile !== undefined && !profile.isActive));
@@ -37,7 +36,6 @@ export function buildPayrollExportReadiness(
     warnings: [
       ...(hoursResult.unattributedBreakHours > 0 ? [`${roundHours(hoursResult.unattributedBreakHours).toFixed(2)}h of unpaid break time could not be matched to a work entry`] : []),
       ...(inactiveNames.length > 0 ? [`Inactive employee has time in this period: ${inactiveNames.join(', ')}`] : []),
-      ...(manualOrEditedCount > 0 ? [`${manualOrEditedCount} admin-created or edited ${manualOrEditedCount === 1 ? 'entry needs' : 'entries need'} review`] : []),
     ],
     acceptableExclusions: [
       ...(openWorkCount > 0 ? [`${openWorkCount} open work ${openWorkCount === 1 ? 'entry is' : 'entries are'} excluded from payroll summary/location exports by design`] : []),

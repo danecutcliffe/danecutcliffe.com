@@ -66,6 +66,7 @@ function createFakeClient({
   openWorkEntry = null,
   openBreakEntry = null,
   existingTimeEntry = timeEntryRow(),
+  manualBreakWorkEntry = null,
   jobCodeRow = activeJobCodeRow,
   rpcResults = {},
 }: {
@@ -73,9 +74,11 @@ function createFakeClient({
   openWorkEntry?: TimeEntryRow | null;
   openBreakEntry?: TimeEntryRow | null;
   existingTimeEntry?: TimeEntryRow | null;
+  manualBreakWorkEntry?: TimeEntryRow | null;
   jobCodeRow?: JobCodeRow;
   rpcResults?: Record<string, unknown>;
 } = {}) {
+  const orFilters: string[] = [];
   const rpc = vi.fn(async (name: string, params: Record<string, unknown>) => ({
     data: rpcResults[name] ?? timeEntryRow({ id: `${name}-entry` }),
     error: null,
@@ -100,13 +103,39 @@ function createFakeClient({
           filters.push({ column, value });
           return query;
         },
+        lte: (column: string, value: unknown) => {
+          filters.push({ column, value });
+          return query;
+        },
+        or: (filter: string) => {
+          orFilters.push(filter);
+          return query;
+        },
+        order: () => query,
+        limit: () => query,
         is: (column: string, value: unknown) => {
           filters.push({ column, value });
           return query;
         },
         maybeSingle: async () => {
           const eventType = filters.find((filter) => filter.column === 'event_type')?.value;
-          const row = eventType === 'break' ? openBreakEntry : eventType === 'work' ? openWorkEntry : null;
+          const isManualBreakValidation = filters.some((filter) => filter.column === 'clock_in');
+          const userIdFilter = filters.find((filter) => filter.column === 'user_id')?.value;
+          const clockInFilter = filters.find((filter) => filter.column === 'clock_in')?.value;
+          const matchingManualBreakWorkEntry = (() => {
+            if (!manualBreakWorkEntry || typeof clockInFilter !== 'string') return null;
+            const breakStart = new Date(clockInFilter).getTime();
+            const workStart = new Date(manualBreakWorkEntry.clock_in).getTime();
+            const workEnd = manualBreakWorkEntry.clock_out ? new Date(manualBreakWorkEntry.clock_out).getTime() : Number.POSITIVE_INFINITY;
+            return manualBreakWorkEntry.user_id === userIdFilter && workStart <= breakStart && breakStart < workEnd
+              ? manualBreakWorkEntry
+              : null;
+          })();
+          const row = eventType === 'break'
+            ? openBreakEntry
+            : eventType === 'work'
+              ? isManualBreakValidation ? matchingManualBreakWorkEntry : openWorkEntry
+              : null;
           return { data: row, error: null };
         },
         single: async () => ({ data: existingTimeEntry, error: existingTimeEntry ? null : { message: 'No rows found' } }),
@@ -176,6 +205,7 @@ function createFakeClient({
     service: new SupabaseTimeClockService(client as never),
     rpc,
     from,
+    orFilters,
   };
 }
 
@@ -316,6 +346,155 @@ describe('SupabaseTimeClockService admin time-entry writes', () => {
       notes: 'Admin correction',
       createdBy: adminProfileRow.id,
     })).rejects.toThrow('Choose an active job code.');
+  });
+
+  it('rejects manual break entries that are not covered by an existing work entry', async () => {
+    const { service, orFilters } = createFakeClient({
+      profile: adminProfileRow,
+      manualBreakWorkEntry: null,
+    });
+
+    await expect(service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: '2026-06-04T15:50:00.000Z',
+      clockOut: '2026-06-04T16:22:00.000Z',
+      notes: 'Break',
+      createdBy: adminProfileRow.id,
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+    expect(orFilters).toContain('clock_out.is.null,clock_out.gt.2026-06-04T15:50:00.000Z');
+  });
+
+  it('rejects manual break entries covered only by another employee work entry', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      manualBreakWorkEntry: timeEntryRow({
+        id: 'other-employee-work',
+        user_id: 'employee-2',
+        clock_in: '2026-06-04T12:19:00.000Z',
+        clock_out: null,
+      }),
+    });
+
+    await expect(service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: '2026-06-04T15:50:00.000Z',
+      clockOut: '2026-06-04T16:22:00.000Z',
+      notes: 'Break',
+      createdBy: adminProfileRow.id,
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+  });
+
+  it('allows manual break entries whose start is inside an existing open work entry even when the break ends later', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      manualBreakWorkEntry: timeEntryRow({
+        id: 'open-work',
+        clock_in: '2026-06-04T12:19:00.000Z',
+        clock_out: null,
+      }),
+    });
+
+    const entry = await service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: '2026-06-04T15:50:00.000Z',
+      clockOut: '2026-06-04T23:22:00.000Z',
+      notes: 'Break',
+      createdBy: adminProfileRow.id,
+    });
+
+    expect(entry.id).toBe('manual-entry');
+    expect(entry.eventType).toBe('break');
+    expect(entry.jobCodeId).toBeNull();
+  });
+
+  it('allows manual break entries when only the break start is inside the matching closed work entry', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      manualBreakWorkEntry: timeEntryRow({
+        id: 'closed-work',
+        clock_in: '2026-06-04T12:00:00.000Z',
+        clock_out: '2026-06-04T16:00:00.000Z',
+      }),
+    });
+
+    const entry = await service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: '2026-06-04T15:50:00.000Z',
+      clockOut: '2026-06-04T16:22:00.000Z',
+      notes: 'Break',
+      createdBy: adminProfileRow.id,
+    });
+
+    expect(entry.id).toBe('manual-entry');
+  });
+
+  it('rejects manual break entries that start exactly at the closed work clock-out', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      manualBreakWorkEntry: timeEntryRow({
+        id: 'closed-work',
+        clock_in: '2026-06-04T12:00:00.000Z',
+        clock_out: '2026-06-04T15:50:00.000Z',
+      }),
+    });
+
+    await expect(service.createManualEntry({
+      userId: employeeId,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: '2026-06-04T15:50:00.000Z',
+      clockOut: '2026-06-04T16:22:00.000Z',
+      notes: 'Break',
+      createdBy: adminProfileRow.id,
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+  });
+
+  it('rejects editing an existing break start outside of a work entry', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      existingTimeEntry: timeEntryRow({
+        id: 'break-entry',
+        event_type: 'break',
+        job_code_id: null,
+        clock_in: '2026-06-04T15:50:00.000Z',
+        clock_out: '2026-06-04T16:22:00.000Z',
+      }),
+      manualBreakWorkEntry: null,
+    });
+
+    await expect(service.updateTimeEntry({
+      entryId: 'break-entry',
+      patch: { clockIn: '2026-06-04T15:50:00.000Z' },
+      editedBy: adminProfileRow.id,
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+  });
+
+  it('rejects editing existing break notes when its start is outside of a work entry', async () => {
+    const { service } = createFakeClient({
+      profile: adminProfileRow,
+      existingTimeEntry: timeEntryRow({
+        id: 'break-entry',
+        event_type: 'break',
+        job_code_id: null,
+        clock_in: '2026-06-04T15:50:00.000Z',
+        clock_out: '2026-06-04T16:22:00.000Z',
+      }),
+      manualBreakWorkEntry: null,
+    });
+
+    await expect(service.updateTimeEntry({
+      entryId: 'break-entry',
+      patch: { notes: 'Admin note edit' },
+      editedBy: adminProfileRow.id,
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
   });
 
   it('rejects moving an existing work entry onto an inactive or archived job code', async () => {

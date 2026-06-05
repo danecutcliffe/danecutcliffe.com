@@ -509,6 +509,55 @@ const assertNoClosedWorkOverlap = (entry: Pick<TimeEntry, 'id' | 'userId' | 'eve
   }
 };
 
+const workEntryContainsBreakStart = (
+  entry: Pick<TimeEntry, 'userId' | 'eventType' | 'clockIn' | 'clockOut'>,
+  userId: string,
+  breakStart: number,
+) => {
+  if (entry.userId !== userId || entry.eventType !== 'work') return false;
+  const workStart = new Date(entry.clockIn).getTime();
+  const workEnd = entry.clockOut ? new Date(entry.clockOut).getTime() : Number.POSITIVE_INFINITY;
+  return breakStart >= workStart && breakStart < workEnd;
+};
+
+const hasWorkEntryForBreakStart = (
+  userId: string,
+  clockIn: string,
+  options: {
+    excludedWorkEntryId?: string;
+    replacementWorkEntry?: Pick<TimeEntry, 'userId' | 'eventType' | 'clockIn' | 'clockOut'>;
+  } = {},
+) => {
+  const breakStart = new Date(clockIn).getTime();
+  return timeEntries.some((entry) => (
+    entry.id !== options.excludedWorkEntryId && workEntryContainsBreakStart(entry, userId, breakStart)
+  )) || Boolean(options.replacementWorkEntry && workEntryContainsBreakStart(options.replacementWorkEntry, userId, breakStart));
+};
+
+const assertManualBreakHasWorkEntry = (userId: string, clockIn: string) => {
+  if (!hasWorkEntryForBreakStart(userId, clockIn)) {
+    throw new Error('Manual break entries must start within an existing work entry for the employee.');
+  }
+};
+
+const assertWorkChangePreservesBreaks = (
+  existing: TimeEntry,
+  replacement?: Pick<TimeEntry, 'userId' | 'eventType' | 'clockIn' | 'clockOut'>,
+) => {
+  if (existing.eventType !== 'work') return;
+  const orphanedBreak = timeEntries.find((entry) => (
+    entry.eventType === 'break'
+    && workEntryContainsBreakStart(existing, entry.userId, new Date(entry.clockIn).getTime())
+    && !hasWorkEntryForBreakStart(entry.userId, entry.clockIn, {
+      excludedWorkEntryId: existing.id,
+      replacementWorkEntry: replacement?.eventType === 'work' ? replacement : undefined,
+    })
+  ));
+  if (orphanedBreak) {
+    throw new Error('Work entry changes cannot leave existing break entries without a containing work entry.');
+  }
+};
+
 const assertCanPunchFor = (userId: string) => {
   const profile = profiles.find((candidate) => candidate.id === currentProfileId);
   if (!profile?.isActive) throw new Error('This account is inactive. Ask an admin to reactivate it.');
@@ -776,6 +825,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (eventType === 'work' && !jobCodeId) throw new Error('Manual work entries need a job code.');
     if (eventType === 'break' && !clockOut) throw new Error('Manual break entries need a punch out time.');
     if (clockOut && new Date(clockOut).getTime() <= new Date(clockIn).getTime()) throw new Error('Clock out must be after clock in.');
+    if (eventType === 'break') assertManualBreakHasWorkEntry(userId, clockIn);
     assertTimeEntryUnlocked(userId, clockIn, clockOut, 'adding time');
     const entry: TimeEntry = {
       id: makeId('manual'),
@@ -812,6 +862,10 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (candidate.clockOut && new Date(candidate.clockOut).getTime() <= new Date(candidate.clockIn).getTime()) {
       throw new Error('Clock out must be after clock in.');
     }
+    if (candidate.eventType === 'break') {
+      assertManualBreakHasWorkEntry(candidate.userId, candidate.clockIn);
+    }
+    assertWorkChangePreservesBreaks(entry, candidate);
     assertTimeEntryUnlocked(candidate.userId, candidate.clockIn, candidate.clockOut, 'editing');
     assertNoClosedWorkOverlap(candidate);
     Object.assign(entry, candidate);
@@ -827,6 +881,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (idx === -1) throw new Error('Time entry not found.');
     const entry = timeEntries[idx];
     assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'deleting');
+    assertWorkChangePreservesBreaks(entry);
     logAudit({ userId: currentProfileId, action: 'time_entry_deleted', targetTable: 'time_entries', targetId: entry.id, oldValues: { ...cloneEntry(entry) }, newValues: null });
     timeEntries.splice(idx, 1);
   },

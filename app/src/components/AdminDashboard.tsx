@@ -31,6 +31,9 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
   const [isAttentionOpen, setIsAttentionOpen] = useState(true);
   const periodEnd = addDaysToDateKey(periodStart, payPeriodSettings.lengthDays - 1);
+  const appStorageScope = typeof window === 'undefined' ? 'server' : `${window.location.host}:${window.location.pathname}`;
+  const dismissalStorageKey = `time-admin-attention-dismissed:${appStorageScope}:${periodStart}:${periodEnd}`;
+  const [dismissedFlagIds, setDismissedFlagIds] = useState<string[]>([]);
   const todayKey = getAtlanticDateKey(new Date());
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
@@ -55,9 +58,16 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
     { netWorkHours: 0, overtimeHours: 0, paidBreakHours: 0, unpaidBreakHours: 0, grossPay: 0 },
   );
   const flags = buildReviewFlags({ entries: periodEntries, profileById, jobById, siteById });
+  const dismissedFlagIdSet = useMemo(() => new Set(dismissedFlagIds), [dismissedFlagIds]);
+  const visibleFlags = useMemo(() => flags.filter((flag) => !dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
+  const hiddenFlags = useMemo(() => flags.filter((flag) => dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
+  const dismissedFlagCount = flags.length - visibleFlags.length;
   const exportReadiness = useMemo(() => buildPayrollExportReadiness(periodEntries, profileById, payPeriodSettings), [payPeriodSettings, periodEntries, profileById]);
   const blockerCount = flags.filter((flag) => flag.severity === 'blocker').length;
-  const reviewCount = flags.length - blockerCount;
+  const visibleBlockerCount = visibleFlags.filter((flag) => flag.severity === 'blocker').length;
+  const visibleReviewCount = visibleFlags.length - visibleBlockerCount;
+  const hiddenBlockerCount = hiddenFlags.filter((flag) => flag.severity === 'blocker').length;
+  const hiddenReviewCount = hiddenFlags.length - hiddenBlockerCount;
   const readiness = flags.length === 0 ? 'ready' : blockerCount > 0 ? 'blocked' : 'review';
   const periodProgress = getPeriodProgress(periodStart, payPeriodSettings.lengthDays, todayKey);
   const projectionFactor = periodProgress.elapsedDays > 0 && periodProgress.isCurrentOrFuture ? payPeriodSettings.lengthDays / periodProgress.elapsedDays : 1;
@@ -67,6 +77,37 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
   }, [currentPeriod.start, payPeriodSettings.lengthDays]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(dismissalStorageKey) ?? '[]');
+      setDismissedFlagIds(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []);
+    } catch {
+      setDismissedFlagIds([]);
+    }
+  }, [dismissalStorageKey]);
+
+  const dismissFlag = (flag: ReviewFlag) => {
+    setDismissedFlagIds((current) => {
+      const dismissalKey = flagDismissalKey(flag);
+      const next = current.includes(dismissalKey) ? current : [...current, dismissalKey];
+      try {
+        localStorage.setItem(dismissalStorageKey, JSON.stringify(next));
+      } catch {
+        // If browser storage is unavailable, still hide it for this session.
+      }
+      return next;
+    });
+  };
+
+  const restoreDismissedFlags = () => {
+    try {
+      localStorage.removeItem(dismissalStorageKey);
+    } catch {
+      // Browser storage can be unavailable in private or locked-down contexts.
+    }
+    setDismissedFlagIds([]);
+  };
 
   return (
     <section className="space-y-4">
@@ -120,7 +161,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
         <Metric label="Total accrued payroll this period" value={money(periodSummary.grossPay)} sublabel={lunchSummaryLabel(periodSummary.paidBreakHours, periodSummary.unpaidBreakHours)} />
         <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionFactor > 1 ? `At current pace x${projectionFactor.toFixed(1)}` : 'Period actual'} />
         <Metric label="Payable hours" value={`${periodSummary.netWorkHours.toFixed(1)}h`} />
-        <Metric label="Attention items" value={flags.length.toString()} sublabel={`${blockerCount} blockers, ${reviewCount} review`} />
+        <Metric label="Visible attention items" value={visibleFlags.length.toString()} sublabel={`${visibleBlockerCount} visible blockers, ${visibleReviewCount} visible review${dismissedFlagCount ? `, ${hiddenBlockerCount} hidden blockers, ${hiddenReviewCount} hidden review` : ''}`} />
       </div>
 
       <div className="grid grid-cols-1 gap-4">
@@ -153,17 +194,37 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
           {isAttentionOpen && (
             <>
               {flags.length === 0 && <p className="text-sm text-muted">No issues found for this pay period.</p>}
+              {flags.length > 0 && visibleFlags.length === 0 && (
+                <p className="rounded-md border border-app-border bg-card-alt p-3 text-sm font-semibold text-muted-strong">
+                  All attention items for this pay period are hidden.
+                </p>
+              )}
               <div className="space-y-2">
-                {flags.slice(0, 10).map((flag) => (
+                {visibleFlags.slice(0, 10).map((flag) => (
                   <div key={flag.id} className={`rounded-md border p-3 text-sm ${flag.severity === 'blocker' ? 'border-error-border bg-error-bg' : 'border-warn-border bg-warn-bg'}`}>
-                    <p className={`font-bold ${flag.severity === 'blocker' ? 'text-error-text' : 'text-warning'}`}>{flag.title}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className={`font-bold ${flag.severity === 'blocker' ? 'text-error-text' : 'text-warning'}`}>{flag.title}</p>
+                      <button
+                        aria-label={`Hide ${flag.title}`}
+                        className="min-h-7 min-w-7 rounded-full border border-current px-2 text-xs font-bold opacity-80 hover:opacity-100"
+                        type="button"
+                        onClick={() => dismissFlag(flag)}
+                      >
+                        X
+                      </button>
+                    </div>
                     <p className="mt-1 text-muted-strong">{flag.detail}</p>
                   </div>
                 ))}
               </div>
+              {dismissedFlagCount > 0 && (
+                <button className="min-h-9 rounded-md border border-input-border px-3 text-sm font-bold text-muted-strong" type="button" onClick={restoreDismissedFlags}>
+                  Show {dismissedFlagCount} hidden item{dismissedFlagCount === 1 ? '' : 's'}
+                </button>
+              )}
             </>
           )}
-          {!isAttentionOpen && <p className="text-sm text-muted">{flags.length} attention item{flags.length === 1 ? '' : 's'} hidden.</p>}
+          {!isAttentionOpen && <p className="text-sm text-muted">{visibleFlags.length} visible attention item{visibleFlags.length === 1 ? '' : 's'} hidden.</p>}
         </Panel>
       </div>
 
@@ -261,13 +322,26 @@ function buildReviewFlags({ entries, profileById, jobById, siteById }: { entries
     if (entry.eventType === 'work' && !entry.jobCodeId) flags.push({ id: `${entry.id}-job`, severity: 'blocker', title: 'Missing job code', detail: `${employeeName} has work time without a job code.`, entry });
     if (employee && employee.hourlyRate <= 0 && entry.eventType === 'work') flags.push({ id: `${entry.id}-rate`, severity: 'blocker', title: 'Missing pay rate', detail: `${employeeName} has hours but no hourly rate.`, entry });
     if (employee && !employee.isActive) flags.push({ id: `${entry.id}-inactive`, severity: 'review', title: 'Inactive employee has time', detail: `${employeeName} has time in this period.`, entry });
-    if (!entry.clockInLat || (entry.clockOut && !entry.clockOutLat)) flags.push({ id: `${entry.id}-gps`, severity: 'review', title: 'Missing GPS', detail: `${employeeName} has ${job?.name ?? entry.eventType} time with incomplete GPS capture.`, entry });
-    if (gps.status === 'outside') flags.push({ id: `${entry.id}-geofence`, severity: 'review', title: 'Off-site punch', detail: `${employeeName} punched ${jobDisplayNameById(entry.jobCodeId, jobById, siteById)} outside the ${site?.geofenceRadiusMeters ?? 250}m geofence.`, entry });
+    const isAdminCreated = Boolean(entry.createdBy && entry.createdBy !== entry.userId);
+    if (!isAdminCreated && (!entry.clockInLat || (entry.clockOut && !entry.clockOutLat))) flags.push({ id: `${entry.id}-gps`, severity: 'review', title: 'Missing GPS', detail: `${employeeName} has ${job?.name ?? entry.eventType} time with incomplete GPS capture.`, entry });
+    if (!isAdminCreated && gps.status === 'outside') flags.push({ id: `${entry.id}-geofence`, severity: 'review', title: 'Off-site punch', detail: `${employeeName} punched ${jobDisplayNameById(entry.jobCodeId, jobById, siteById)} outside the ${site?.geofenceRadiusMeters ?? 250}m geofence.`, entry });
     if (entry.isAutoClockedOut) flags.push({ id: `${entry.id}-auto`, severity: 'review', title: 'Auto clock-out', detail: `${employeeName} has an auto clock-out to review.`, entry });
-    if (entry.editedAt || (entry.createdBy && entry.createdBy !== entry.userId)) flags.push({ id: `${entry.id}-manual`, severity: 'review', title: 'Manual or edited entry', detail: `${employeeName} has an admin-created or edited entry.`, entry });
 
     return flags;
   });
+}
+
+function flagDismissalKey(flag: ReviewFlag) {
+  const entry = flag.entry;
+  if (!entry) return flag.id;
+  return [
+    flag.id,
+    entry.clockIn,
+    entry.clockOut ?? 'open',
+    entry.jobCodeId ?? 'no-job',
+    entry.editedAt ?? 'unedited',
+    entry.isAutoClockedOut ? 'auto' : 'manual',
+  ].join(':');
 }
 
 function getJobSplits(entries: TimeEntry[], jobById: Map<string, JobCode>, siteById: Map<string, JobSite>, employee: Profile) {

@@ -123,8 +123,13 @@ requireIncludes(
 );
 requireIncludes(
   changeSafety,
-  'Skeptical Claude Challenger',
+  'Skeptical Release Challenger',
   'Change safety contract must preserve the skeptical recurring review-agent role.',
+);
+requireIncludes(
+  changeSafety,
+  'For code revisions, use actual available subagents or multi-agent tooling throughout the work',
+  'Change safety contract must require actual subagent review throughout code revisions when available.',
 );
 requireIncludes(
   changeSafety,
@@ -153,6 +158,7 @@ requireIncludes(
 );
 
 const integrityMigration = read('supabase/migrations/20260604154000_time_entry_integrity_guards.sql');
+const manualBreakWorkMigration = read('supabase/migrations/20260604190000_manual_break_start_requires_work_entry.sql');
 requireIncludes(
   integrityMigration,
   'create or replace function public.time_entry_touches_approved_period',
@@ -217,6 +223,32 @@ requireIncludes(
   integrityMigration,
   "candidate_clock_in < coalesce(existing.clock_out, 'infinity'::timestamptz)",
   'Overlap detection must reject closed work overlapping an existing open work interval.',
+);
+
+requireIncludes(
+  manualBreakWorkMigration,
+  'create or replace function public.break_start_has_work_entry',
+  'Manual break guard migration must keep break-start work containment detection.',
+);
+requireIncludes(
+  manualBreakWorkMigration,
+  "candidate_clock_in < coalesce(work_entry.clock_out, 'infinity'::timestamptz)",
+  'Manual break guard must treat closed work intervals as half-open at clock_out.',
+);
+requireIncludes(
+  manualBreakWorkMigration,
+  'before insert or update on public.time_entries',
+  'Manual break guard must validate existing break rows on all updates, not only clock-in edits.',
+);
+requireIncludes(
+  manualBreakWorkMigration,
+  'create trigger time_entries_work_break_guard_update',
+  'Manual break guard must prevent work-entry updates from orphaning existing breaks.',
+);
+requireIncludes(
+  manualBreakWorkMigration,
+  'create trigger time_entries_work_break_guard_delete',
+  'Manual break guard must prevent work-entry deletes from orphaning existing breaks.',
 );
 requireIncludes(
   integrityMigration,

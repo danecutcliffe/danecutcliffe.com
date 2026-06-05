@@ -135,4 +135,64 @@ describe('mockTimeClockService production parity', () => {
       editedBy: 'profile-admin-1',
     })).rejects.toThrow('overlaps another closed work entry');
   });
+
+  it('keeps manual break starts inside a same-employee work entry', async () => {
+    const employee = await createMockEmployee();
+    const dayOffset = sequence * 20;
+    await expect(mockTimeClockService.createManualEntry({
+      userId: employee.id,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: isoAt(dayOffset, 8),
+      clockOut: isoAt(dayOffset, 9),
+      notes: 'Uncovered break',
+      createdBy: 'profile-admin-1',
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+
+    const work = await mockTimeClockService.createManualEntry({
+      userId: employee.id,
+      jobCodeId: 'job-orlebar',
+      eventType: 'work',
+      clockIn: isoAt(dayOffset, 9),
+      clockOut: isoAt(dayOffset, 11),
+      notes: 'Containing work',
+      createdBy: 'profile-admin-1',
+    });
+
+    await expect(mockTimeClockService.createManualEntry({
+      userId: employee.id,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: isoAt(dayOffset, 11),
+      clockOut: isoAt(dayOffset, 12),
+      notes: 'Boundary break',
+      createdBy: 'profile-admin-1',
+    })).rejects.toThrow('Manual break entries must start within an existing work entry for the employee.');
+
+    const breakEntry = await mockTimeClockService.createManualEntry({
+      userId: employee.id,
+      jobCodeId: null,
+      eventType: 'break',
+      clockIn: isoAt(dayOffset, 10),
+      clockOut: isoAt(dayOffset, 13),
+      notes: 'Covered break',
+      createdBy: 'profile-admin-1',
+    });
+
+    await expect(mockTimeClockService.updateTimeEntry({
+      entryId: work.id,
+      patch: { clockOut: isoAt(dayOffset, 10) },
+      editedBy: 'profile-admin-1',
+    })).rejects.toThrow('Work entry changes cannot leave existing break entries without a containing work entry.');
+
+    await expect(mockTimeClockService.deleteTimeEntry({
+      entryId: work.id,
+    })).rejects.toThrow('Work entry changes cannot leave existing break entries without a containing work entry.');
+
+    await expect(mockTimeClockService.updateTimeEntry({
+      entryId: breakEntry.id,
+      patch: { notes: 'Still covered' },
+      editedBy: 'profile-admin-1',
+    })).resolves.toMatchObject({ notes: 'Still covered' });
+  });
 });

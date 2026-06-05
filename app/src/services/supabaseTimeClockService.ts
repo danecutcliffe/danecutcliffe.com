@@ -318,6 +318,7 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     if (eventType === 'work' && jobCodeId) await this.assertActiveJobCode(jobCodeId);
     if (eventType === 'break' && !clockOut) throw new Error('Manual break entries need a punch out time.');
     if (clockOut && new Date(clockOut).getTime() <= new Date(clockIn).getTime()) throw new Error('Clock out must be after clock in.');
+    if (eventType === 'break') await this.assertManualBreakHasWorkEntry(userId, clockIn);
 
     const row = unwrap(
       await this.client
@@ -340,13 +341,16 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
 
   async updateTimeEntry({ entryId, patch, editedBy }: { entryId: string; patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>; editedBy: string }) {
     await this.assertAdmin();
+    const existing = await this.getTimeEntryForAdminValidation(entryId);
     if (patch.jobCodeId !== undefined) {
-      const existing = await this.getTimeEntryForAdminValidation(entryId);
       const nextJobCodeId = patch.jobCodeId;
       if (existing.event_type === 'work') {
         if (!nextJobCodeId) throw new Error('Manual work entries need a job code.');
         if (nextJobCodeId !== existing.job_code_id) await this.assertActiveJobCode(nextJobCodeId);
       }
+    }
+    if (existing.event_type === 'break') {
+      await this.assertManualBreakHasWorkEntry(existing.user_id, patch.clockIn ?? existing.clock_in);
     }
 
     const update: Record<string, string | null> = {
@@ -927,9 +931,9 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     return unwrap(
       await this.client
         .from('time_entries')
-        .select('id,event_type,job_code_id')
+        .select('id,user_id,event_type,job_code_id,clock_in,clock_out')
         .eq('id', entryId)
-        .single() as SupabaseResponse<{ id: string; event_type: TimeEntry['eventType']; job_code_id: string | null }>,
+        .single() as SupabaseResponse<Pick<TimeEntryRow, 'id' | 'user_id' | 'event_type' | 'job_code_id' | 'clock_in' | 'clock_out'>>,
       'Unable to load time entry for validation.',
     );
   }
@@ -944,6 +948,22 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
       'Unable to verify the selected job code.',
     );
     if (!row.is_active || row.is_archived) throw new Error('Choose an active job code.');
+  }
+
+  private async assertManualBreakHasWorkEntry(userId: string, clockIn: string) {
+    const row = unwrap(
+      await this.client
+        .from('time_entries')
+        .select('id,clock_in,clock_out')
+        .eq('user_id', userId)
+        .eq('event_type', 'work')
+        .lte('clock_in', clockIn)
+        .or(`clock_out.is.null,clock_out.gt.${clockIn}`)
+        .order('clock_in', { ascending: false })
+        .limit(1)
+        .maybeSingle() as SupabaseResponse<Pick<TimeEntryRow, 'id' | 'clock_in' | 'clock_out'>>,
+      'Manual break entries must start within an existing work entry for the employee.',
+    );
   }
 
   private async verifyCurrentUserPassword(password: string, profile?: Profile) {

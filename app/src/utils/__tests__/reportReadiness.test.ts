@@ -63,4 +63,22 @@ describe('payroll export readiness', () => {
     expect(readiness.blockers).toEqual([]);
     expect(readiness.warnings).toContain('0.60h of unpaid break time could not be matched to a work entry');
   });
+
+  it('does not treat admin-created or edited entries as report warnings', () => {
+    resetEntrySequence();
+    const adminEdited = {
+      ...workEntry({ id: 'admin-edited', clockIn: '2026-06-02T12:00:00.000Z', hours: 4 }),
+      createdBy: 'admin-1',
+      editedAt: '2026-06-02T16:30:00.000Z',
+      editedBy: 'admin-1',
+    };
+
+    const readiness = buildPayrollExportReadiness(
+      [adminEdited],
+      profileById,
+      payPeriodSettings,
+    );
+
+    expect(readiness.warnings).toEqual([]);
+  });
 });
