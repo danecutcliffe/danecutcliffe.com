@@ -161,7 +161,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
         <div className="mt-4">
           {viewMode === 'summary' && displayWeeks.map((week) => (
             <section key={week.weekStart} className="time-day-panel py-5 first:pt-0 last:pb-0">
-              <WeekSectionHeader week={week} showGrossPay />
+              <WeekSectionHeader week={week} />
               {week.entries.length === 0 ? (
                 <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No entries for this week.</p>
               ) : (
@@ -317,22 +317,26 @@ function DailyBreakdown({
   );
 }
 
-function WeekSectionHeader({ week, showGrossPay = false }: { week: TimesheetWeek; showGrossPay?: boolean }) {
+function WeekSectionHeader({ week }: { week: TimesheetWeek }) {
   return (
-    <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-bold">{week.title}</h3>
-          {week.isPartialWeek && <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">Partial work week</p>}
+    <div className="rounded-md border border-app-border-subtle bg-card-alt px-4 py-3">
+      <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex min-w-0 items-start gap-3">
+          <span aria-hidden="true" className="mt-1 h-8 w-1.5 shrink-0 rounded-full bg-accent" />
+          <div className="min-w-0">
+            <h3 className="text-base font-bold sm:text-lg">{week.title}</h3>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {week.isCurrentWeek && <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">This week</span>}
+              {week.isPartialWeek && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Partial work week</span>}
+              {week.isOpen && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Open entry</span>}
+            </div>
+          </div>
         </div>
-        {week.isOpen && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Open entry</span>}
+        <div className="shrink-0 text-right">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Net hours</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{week.summary.netWorkHours.toFixed(2)}h</p>
+        </div>
       </div>
-      <dl className={`mt-3 grid grid-cols-2 gap-3 text-sm ${showGrossPay ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
-        <Metric label="Net hours" value={`${week.summary.netWorkHours.toFixed(2)}h`} />
-        <Metric label="Breaks" value={`${week.summary.breakHours.toFixed(2)}h`} />
-        <Metric label="OT hours" value={`${week.summary.overtimeHours.toFixed(2)}h`} />
-        {showGrossPay && <Metric label="Gross pay" value={`$${week.summary.grossPay.toFixed(2)}`} />}
-      </dl>
     </div>
   );
 }

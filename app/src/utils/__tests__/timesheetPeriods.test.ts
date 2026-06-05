@@ -21,10 +21,37 @@ describe('buildTimesheetWeeks', () => {
     });
 
     expect(weeks).toHaveLength(2);
-    expect(weeks[0].title).toBe('Previous Week [May 25th to May 31st]');
-    expect(weeks[1].title).toBe('This Week [June 1st to June 7th]');
+    expect(weeks[0].title).toBe('Week of May 25th - 31st');
+    expect(weeks[1].title).toBe('Week of June 1st - 7th');
     expect(weeks[0].isPartialWeek).toBe(false);
     expect(weeks[1].isCurrentWeek).toBe(true);
+  });
+
+  it('uses the full month name on both sides when a week crosses months', () => {
+    const weeks = buildTimesheetWeeks({
+      periodDays: ['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05'],
+      entries: [],
+      profile: employeeProfile,
+      weeklyOvertimeThresholdHours: 48,
+      todayKey: '2026-07-03',
+    });
+
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0].title).toBe('Week of June 29th - July 5th');
+    expect(weeks[0].isCurrentWeek).toBe(true);
+  });
+
+  it('keeps teen ordinal suffixes correct in week titles', () => {
+    const weeks = buildTimesheetWeeks({
+      periodDays: ['2026-07-11', '2026-07-12'],
+      entries: [],
+      profile: employeeProfile,
+      weeklyOvertimeThresholdHours: 48,
+      todayKey: '2026-07-12',
+    });
+
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0].title).toBe('Week of July 11th - 12th');
   });
 
   it('keeps partial Atlantic weeks when a pay period starts midweek', () => {

@@ -59,15 +59,13 @@ export function buildTimesheetWeeks({
     const weekStart = week.days[0];
     const weekEnd = week.days[week.days.length - 1];
     const rangeLabel = formatDateKeyRange(weekStart, weekEnd);
-    const label = labelWeek(index, currentWeekIndex);
-
     return {
       weekStart,
       weekEnd,
       days: week.days,
       entries: weekEntries,
       summary: computeTimeSummary(weekEntries, profile, weeklyOvertimeThresholdHours, now),
-      title: `${label} [${rangeLabel}]`,
+      title: `Week of ${rangeLabel}`,
       rangeLabel,
       isCurrentWeek: index === currentWeekIndex,
       isPartialWeek: week.days.length < 7,
@@ -76,17 +74,13 @@ export function buildTimesheetWeeks({
   });
 }
 
-function labelWeek(index: number, currentWeekIndex: number) {
-  if (index === currentWeekIndex) return 'This Week';
-  if (currentWeekIndex >= 0 && index === currentWeekIndex - 1) return 'Previous Week';
-  if (currentWeekIndex >= 0 && index === currentWeekIndex + 1) return 'Next Week';
-  return `Week ${index + 1}`;
-}
-
 function formatDateKeyRange(startDateKey: string, endDateKey: string) {
   const start = parseDateKey(startDateKey);
   const end = parseDateKey(endDateKey);
-  return `${monthName(start.month)} ${ordinal(start.day)} to ${monthName(end.month)} ${ordinal(end.day)}`;
+  if (start.month === end.month && start.year === end.year) {
+    return `${monthName(start.month)} ${ordinal(start.day)} - ${ordinal(end.day)}`;
+  }
+  return `${monthName(start.month)} ${ordinal(start.day)} - ${monthName(end.month)} ${ordinal(end.day)}`;
 }
 
 function parseDateKey(dateKey: string) {

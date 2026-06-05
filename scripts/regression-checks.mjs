@@ -268,8 +268,28 @@ requireIncludes(
 );
 requireIncludes(
   timesheetPeriods,
-  "'This Week'",
-  'Timesheet work-week grouping must keep the user-facing This Week label.',
+  '`Week of ${rangeLabel}`',
+  'Timesheet work-week grouping must keep the simple Week of date-range title.',
+);
+requireIncludes(
+  adminTimesheets,
+  'This week',
+  'Admin weekly timesheet header must keep the separate current-week tag.',
+);
+requireIncludes(
+  timesheetScreen,
+  'This week',
+  'Employee weekly timesheet header must keep the separate current-week tag.',
+);
+requireIncludes(
+  adminTimesheets,
+  'Net hours',
+  'Admin weekly timesheet header must keep the simplified Net hours label.',
+);
+requireIncludes(
+  timesheetScreen,
+  'Net hours',
+  'Employee weekly timesheet header must keep the simplified Net hours label.',
 );
 requireIncludes(
   adminTimesheets,
