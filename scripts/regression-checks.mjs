@@ -34,6 +34,7 @@ const releaseWorkflow = read('docs/RELEASE_WORKFLOW.md');
 const changeSafety = read('docs/TIME_APP_CHANGE_SAFETY.md');
 const playwrightConfig = read('app/playwright.config.ts');
 const mockService = read('app/src/services/mockTimeClockService.ts');
+const adminReports = read('app/src/components/AdminReports.tsx');
 
 if (timeUtils.includes('getEntryPayableHours')) {
   fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
@@ -136,6 +137,19 @@ requireIncludes(
   'After each implemented change, give the user a plain-language explanation',
   'Change safety contract must preserve the user ELI5 explanation rule.',
 );
+requireIncludes(
+  changeSafety,
+  'The simplest design is usually the most beautiful design.',
+  'Change safety contract must preserve the Time App simplicity/beauty heuristic.',
+);
+requireIncludes(
+  adminReports,
+  'Cannot export as there are open entries.',
+  'Reports export UI must keep just-in-time open-entry blocking instead of persistent warning clutter.',
+);
+if (adminReports.includes('Selected report blockers') || adminReports.includes('Selected report warnings')) {
+  fail('Reports page must not reintroduce persistent selected report blocker/warning panels.');
+}
 requireIncludes(
   playwrightConfig,
   "VITE_TIME_CLOCK_STRESS_DATA: 'true'",

@@ -46,6 +46,14 @@ Every future change should state whether it touches source files, generated depl
 - Clamp progress bars, charts, SVGs, and graphics so they cannot spill outside their cards.
 - Ban runtime CSS overrides for shell, nav, and mobile layout behavior.
 
+## Product/UI Simplicity Heuristic
+
+- Aim for calm, spare, beautiful UI. The simplest design is usually the most beautiful design.
+- Minimize persistent warning blocks, error cards, and explanatory notices. Do not warn long before the user can act on the problem.
+- Prefer just-in-time feedback at the action boundary. Example: if payroll export is blocked by open entries, show the blocking message when Export is clicked.
+- Keep persistent alerts only when they are safety-critical or environment-critical, such as wrong environment targeting, approved-period locks, failed saves, or data issues that would make payroll/export totals materially unsafe before action.
+- Keep normal admin edits in the time card and audit trail. Do not turn admin-created or admin-edited entries into global warnings unless they create a real payroll/data integrity issue.
+
 ## Verification Gates
 
 - Run `npm run verify` before every staging or production deploy.
