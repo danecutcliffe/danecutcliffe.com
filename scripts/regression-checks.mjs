@@ -39,6 +39,7 @@ const changeSafety = read('docs/TIME_APP_CHANGE_SAFETY.md');
 const playwrightConfig = read('app/playwright.config.ts');
 const mockService = read('app/src/services/mockTimeClockService.ts');
 const adminReports = read('app/src/components/AdminReports.tsx');
+const adminDashboard = read('app/src/components/AdminDashboard.tsx');
 const projectAgents = readOptional('../../../../AGENTS.md');
 const sourceAppAgents = readOptional('../source-app/AGENTS.md');
 
@@ -179,6 +180,9 @@ requireIncludes(
 );
 if (adminReports.includes('Selected report blockers') || adminReports.includes('Selected report warnings')) {
   fail('Reports page must not reintroduce persistent selected report blocker/warning panels.');
+}
+if (adminDashboard.includes('Report blockers') || adminDashboard.includes('Report warnings') || adminDashboard.includes('Allowed exclusions')) {
+  fail('Dashboard must not reintroduce persistent payroll report blocker/warning/exclusion cards.');
 }
 requireIncludes(
   playwrightConfig,

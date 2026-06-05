@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
-import { buildPayrollExportReadiness } from '../utils/reportReadiness';
 import { computeTimeSummary } from '../utils/timecardHours';
 import { addDaysToDateKey, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
 
@@ -62,7 +61,6 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const visibleFlags = useMemo(() => flags.filter((flag) => !dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
   const hiddenFlags = useMemo(() => flags.filter((flag) => dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
   const dismissedFlagCount = flags.length - visibleFlags.length;
-  const exportReadiness = useMemo(() => buildPayrollExportReadiness(periodEntries, profileById, payPeriodSettings), [payPeriodSettings, periodEntries, profileById]);
   const blockerCount = flags.filter((flag) => flag.severity === 'blocker').length;
   const visibleBlockerCount = visibleFlags.filter((flag) => flag.severity === 'blocker').length;
   const visibleReviewCount = visibleFlags.length - visibleBlockerCount;
@@ -141,7 +139,6 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
             <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${periodProgress.percent}%` }} />
           </div>
         </div>
-        <DashboardReadinessSummary readiness={exportReadiness} />
       </div>
 
       <Panel id="working-now" title="Working now">
@@ -229,40 +226,6 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
       </div>
 
     </section>
-  );
-}
-
-function DashboardReadinessSummary({ readiness }: { readiness: ReturnType<typeof buildPayrollExportReadiness> }) {
-  if (readiness.blockers.length === 0 && readiness.warnings.length === 0 && readiness.acceptableExclusions.length === 0) {
-    return (
-      <p className="mt-4 rounded-md bg-success-bg p-3 text-sm font-bold text-success">
-        Payroll/report integrity looks clean for this period.
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-      {readiness.blockers.length > 0 && <DashboardReadinessList title="Report blockers" tone="error" messages={readiness.blockers} />}
-      {readiness.warnings.length > 0 && <DashboardReadinessList title="Report warnings" tone="warning" messages={readiness.warnings} />}
-      {readiness.acceptableExclusions.length > 0 && <DashboardReadinessList title="Allowed exclusions" tone="neutral" messages={readiness.acceptableExclusions} />}
-    </div>
-  );
-}
-
-function DashboardReadinessList({ title, tone, messages }: { title: string; tone: 'error' | 'warning' | 'neutral'; messages: string[] }) {
-  const className = tone === 'error'
-    ? 'border-error-border bg-error-bg text-error-text'
-    : tone === 'warning'
-      ? 'border-warn-border bg-warn-bg text-warning'
-      : 'border-app-border bg-card-alt text-muted-strong';
-  return (
-    <div className={`rounded-md border p-3 ${className}`}>
-      <p className="text-sm font-bold">{title}</p>
-      <ul className="mt-2 space-y-1 text-sm font-semibold">
-        {messages.map((message) => <li key={message}>{message}</li>)}
-      </ul>
-    </div>
   );
 }
 
