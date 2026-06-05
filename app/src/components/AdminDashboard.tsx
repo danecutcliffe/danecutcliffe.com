@@ -61,12 +61,10 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const visibleFlags = useMemo(() => flags.filter((flag) => !dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
   const hiddenFlags = useMemo(() => flags.filter((flag) => dismissedFlagIdSet.has(flagDismissalKey(flag))), [dismissedFlagIdSet, flags]);
   const dismissedFlagCount = flags.length - visibleFlags.length;
-  const blockerCount = flags.filter((flag) => flag.severity === 'blocker').length;
   const visibleBlockerCount = visibleFlags.filter((flag) => flag.severity === 'blocker').length;
   const visibleReviewCount = visibleFlags.length - visibleBlockerCount;
   const hiddenBlockerCount = hiddenFlags.filter((flag) => flag.severity === 'blocker').length;
   const hiddenReviewCount = hiddenFlags.length - hiddenBlockerCount;
-  const readiness = flags.length === 0 ? 'ready' : blockerCount > 0 ? 'blocked' : 'review';
   const periodProgress = getPeriodProgress(periodStart, payPeriodSettings.lengthDays, todayKey);
   const projectionFactor = periodProgress.elapsedDays > 0 && periodProgress.isCurrentOrFuture ? payPeriodSettings.lengthDays / periodProgress.elapsedDays : 1;
   const projectedPayroll = periodSummary.grossPay * projectionFactor;
@@ -112,13 +110,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
       <div id="period-readiness" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${readinessClass(readiness)}`}>{readinessLabel(readiness)}</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">{payPeriodSettings.lengthDays}-day period</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Employee lunch rules</span>
-              <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">OT after {payPeriodSettings.weeklyOvertimeThresholdHours}h/week</span>
-            </div>
-            <h2 className="mt-3 text-2xl font-bold leading-tight">Is this pay period ready for payroll review?</h2>
+            <h2 className="text-2xl font-bold leading-tight">Is this pay period ready for payroll review?</h2>
             <p className="mt-1 text-sm text-muted">
               {formatAtlanticDate(periodStart)} - {formatAtlanticDate(periodEnd)}
             </p>
@@ -360,18 +352,6 @@ function Panel({ id, title, action, children }: { id?: string; title: string; ac
       {children}
     </div>
   );
-}
-
-function readinessLabel(readiness: 'ready' | 'review' | 'blocked') {
-  if (readiness === 'ready') return 'Ready for review';
-  if (readiness === 'review') return 'Review needed';
-  return 'Not ready for payroll';
-}
-
-function readinessClass(readiness: 'ready' | 'review' | 'blocked') {
-  if (readiness === 'ready') return 'bg-success-bg text-success';
-  if (readiness === 'review') return 'bg-warn-bg text-warning';
-  return 'bg-error-bg text-error-text';
 }
 
 function name(profile?: Profile) {

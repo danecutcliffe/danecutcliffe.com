@@ -184,6 +184,16 @@ if (adminReports.includes('Selected report blockers') || adminReports.includes('
 if (adminDashboard.includes('Report blockers') || adminDashboard.includes('Report warnings') || adminDashboard.includes('Allowed exclusions')) {
   fail('Dashboard must not reintroduce persistent payroll report blocker/warning/exclusion cards.');
 }
+if (
+  adminDashboard.includes('Review needed')
+  || adminDashboard.includes('Ready for review')
+  || adminDashboard.includes('Not ready for payroll')
+  || adminDashboard.includes('-day period')
+  || adminDashboard.includes('Employee lunch rules')
+  || adminDashboard.includes('OT after')
+) {
+  fail('Dashboard must not reintroduce persistent readiness/rules pills.');
+}
 requireIncludes(
   playwrightConfig,
   "VITE_TIME_CLOCK_STRESS_DATA: 'true'",
