@@ -98,7 +98,8 @@ test.describe('Time app smoke and layout contract', () => {
     await expectNoDocumentOverflow(page);
 
     await page.locator('#employee-select').selectOption('profile-stress-empty');
-    await expect(page.getByText('No entries for this week.')).toBeVisible();
+    await expect(page.getByText('No entries for this week.').first()).toBeVisible();
+    await expect(page.locator('#ts-entries').getByText(/Week \[/).first()).toBeVisible();
     await expectNoDocumentOverflow(page);
 
     await page.getByRole('button', { name: 'Add Manual Entry' }).click();

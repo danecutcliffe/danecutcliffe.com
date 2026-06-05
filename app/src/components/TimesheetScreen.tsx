@@ -4,6 +4,7 @@ import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSett
 import { employeeJobDisplayName, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate } from '../utils/time';
+import { buildTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
 
 interface TimesheetScreenProps {
   profile: Profile;
@@ -24,7 +25,13 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
   const periodApproval = approvals.find((approval) => approval.userId === profile.id && approval.weekStart === periodStart && approval.status === 'approved');
   const groupedEntries = groupEntriesByAtlanticDate(periodEntries);
   const summary = computeTimeSummary(periodEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
-  const displayDays = [...periodDays].reverse();
+  const timesheetWeeks = buildTimesheetWeeks({
+    periodDays,
+    entries: periodEntries,
+    profile,
+    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+  });
+  const displayWeeks = [...timesheetWeeks].reverse();
 
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
@@ -50,39 +57,52 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
         <SummaryCard label="Est. gross" value={`$${summary.grossPay.toFixed(2)}`} />
       </div>
 
-      <div id="daily-breakdown" className="scroll-mt-20 rounded-md border border-app-border bg-card shadow-soft">
-        {displayDays.map((day) => {
-          const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-          const daySummary = computeTimeSummary(dayEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
+      <div id="daily-breakdown" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
+        <div className="space-y-5">
+          {displayWeeks.map((week) => (
+            <section key={week.weekStart} className="time-day-panel pb-5 last:pb-0">
+              <WeekSectionHeader week={week} />
+              {week.entries.length === 0 ? (
+                <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No entries for this week.</p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {[...week.days].reverse().map((day) => {
+                    const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
+                    if (dayEntries.length === 0) return null;
+                    const daySummary = computeTimeSummary(dayEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
           return (
-            <div key={day} className="time-day-panel p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-bold">{formatAtlanticDate(day)}</h3>
-                {dayEntries.length > 0 && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Net work hours {daySummary.netWorkHours.toFixed(2)}h</span>}
-              </div>
-              <div className="mt-3 space-y-2">
-                {dayEntries.length === 0 && <p className="text-sm text-muted">No entries.</p>}
-                {dayEntries.map((entry) => {
-                  const job = entry.jobCodeId ? jobById.get(entry.jobCodeId) : null;
-                  const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : null;
-                  return (
-                    <div key={entry.id} className="rounded-md bg-card-alt p-3 text-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <span className="mb-2 inline-flex rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">{formatDurationCompact(getEntryDurationHours(entry))}</span>
-                          <p className="font-semibold">{entry.eventType === 'break' ? 'Break' : employeeJobDisplayName(job, site)}</p>
-                          <p className="text-muted">{formatAtlanticTime(entry.clockIn)} - {entry.clockOut ? formatAtlanticTime(entry.clockOut) : 'In progress'}</p>
+                      <section key={day} className="rounded-md border border-app-border-subtle bg-card p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-bold">{formatAtlanticDate(day)}</h4>
+                          <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Net work hours {daySummary.netWorkHours.toFixed(2)}h</span>
                         </div>
-                        <span className="font-bold">{getEntryDurationHours(entry).toFixed(2)}h</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {dayEntries.length > 0 && <DailyBreakdown summary={daySummary} isOpen={dayEntries.some((entry) => !entry.clockOut)} showPaidLunchCredit={profile.paidBreaks} />}
-            </div>
-          );
-        })}
+                        <div className="mt-3 space-y-2">
+                          {dayEntries.map((entry) => {
+                            const job = entry.jobCodeId ? jobById.get(entry.jobCodeId) : null;
+                            const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : null;
+                            return (
+                              <div key={entry.id} className="rounded-md bg-card-alt p-3 text-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <span className="mb-2 inline-flex rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">{formatDurationCompact(getEntryDurationHours(entry))}</span>
+                                    <p className="font-semibold">{entry.eventType === 'break' ? 'Break' : employeeJobDisplayName(job, site)}</p>
+                                    <p className="text-muted">{formatAtlanticTime(entry.clockIn)} - {entry.clockOut ? formatAtlanticTime(entry.clockOut) : 'In progress'}</p>
+                                  </div>
+                                  <span className="font-bold">{getEntryDurationHours(entry).toFixed(2)}h</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <DailyBreakdown summary={daySummary} isOpen={dayEntries.some((entry) => !entry.clockOut)} showPaidLunchCredit={profile.paidBreaks} />
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-md border border-app-border bg-card p-4 shadow-soft">
@@ -95,6 +115,25 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
         </dl>
       </div>
     </section>
+  );
+}
+
+function WeekSectionHeader({ week }: { week: TimesheetWeek }) {
+  return (
+    <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold">{week.title}</h3>
+          {week.isPartialWeek && <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">Partial work week</p>}
+        </div>
+        {week.isOpen && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Open entry</span>}
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        <Metric label="Net hours" value={`${week.summary.netWorkHours.toFixed(2)}h`} />
+        <Metric label="Breaks" value={`${week.summary.breakHours.toFixed(2)}h`} />
+        <Metric label="OT hours" value={`${week.summary.overtimeHours.toFixed(2)}h`} />
+      </dl>
+    </div>
   );
 }
 

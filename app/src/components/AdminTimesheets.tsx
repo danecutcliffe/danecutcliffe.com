@@ -5,6 +5,7 @@ import type { AdminTimeClockService } from '../services/TimeClockService';
 import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
+import { buildTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
 
 interface AdminTimesheetsProps {
   adminProfile: Profile;
@@ -39,7 +40,15 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
     ? computeTimeSummary(profileEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
     : emptyTimeSummary();
   const groupedEntries = groupEntriesByAtlanticDate(profileEntries);
-  const displayDays = [...periodDays].reverse();
+  const timesheetWeeks = employee
+    ? buildTimesheetWeeks({
+        periodDays,
+        entries: profileEntries,
+        profile: employee,
+        weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+      })
+    : [];
+  const displayWeeks = [...timesheetWeeks].reverse();
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
   const selectableJobCodes = useMemo(() => jobCodes.filter(isSelectableJobCode), [jobCodes]);
   const siteById = useMemo(() => new Map(jobSites.map((site) => [site.id, site])), [jobSites]);
@@ -150,41 +159,51 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           </p>
         )}
         <div className="mt-4">
-          {profileEntries.length === 0 && <p className="text-sm text-muted">No entries for this week.</p>}
-          {viewMode === 'summary' && displayDays.map((day) => {
-              const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-              if (dayEntries.length === 0) return null;
-              const daySummary = employee
-                ? computeTimeSummary(dayEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
-                : emptyTimeSummary();
-              const isOpen = dayEntries.some((entry) => !entry.clockOut);
+          {viewMode === 'summary' && displayWeeks.map((week) => (
+            <section key={week.weekStart} className="time-day-panel py-5 first:pt-0 last:pb-0">
+              <WeekSectionHeader week={week} showGrossPay />
+              {week.entries.length === 0 ? (
+                <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No entries for this week.</p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {[...week.days].reverse().map((day) => {
+                    const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
+                    if (dayEntries.length === 0) return null;
+                    const daySummary = employee
+                      ? computeTimeSummary(dayEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
+                      : emptyTimeSummary();
+                    const isOpen = dayEntries.some((entry) => !entry.clockOut);
 
-              return (
-                <section key={day} className="time-day-panel py-5 first:pt-0 last:pb-0">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-lg font-bold">{formatAtlanticDate(day)}</h3>
-                    <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Net work hours {daySummary.netWorkHours.toFixed(2)}h</span>
-                  </div>
-                  <div className="space-y-3">
-                    {dayEntries.map((entry) => (
-                      <TimesheetEntryCard
-                        key={entry.id}
-                        entry={entry}
-                        jobById={jobById}
-                        siteById={siteById}
-                        profileById={profileById}
-                        isPeriodApproved={isPeriodApproved}
-                        onEdit={() => setEditingEntryId(entry.id)}
-                      />
-                    ))}
-                  </div>
-                  <DailyBreakdown summary={daySummary} isOpen={isOpen} showPaidLunchCredit={employee?.paidBreaks ?? false} />
-                </section>
-              );
-            })}
+                    return (
+                      <section key={day} className="rounded-md border border-app-border-subtle bg-card p-3">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <h4 className="font-bold">{formatAtlanticDate(day)}</h4>
+                          <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Net work hours {daySummary.netWorkHours.toFixed(2)}h</span>
+                        </div>
+                        <div className="space-y-3">
+                          {dayEntries.map((entry) => (
+                            <TimesheetEntryCard
+                              key={entry.id}
+                              entry={entry}
+                              jobById={jobById}
+                              siteById={siteById}
+                              profileById={profileById}
+                              isPeriodApproved={isPeriodApproved}
+                              onEdit={() => setEditingEntryId(entry.id)}
+                            />
+                          ))}
+                        </div>
+                        <DailyBreakdown summary={daySummary} isOpen={isOpen} showPaidLunchCredit={employee?.paidBreaks ?? false} />
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
           {viewMode === 'punch-log' && (
             <PunchLogView
-              displayDays={displayDays}
+              weeks={displayWeeks}
               groupedEntries={groupedEntries}
               jobById={jobById}
               siteById={siteById}
@@ -298,15 +317,35 @@ function DailyBreakdown({
   );
 }
 
+function WeekSectionHeader({ week, showGrossPay = false }: { week: TimesheetWeek; showGrossPay?: boolean }) {
+  return (
+    <div className="rounded-md border border-app-border-subtle bg-card-alt p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold">{week.title}</h3>
+          {week.isPartialWeek && <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">Partial work week</p>}
+        </div>
+        {week.isOpen && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Open entry</span>}
+      </div>
+      <dl className={`mt-3 grid grid-cols-2 gap-3 text-sm ${showGrossPay ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        <Metric label="Net hours" value={`${week.summary.netWorkHours.toFixed(2)}h`} />
+        <Metric label="Breaks" value={`${week.summary.breakHours.toFixed(2)}h`} />
+        <Metric label="OT hours" value={`${week.summary.overtimeHours.toFixed(2)}h`} />
+        {showGrossPay && <Metric label="Gross pay" value={`$${week.summary.grossPay.toFixed(2)}`} />}
+      </dl>
+    </div>
+  );
+}
+
 function PunchLogView({
-  displayDays,
+  weeks,
   groupedEntries,
   jobById,
   siteById,
   isPeriodApproved,
   onEdit,
 }: {
-  displayDays: string[];
+  weeks: TimesheetWeek[];
   groupedEntries: Record<string, TimeEntry[]>;
   jobById: Map<string, JobCode>;
   siteById: Map<string, JobSite>;
@@ -315,9 +354,8 @@ function PunchLogView({
 }) {
   return (
     <div className="space-y-0">
-      {displayDays.map((day) => {
-        const dayEntries = groupedEntries[day] ?? [];
-        const punchEvents = dayEntries
+      {weeks.map((week) => {
+        const punchEvents = [...week.days].reverse().flatMap((day) => (groupedEntries[day] ?? [])
           .flatMap((entry) => {
             const events = [{
               id: `${entry.id}-in`,
@@ -339,14 +377,15 @@ function PunchLogView({
             }
             return events;
           })
-          .sort((a, b) => b.at.localeCompare(a.at));
-
-        if (punchEvents.length === 0) return null;
+        ).sort((a, b) => b.at.localeCompare(a.at));
 
         return (
-          <section key={day} className="time-day-panel py-5 first:pt-0 last:pb-0">
-            <h3 className="mb-3 text-lg font-bold">{formatAtlanticDate(day)}</h3>
-            <div className="space-y-2">
+          <section key={week.weekStart} className="time-day-panel py-5 first:pt-0 last:pb-0">
+            <WeekSectionHeader week={week} />
+            {punchEvents.length === 0 ? (
+              <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No punch events for this week.</p>
+            ) : (
+              <div className="mt-4 space-y-2">
               {punchEvents.map((event) => {
                 const job = event.entry.jobCodeId ? jobById.get(event.entry.jobCodeId) : null;
                 const site = job?.jobSiteId ? siteById.get(job.jobSiteId) : null;
@@ -373,7 +412,8 @@ function PunchLogView({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </section>
         );
       })}

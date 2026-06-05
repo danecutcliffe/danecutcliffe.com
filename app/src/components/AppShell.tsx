@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlarmClock, ChevronDown, LogOut } from 'lucide-react';
+import { AlarmClock, BarChart3, CalendarClock, ChevronDown, ClipboardList, Hammer, LayoutDashboard, LogOut, Settings, type LucideIcon } from 'lucide-react';
 import type { AppRole, Profile } from '../domain/types';
 
 export type AppTab = 'clock' | 'timesheets' | 'settings' | 'dashboard' | 'employees' | 'reports' | 'scope' | 'scope-builder';
@@ -10,6 +10,7 @@ interface SubSection { id: string; label: string }
 interface TabDef {
   id: AppTab;
   label: string;
+  icon: LucideIcon;
   sections?: SubSection[];
 }
 
@@ -26,14 +27,14 @@ interface AppShellProps {
 }
 
 const employeeTabs: TabDef[] = [
-  { id: 'clock', label: 'Clock' },
-  { id: 'timesheets', label: 'Timesheets', sections: [
-    { id: 'week-nav', label: 'Week' },
+  { id: 'clock', label: 'Clock', icon: AlarmClock },
+  { id: 'timesheets', label: 'Timesheets', icon: CalendarClock, sections: [
+    { id: 'week-nav', label: 'Pay Period' },
     { id: 'week-summary', label: 'Summary' },
-    { id: 'daily-breakdown', label: 'Daily Breakdown' },
+    { id: 'daily-breakdown', label: 'Time Cards' },
   ]},
-  { id: 'scope', label: 'Scope' },
-  { id: 'settings', label: 'Settings', sections: [
+  { id: 'scope', label: 'Scope', icon: ClipboardList },
+  { id: 'settings', label: 'Settings', icon: Settings, sections: [
     { id: 'profile', label: 'Profile' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'connection', label: 'Connection' },
@@ -41,34 +42,34 @@ const employeeTabs: TabDef[] = [
 ];
 
 const adminTabs: TabDef[] = [
-  { id: 'dashboard', label: 'Dashboard', sections: [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, sections: [
     { id: 'working-now', label: 'Working Now' },
     { id: 'pay-period-snapshot', label: 'Pay Period' },
     { id: 'employee-review', label: 'Employee Review' },
     { id: 'needs-review', label: 'Needs Review' },
   ]},
-  { id: 'timesheets', label: 'Timesheets', sections: [
+  { id: 'timesheets', label: 'Timesheets', icon: CalendarClock, sections: [
     { id: 'ts-employee', label: 'Employee' },
-    { id: 'ts-entries', label: 'Entries' },
-    { id: 'ts-summary', label: 'Weekly Summary' },
+    { id: 'ts-summary', label: 'Pay Period Summary' },
+    { id: 'ts-entries', label: 'Time Cards' },
   ]},
-  { id: 'employees', label: 'Settings', sections: [
+  { id: 'employees', label: 'Settings', icon: Settings, sections: [
     { id: 'appearance', label: 'Appearance' },
     { id: 'employees', label: 'Employees' },
     { id: 'properties', label: 'Properties' },
     { id: 'job-codes', label: 'Job Codes' },
     { id: 'payroll-settings', label: 'Payroll' },
   ]},
-  { id: 'reports', label: 'Reports', sections: [
+  { id: 'reports', label: 'Reports', icon: BarChart3, sections: [
     { id: 'labour-costs', label: 'Payroll Costs' },
     { id: 'payroll-export', label: 'Payroll Reports' },
     { id: 'report-detail', label: 'Reports' },
     { id: 'audit-trail', label: 'Audit Trail' },
   ]},
-  { id: 'scope-builder', label: 'Scope Builder', sections: [
+  { id: 'scope-builder', label: 'Scope Builder', icon: Hammer, sections: [
     { id: 'scope-builder', label: 'Builder' },
   ]},
-  { id: 'scope', label: 'Scope' },
+  { id: 'scope', label: 'Scope', icon: ClipboardList },
 ];
 
 export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading, onTabChange, onRoleChange, onViewRoleChange, onSignOut, children }: AppShellProps) {
@@ -135,6 +136,7 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
             <ul className="space-y-0.5">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
+                const Icon = tab.icon;
                 return (
                   <li key={tab.id}>
                     <button
@@ -144,7 +146,10 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
                       type="button"
                       onClick={() => onTabChange(tab.id)}
                     >
-                      {tab.label}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Icon size={16} className={`shrink-0 ${isActive ? 'text-accent' : 'text-muted-light'}`} aria-hidden="true" />
+                        <span className="truncate">{tab.label}</span>
+                      </span>
                       {isActive && tab.sections && <ChevronDown size={14} className="text-muted-light" aria-hidden="true" />}
                     </button>
                     {isActive && tab.sections && (

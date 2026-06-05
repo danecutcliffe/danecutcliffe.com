@@ -41,6 +41,9 @@ const mockService = read('app/src/services/mockTimeClockService.ts');
 const adminReports = read('app/src/components/AdminReports.tsx');
 const adminDashboard = read('app/src/components/AdminDashboard.tsx');
 const appShell = read('app/src/components/AppShell.tsx');
+const adminTimesheets = read('app/src/components/AdminTimesheets.tsx');
+const timesheetScreen = read('app/src/components/TimesheetScreen.tsx');
+const timesheetPeriods = read('app/src/utils/timesheetPeriods.ts');
 const projectAgents = readOptional('../../../../AGENTS.md');
 const sourceAppAgents = readOptional('../source-app/AGENTS.md');
 
@@ -224,6 +227,21 @@ requireIncludes(
   'Dashboard shell navigation must keep Pay period snapshot as a single nested section.',
 );
 requireIncludes(
+  appShell,
+  'icon: LucideIcon',
+  'Desktop sidebar navigation must keep quiet left-nav icon support.',
+);
+requireIncludes(
+  appShell,
+  '<Icon size={16}',
+  'Left-nav icons must stay small and decorative in the desktop sidebar.',
+);
+requireIncludes(
+  appShell,
+  '{tab.label}\n          </button>',
+  'Mobile bottom navigation must remain text-only and not inherit sidebar icons.',
+);
+requireIncludes(
   adminDashboard,
   'title="Needs Review"',
   'Dashboard must keep the review queue renamed to Needs Review.',
@@ -237,6 +255,36 @@ requireIncludes(
   adminDashboard,
   'getWorkdayProjectionFactor(workdayProgress)',
   'Dashboard projected payroll must use the reviewed workday projection factor helper.',
+);
+requireIncludes(
+  timesheetPeriods,
+  'getAtlanticWeekStart',
+  'Timesheet work-week grouping must use Atlantic work-week buckets.',
+);
+requireIncludes(
+  timesheetPeriods,
+  'computeTimeSummary(weekEntries',
+  'Timesheet weekly summaries must be computed from the whole visible week bucket, not summed from daily cards.',
+);
+requireIncludes(
+  timesheetPeriods,
+  "'This Week'",
+  'Timesheet work-week grouping must keep the user-facing This Week label.',
+);
+requireIncludes(
+  adminTimesheets,
+  'weekStart: periodStart',
+  'Admin approval must stay pay-period-level until the DB approval model is intentionally changed.',
+);
+requireIncludes(
+  adminTimesheets,
+  'buildTimesheetWeeks',
+  'Admin timesheets must keep weekly nested timecard grouping.',
+);
+requireIncludes(
+  timesheetScreen,
+  'buildTimesheetWeeks',
+  'Employee timesheets must keep weekly nested timecard grouping.',
 );
 requireIncludes(
   adminDashboard,
