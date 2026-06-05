@@ -36,6 +36,14 @@ Every future change should list impacted areas before implementation:
 
 Every future change should state whether it touches source files, generated deploy files, database migrations, public assets, release scripts, or live environment settings. If it crosses one of those boundaries, document the regression risk before deploy.
 
+## Supabase Data Read-Only Invariant
+
+- Codex/operator access to Supabase table row data is read-only by default for this program. This applies to production, staging, local scripts, CLI sessions, Dashboard use, service-role API calls, and any automation run by Codex.
+- Never directly insert, update, delete, truncate, seed, backfill, or otherwise mutate Supabase table rows unless Dane gives explicit written approval for that named one-time operation.
+- Read-only `SELECT`, export, schema inspection, migration-history inspection, and diagnostic queries are allowed when needed to investigate or verify behavior.
+- User/admin data corrections should be made through the Time App UI so normal validation and audit trails apply. If the UI cannot support the correction, stop and ask Dane for explicit approval before proposing any direct data operation.
+- Schema migrations, RPC/RLS/function changes, indexes, and policy changes are separate from table-row edits, but they still require migration review and must not include data mutations unless Dane explicitly approves that mutation.
+
 ## Mobile Layout Rules
 
 - Keep one mobile scroll region: `.app-shell-content` owns vertical scrolling.

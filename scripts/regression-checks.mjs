@@ -6,6 +6,10 @@ import { dirname, resolve } from 'node:path';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const read = (path) => readFileSync(resolve(root, path), 'utf8');
+const readOptional = (path) => {
+  const resolved = resolve(root, path);
+  return existsSync(resolved) ? readFileSync(resolved, 'utf8') : null;
+};
 const listFiles = (dir) => readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
   const path = `${dir}/${entry.name}`;
   if (entry.isDirectory()) return listFiles(path);
@@ -35,6 +39,8 @@ const changeSafety = read('docs/TIME_APP_CHANGE_SAFETY.md');
 const playwrightConfig = read('app/playwright.config.ts');
 const mockService = read('app/src/services/mockTimeClockService.ts');
 const adminReports = read('app/src/components/AdminReports.tsx');
+const projectAgents = readOptional('../../../../AGENTS.md');
+const sourceAppAgents = readOptional('../source-app/AGENTS.md');
 
 if (timeUtils.includes('getEntryPayableHours')) {
   fail('Retired getEntryPayableHours must not be reintroduced for payroll-facing semantics. Use computeEntryHours/report models instead.');
@@ -142,6 +148,30 @@ requireIncludes(
   'The simplest design is usually the most beautiful design.',
   'Change safety contract must preserve the Time App simplicity/beauty heuristic.',
 );
+requireIncludes(
+  changeSafety,
+  'Codex/operator access to Supabase table row data is read-only by default for this program.',
+  'Change safety contract must preserve the Supabase data read-only invariant.',
+);
+requireIncludes(
+  changeSafety,
+  'Never directly insert, update, delete, truncate, seed, backfill, or otherwise mutate Supabase table rows',
+  'Change safety contract must preserve the specific Supabase row-mutation prohibitions.',
+);
+if (projectAgents) {
+  requireIncludes(
+    projectAgents,
+    'Production snapshots may be copied into staging for realistic testing only when Dane explicitly approves that named one-time operation',
+    'Project AGENTS must approval-gate production snapshot copying into staging.',
+  );
+}
+if (sourceAppAgents) {
+  requireIncludes(
+    sourceAppAgents,
+    'Seed scripts must not be run against production unless they are idempotent, reviewed for live-data safety, and explicitly approved by Dane for that named one-time operation.',
+    'Source-app AGENTS must approval-gate production seed scripts.',
+  );
+}
 requireIncludes(
   adminReports,
   'Cannot export as there are open entries.',
