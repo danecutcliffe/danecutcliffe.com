@@ -4,7 +4,8 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary } from '../utils/timecardHours';
-import { addDaysToDateKey, dayDiff, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
+import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
+import { getWorkdayProgress, getWorkdayProjectionFactor } from '../utils/workdayProjection';
 
 interface AdminDashboardProps {
   profiles: Profile[];
@@ -41,7 +42,8 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const appStorageScope = typeof window === 'undefined' ? 'server' : `${window.location.host}:${window.location.pathname}`;
   const dismissalStorageKey = `time-admin-attention-dismissed:${appStorageScope}:${periodStart}:${periodEnd}`;
   const [dismissedFlagIds, setDismissedFlagIds] = useState<string[]>([]);
-  const todayKey = getAtlanticDateKey(new Date());
+  const now = new Date();
+  const todayKey = getAtlanticDateKey(now);
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
   const siteById = useMemo(() => jobSiteById(jobSites), [jobSites]);
@@ -73,8 +75,8 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const visibleReviewCount = visibleFlags.length - visibleBlockerCount;
   const hiddenBlockerCount = hiddenFlags.filter((flag) => flag.severity === 'blocker').length;
   const hiddenReviewCount = hiddenFlags.length - hiddenBlockerCount;
-  const periodProgress = getPeriodProgress(periodStart, payPeriodSettings.lengthDays, todayKey);
-  const projectionFactor = periodProgress.elapsedDays > 0 && periodProgress.isCurrentOrFuture ? payPeriodSettings.lengthDays / periodProgress.elapsedDays : 1;
+  const workdayProgress = getWorkdayProgress(periodStart, payPeriodSettings.lengthDays, now);
+  const projectionFactor = getWorkdayProjectionFactor(workdayProgress);
   const projectedPayroll = periodSummary.grossPay * projectionFactor;
   const workingNowItems = useMemo(() => buildWorkingNowItems({ entries, employees, jobById, siteById }), [employees, entries, jobById, siteById]);
 
@@ -125,7 +127,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
       </Panel>
 
       <Panel id="pay-period-snapshot" title="Pay period snapshot">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-center">
           <div className="min-w-0">
             <h3 className="text-lg font-bold leading-tight">Current pay period</h3>
             <p className="mt-1 text-sm text-muted">
@@ -139,19 +141,19 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
           </div>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-6">
           <div className="flex items-center justify-between gap-3 text-sm font-semibold text-muted">
-            <span>{periodProgress.elapsedDays} of {payPeriodSettings.lengthDays} days elapsed</span>
-            <span>{periodProgress.percent}%</span>
+            <span>{formatWorkdayCount(workdayProgress.elapsedWorkdays)} of {workdayProgress.totalWorkdays} workdays elapsed</span>
+            <span>{workdayProgress.percent}%</span>
           </div>
           <div className="mt-2 h-3 overflow-hidden rounded-full bg-badge-neutral">
-            <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${periodProgress.percent}%` }} />
+            <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${workdayProgress.percent}%` }} />
           </div>
         </div>
 
-        <div id="metrics" className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div id="metrics" className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Total accrued payroll this period" value={money(periodSummary.grossPay)} sublabel={lunchSummaryLabel(periodSummary.paidBreakHours, periodSummary.unpaidBreakHours)} />
-          <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionFactor > 1 ? `At current pace x${projectionFactor.toFixed(1)}` : 'Period actual'} />
+          <Metric label="Projected total payroll this period" value={money(projectedPayroll)} sublabel={projectionLabel(workdayProgress, projectionFactor)} />
           <Metric label="Payable hours" value={`${periodSummary.netWorkHours.toFixed(1)}h`} />
           <Metric label="Needs review" value={visibleFlags.length.toString()} sublabel={`${visibleBlockerCount} visible blockers, ${visibleReviewCount} visible review${dismissedFlagCount ? `, ${hiddenBlockerCount} hidden blockers, ${hiddenReviewCount} hidden review` : ''}`} />
         </div>
@@ -392,16 +394,15 @@ function getJobSplits(entries: TimeEntry[], jobById: Map<string, JobCode>, siteB
     .sort((a, b) => b.hours - a.hours);
 }
 
-function getPeriodProgress(start: string, lengthDays: number, todayKey: string) {
-  const end = addDaysToDateKey(start, lengthDays - 1);
-  const rawElapsed = todayKey < start ? 0 : todayKey > end ? lengthDays : dayDiff(start, todayKey) + 1;
-  const elapsedDays = Math.min(lengthDays, Math.max(0, rawElapsed));
-  const percent = Math.round((elapsedDays / lengthDays) * 100);
-  return {
-    elapsedDays,
-    percent,
-    isCurrentOrFuture: todayKey <= end,
-  };
+function projectionLabel(workdayProgress: ReturnType<typeof getWorkdayProgress>, projectionFactor: number) {
+  if (workdayProgress.totalWorkdays === 0) return 'No workdays in period';
+  if (workdayProgress.elapsedWorkdays <= 0) return 'Projection starts on first workday';
+  if (workdayProgress.elapsedWorkdays >= workdayProgress.totalWorkdays || projectionFactor <= 1) return 'Period actual';
+  return `${workdayProgress.percent}% of workdays elapsed`;
+}
+
+function formatWorkdayCount(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
 }
 
 function Metric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {

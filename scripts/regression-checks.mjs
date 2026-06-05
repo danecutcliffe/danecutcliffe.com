@@ -228,6 +228,40 @@ requireIncludes(
   'title="Needs Review"',
   'Dashboard must keep the review queue renamed to Needs Review.',
 );
+requireIncludes(
+  adminDashboard,
+  'getWorkdayProgress',
+  'Dashboard projected payroll must use Monday-Friday workday progress instead of calendar-day progress.',
+);
+requireIncludes(
+  adminDashboard,
+  'getWorkdayProjectionFactor(workdayProgress)',
+  'Dashboard projected payroll must use the reviewed workday projection factor helper.',
+);
+requireIncludes(
+  read('app/src/utils/workdayProjection.ts'),
+  'formatAtlanticDateTimeInput',
+  'Dashboard workday projection must use Atlantic local time for partial current-workday progress.',
+);
+requireIncludes(
+  adminDashboard,
+  'workdays elapsed',
+  'Dashboard pay-period progress should show workday progress, not calendar-day progress.',
+);
+requireIncludes(
+  adminDashboard,
+  'className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"',
+  'Dashboard metrics need breathing room below the pay-period progress bar.',
+);
+if (adminDashboard.includes('payPeriodSettings.lengthDays / periodProgress.elapsedDays')) {
+  fail('Dashboard projected payroll must not use calendar-day elapsed multiplier math.');
+}
+if (adminDashboard.includes('payPeriodSettings.lengthDays} days elapsed')) {
+  fail('Dashboard pay-period progress must not label calendar days elapsed in the snapshot.');
+}
+if (adminDashboard.includes('At current pace')) {
+  fail('Dashboard projected payroll must not use vague current-pace multiplier copy.');
+}
 if (adminDashboard.indexOf('title="Working now"') > adminDashboard.indexOf('title="Pay period snapshot"')) {
   fail('Dashboard must keep Working Now above the pay-period snapshot.');
 }
