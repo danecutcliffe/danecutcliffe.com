@@ -5,7 +5,7 @@ import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary } from '../utils/timecardHours';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
-import { getWorkdayProgress, getWorkdayProjectionFactor } from '../utils/workdayProjection';
+import { formatWorkdayCount, getWorkdayProgress, getWorkdayProjectionFactor } from '../utils/workdayProjection';
 
 interface AdminDashboardProps {
   profiles: Profile[];
@@ -399,10 +399,6 @@ function projectionLabel(workdayProgress: ReturnType<typeof getWorkdayProgress>,
   if (workdayProgress.elapsedWorkdays <= 0) return 'Projection starts on first workday';
   if (workdayProgress.elapsedWorkdays >= workdayProgress.totalWorkdays || projectionFactor <= 1) return 'Period actual';
   return `${workdayProgress.percent}% of workdays elapsed`;
-}
-
-function formatWorkdayCount(value: number) {
-  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
 }
 
 function Metric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {

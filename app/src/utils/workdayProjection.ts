@@ -34,6 +34,10 @@ export function getWorkdayProjectionFactor(progress: WorkdayProgress) {
   return progress.totalWorkdays / progress.elapsedWorkdays;
 }
 
+export function formatWorkdayCount(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
 function isWeekday(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number);
   const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getWorkdayProgress, getWorkdayProjectionFactor } from '../workdayProjection';
+import { formatWorkdayCount, getWorkdayProgress, getWorkdayProjectionFactor } from '../workdayProjection';
 
 describe('workday payroll projection progress', () => {
   it('uses weekday progress instead of elapsed calendar days', () => {
@@ -33,5 +33,10 @@ describe('workday payroll projection progress', () => {
     expect(progress.elapsedWorkdays).toBe(0);
     expect(progress.percent).toBe(0);
     expect(getWorkdayProjectionFactor(progress)).toBe(1);
+  });
+
+  it('formats whole and partial workday counts cleanly', () => {
+    expect(formatWorkdayCount(10)).toBe('10');
+    expect(formatWorkdayCount(9.5)).toBe('9.5');
   });
 });
