@@ -31,6 +31,13 @@ const requireIncludes = (source, needle, message) => {
   if (!source.includes(needle)) fail(message);
 };
 
+const extractFunctionBlock = (source, name) => {
+  const start = source.indexOf(`function ${name}(`);
+  if (start === -1) throw new Error(`Regression guard could not find ${name}().`);
+  const next = source.indexOf('\nfunction ', start + 1);
+  return source.slice(start, next === -1 ? source.length : next);
+};
+
 const service = read('app/src/services/supabaseTimeClockService.ts');
 const timeUtils = read('app/src/utils/time.ts');
 const verifyTimeBuild = read('scripts/verify-time-build.mjs');
@@ -44,6 +51,8 @@ const appShell = read('app/src/components/AppShell.tsx');
 const adminTimesheets = read('app/src/components/AdminTimesheets.tsx');
 const timesheetScreen = read('app/src/components/TimesheetScreen.tsx');
 const timesheetPeriods = read('app/src/utils/timesheetPeriods.ts');
+const adminWeekHeader = extractFunctionBlock(adminTimesheets, 'WeekSectionHeader');
+const employeeWeekHeader = extractFunctionBlock(timesheetScreen, 'WeekSectionHeader');
 const projectAgents = readOptional('../../../../AGENTS.md');
 const sourceAppAgents = readOptional('../source-app/AGENTS.md');
 
@@ -277,14 +286,30 @@ requireIncludes(
   'Timesheet display weeks must hide only future empty weeks, not current/past empty weeks.',
 );
 requireIncludes(
-  adminTimesheets,
-  'This week',
-  'Admin weekly timesheet header must keep the separate current-week tag.',
+  adminWeekHeader,
+  '(This week)',
+  'Admin weekly timesheet header must keep This week inline in the title, not as a pill.',
 );
 requireIncludes(
-  timesheetScreen,
-  'This week',
-  'Employee weekly timesheet header must keep the separate current-week tag.',
+  employeeWeekHeader,
+  '(This week)',
+  'Employee weekly timesheet header must keep This week inline in the title, not as a pill.',
+);
+if (adminWeekHeader.includes('Open entry') || employeeWeekHeader.includes('Open entry')) {
+  fail('Weekly timesheet headers must not show an Open entry pill; open status belongs in the day/entry details.');
+}
+if (adminWeekHeader.includes('bg-badge-neutral') || employeeWeekHeader.includes('bg-badge-neutral')) {
+  fail('Weekly timesheet headers must stay as simple divider rows without pill badges.');
+}
+requireIncludes(
+  adminWeekHeader,
+  '[border-color:color-mix(in_srgb,var(--color-border)_58%,transparent)]',
+  'Admin weekly timesheet header must keep a faint but visible divider line.',
+);
+requireIncludes(
+  employeeWeekHeader,
+  '[border-color:color-mix(in_srgb,var(--color-border)_58%,transparent)]',
+  'Employee weekly timesheet header must keep a faint but visible divider line.',
 );
 requireIncludes(
   adminTimesheets,

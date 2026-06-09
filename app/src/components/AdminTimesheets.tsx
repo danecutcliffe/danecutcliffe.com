@@ -320,14 +320,13 @@ function DailyBreakdown({
 
 function WeekSectionHeader({ week }: { week: TimesheetWeek }) {
   return (
-    <div className="border-y border-app-border-subtle py-3">
+    <div className="border-y py-3 [border-color:color-mix(in_srgb,var(--color-border)_58%,transparent)]">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="text-base font-bold">{week.title}</h3>
-          {week.isCurrentWeek && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">This week</span>}
-          {week.isPartialWeek && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">Partial week</span>}
-          {week.isOpen && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">Open entry</span>}
-        </div>
+        <h3 className="min-w-0 text-base font-bold">
+          {week.title}
+          {week.isCurrentWeek && <span className="text-muted"> (This week)</span>}
+          {!week.isCurrentWeek && week.isPartialWeek && <span className="text-muted"> (Partial week)</span>}
+        </h3>
         <div className="shrink-0 text-sm font-bold">
           <span className="text-muted">Net hours </span>
           <span className="text-ink">{week.summary.netWorkHours.toFixed(2)}h</span>

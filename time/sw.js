@@ -1,4 +1,4 @@
-const CACHE_NAME = 'time-clock-runtime-20260609123518';
+const CACHE_NAME = 'time-clock-runtime-20260609125841';
 const STATIC_ASSETS = ['./manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
