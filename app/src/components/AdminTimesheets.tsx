@@ -517,13 +517,17 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
 function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSave }: { employee: Profile; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; onCancel: () => void; onSave: (values: { jobCodeId: string | null; eventType: TimeEntry['eventType']; clockIn: string; clockOut: string | null; notes: string }) => void }) {
   const [eventType, setEventType] = useState<TimeEntry['eventType']>('work');
   const [jobCodeId, setJobCodeId] = useState(jobCodes[0]?.id ?? '');
-  const [clockIn, setClockIn] = useState('');
-  const [clockOut, setClockOut] = useState('');
+  const [clockInDate, setClockInDate] = useState(() => getAtlanticDateKey(new Date()));
+  const [clockInTime, setClockInTime] = useState('');
+  const [clockOutDate, setClockOutDate] = useState(() => getAtlanticDateKey(new Date()));
+  const [clockOutTime, setClockOutTime] = useState('');
   const [breakDurationMinutes, setBreakDurationMinutes] = useState('30');
   const [notes, setNotes] = useState('');
   const isBreak = eventType === 'break';
   const breakDuration = Number(breakDurationMinutes);
   const hasValidBreakDuration = !isBreak || (Number.isFinite(breakDuration) && breakDuration > 0);
+  const clockIn = combineManualDateTime(clockInDate, clockInTime);
+  const clockOut = isBreak ? '' : combineManualDateTime(clockOutDate, clockOutTime);
 
   useEffect(() => {
     if (isBreak && !notes) setNotes('Break');
@@ -553,9 +557,9 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
         jobCodeId={jobCodeId}
         setJobCodeId={setJobCodeId}
         clockIn={clockIn}
-        setClockIn={setClockIn}
+        setClockIn={() => {}}
         clockOut={clockOut}
-        setClockOut={setClockOut}
+        setClockOut={() => {}}
         notes={notes}
         setNotes={setNotes}
         entryTypeControl={<EntryTypeControl value={eventType} onChange={setEventType} />}
@@ -567,10 +571,7 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
         validationMessage={isBreak && !hasValidBreakDuration ? 'Enter a break duration greater than 0 minutes.' : null}
         timeFields={isBreak ? (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block text-sm font-semibold text-muted">
-              Break start
-              <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="datetime-local" value={clockIn} onChange={(event) => setClockIn(event.target.value)} />
-            </label>
+            <ManualDateTimeInput label="Break start" date={clockInDate} time={clockInTime} setDate={setClockInDate} setTime={setClockInTime} />
             <label className="block text-sm font-semibold text-muted">
               Duration
               <div className="mt-1.5 flex min-h-12 items-center rounded-md border border-input-border bg-card">
@@ -579,9 +580,33 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
               </div>
             </label>
           </div>
-        ) : undefined}
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ManualDateTimeInput label="Punch in" date={clockInDate} time={clockInTime} setDate={setClockInDate} setTime={setClockInTime} />
+            <ManualDateTimeInput label="Punch out" date={clockOutDate} time={clockOutTime} setDate={setClockOutDate} setTime={setClockOutTime} />
+          </div>
+        )}
       />
     </FormModal>
+  );
+}
+
+function combineManualDateTime(date: string, time: string): string {
+  return date && time ? `${date}T${time}` : '';
+}
+
+function ManualDateTimeInput({ label, date, time, setDate, setTime }: { label: string; date: string; time: string; setDate: (value: string) => void; setTime: (value: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <label className="block text-sm font-semibold text-muted">
+        {label} date
+        <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      </label>
+      <label className="block text-sm font-semibold text-muted">
+        {label} time
+        <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
+      </label>
+    </div>
   );
 }
 

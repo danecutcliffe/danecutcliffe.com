@@ -1,5 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
+function getAtlanticTodayKey() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Halifax',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 async function waitForApp(page: Page) {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Time Clock' })).toBeVisible();
@@ -104,6 +115,12 @@ test.describe('Time app smoke and layout contract', () => {
 
     await page.getByRole('button', { name: 'Add Manual Entry' }).click();
     await expect(page.getByRole('heading', { name: /Manual entry for No-Entries-Yet/ })).toBeVisible();
+    const manualEntryModal = page.locator('.fixed');
+    const today = getAtlanticTodayKey();
+    await expect(manualEntryModal.getByLabel('Punch in date')).toHaveValue(today);
+    await expect(manualEntryModal.getByLabel('Punch in time')).toHaveValue('');
+    await expect(manualEntryModal.getByLabel('Punch out date')).toHaveValue(today);
+    await expect(manualEntryModal.getByLabel('Punch out time')).toHaveValue('');
     await page.locator('.fixed').getByRole('combobox').selectOption('job-stress-long');
     await expectNoDocumentOverflow(page);
     await page.getByRole('button', { name: 'Close' }).click();
