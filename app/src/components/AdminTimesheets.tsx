@@ -521,6 +521,7 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
   const [clockInTime, setClockInTime] = useState('');
   const [clockOutDate, setClockOutDate] = useState(() => getAtlanticDateKey(new Date()));
   const [clockOutTime, setClockOutTime] = useState('');
+  const [clockOutDateEdited, setClockOutDateEdited] = useState(false);
   const [breakDurationMinutes, setBreakDurationMinutes] = useState('30');
   const [notes, setNotes] = useState('');
   const isBreak = eventType === 'break';
@@ -533,6 +534,10 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
     if (isBreak && !notes) setNotes('Break');
     if (!isBreak && notes === 'Break') setNotes('');
   }, [isBreak, notes]);
+
+  useEffect(() => {
+    if (!clockOutDateEdited) setClockOutDate(clockInDate);
+  }, [clockInDate, clockOutDateEdited]);
 
   const handleSave = () => {
     const clockInIso = parseAtlanticDateTimeInput(clockIn);
@@ -557,9 +562,9 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
         jobCodeId={jobCodeId}
         setJobCodeId={setJobCodeId}
         clockIn={clockIn}
-        setClockIn={() => {}}
+        setClockIn={() => undefined}
         clockOut={clockOut}
-        setClockOut={() => {}}
+        setClockOut={() => undefined}
         notes={notes}
         setNotes={setNotes}
         entryTypeControl={<EntryTypeControl value={eventType} onChange={setEventType} />}
@@ -583,7 +588,7 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <ManualDateTimeInput label="Punch in" date={clockInDate} time={clockInTime} setDate={setClockInDate} setTime={setClockInTime} />
-            <ManualDateTimeInput label="Punch out" date={clockOutDate} time={clockOutTime} setDate={setClockOutDate} setTime={setClockOutTime} />
+            <ManualDateTimeInput label="Punch out" date={clockOutDate} time={clockOutTime} setDate={(value) => { setClockOutDateEdited(true); setClockOutDate(value); }} setTime={setClockOutTime} />
           </div>
         )}
       />
@@ -592,7 +597,9 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
 }
 
 function combineManualDateTime(date: string, time: string): string {
-  return date && time ? `${date}T${time}` : '';
+  const dateKey = date.trim();
+  const timeValue = time.trim();
+  return dateKey && timeValue ? `${dateKey}T${timeValue}` : '';
 }
 
 function ManualDateTimeInput({ label, date, time, setDate, setTime }: { label: string; date: string; time: string; setDate: (value: string) => void; setTime: (value: string) => void }) {

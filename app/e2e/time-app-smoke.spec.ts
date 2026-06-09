@@ -11,6 +11,11 @@ function getAtlanticTodayKey() {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 async function waitForApp(page: Page) {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Time Clock' })).toBeVisible();
@@ -121,6 +126,16 @@ test.describe('Time app smoke and layout contract', () => {
     await expect(manualEntryModal.getByLabel('Punch in time')).toHaveValue('');
     await expect(manualEntryModal.getByLabel('Punch out date')).toHaveValue(today);
     await expect(manualEntryModal.getByLabel('Punch out time')).toHaveValue('');
+    await expect(manualEntryModal.getByRole('button', { name: 'Add Entry' })).toBeDisabled();
+    const priorDay = addDaysToDateKey(today, -2);
+    await manualEntryModal.getByLabel('Punch in date').fill(priorDay);
+    await expect(manualEntryModal.getByLabel('Punch out date')).toHaveValue(priorDay);
+    await manualEntryModal.getByLabel('Punch in date').fill(today);
+    await expect(manualEntryModal.getByLabel('Punch out date')).toHaveValue(today);
+    await manualEntryModal.getByRole('button', { name: 'Break' }).click();
+    await expect(manualEntryModal.getByLabel('Break start date')).toHaveValue(today);
+    await expect(manualEntryModal.getByLabel('Break start time')).toHaveValue('');
+    await manualEntryModal.getByRole('button', { name: 'Work' }).click();
     await page.locator('.fixed').getByRole('combobox').selectOption('job-stress-long');
     await expectNoDocumentOverflow(page);
     await page.getByRole('button', { name: 'Close' }).click();
