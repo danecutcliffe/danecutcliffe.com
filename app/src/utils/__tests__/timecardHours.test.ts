@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildLabourCostBreakdown } from '../labour';
+import { buildLabourCostBreakdown, buildLabourCostBreakdownAcrossPayPeriods } from '../labour';
 import { computeEntryHours, computeTimeSummary } from '../timecardHours';
 import {
   breakEntry,
   employeeProfile,
   jobCodes,
   jobSites,
+  payPeriodSettings,
   paidBreakProfile,
   resetEntrySequence,
   workEntry,
@@ -153,5 +154,57 @@ describe('labour cost regression fixtures', () => {
     expect(qaJob?.payableHours).toBe(7.82);
     expect(qaJob?.grossPay).toBe(140.76);
     expect(qaJob?.loadedCost).toBe(175.95);
+  });
+
+  it('sorts employee job breakdowns by displayed loaded cost, not gross pay', () => {
+    resetEntrySequence();
+    const loadedEmployee = {
+      ...employeeProfile,
+      id: 'loaded-employee',
+      email: 'loaded-employee@example.com',
+      firstName: 'Loaded',
+      lastName: 'Employee',
+      workerType: 'employee' as const,
+      contractorHstApplicable: false,
+      hourlyRate: 20,
+    };
+    const lowerLoadedContractor = {
+      ...employeeProfile,
+      id: 'lower-loaded-contractor',
+      email: 'lower-loaded-contractor@example.com',
+      firstName: 'Lower Loaded',
+      lastName: 'Contractor',
+      workerType: 'contractor' as const,
+      contractorHstApplicable: false,
+      hourlyRate: 30,
+    };
+    const employeeWork = workEntry({ id: 'loaded-employee-work', userId: loadedEmployee.id, jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 10 });
+    const contractorWork = workEntry({ id: 'lower-loaded-contractor-work', userId: lowerLoadedContractor.id, jobCodeId: 'job-qa0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 8 });
+
+    const breakdown = buildLabourCostBreakdown({
+      entries: [employeeWork, contractorWork],
+      profiles: [loadedEmployee, lowerLoadedContractor],
+      jobSites,
+      jobCodes,
+      grossUpSchedule: [{ effectiveDate: '2026-01-01', multiplier: 1.25 }],
+      weeklyOvertimeThresholdHours: 48,
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+    const qaJob = breakdown.properties.flatMap((property) => property.jobs).find((job) => job.jobCodeLabel.includes('QA0358'));
+    const mergedBreakdown = buildLabourCostBreakdownAcrossPayPeriods({
+      entries: [employeeWork, contractorWork],
+      profiles: [loadedEmployee, lowerLoadedContractor],
+      jobSites,
+      jobCodes,
+      grossUpSchedule: [{ effectiveDate: '2026-01-01', multiplier: 1.25 }],
+      payPeriodSettings,
+      now: new Date('2026-06-03T12:00:00.000Z'),
+    });
+    const mergedQaJob = mergedBreakdown.properties.flatMap((property) => property.jobs).find((job) => job.jobCodeLabel.includes('QA0358'));
+
+    expect(qaJob?.employees.map((employee) => employee.employeeName)).toEqual(['Loaded Employee', 'Lower Loaded Contractor']);
+    expect(qaJob?.employees.map((employee) => employee.grossPay)).toEqual([200, 240]);
+    expect(qaJob?.employees.map((employee) => employee.loadedCost)).toEqual([250, 240]);
+    expect(mergedQaJob?.employees.map((employee) => employee.employeeName)).toEqual(['Loaded Employee', 'Lower Loaded Contractor']);
   });
 });

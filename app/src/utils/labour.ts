@@ -234,7 +234,7 @@ export function buildLabourCostBreakdown({
       jobs: Array.from(property.jobs.values())
         .map((job) => ({
           ...job,
-          employees: Array.from(job.employees.values()).sort((a, b) => b.grossPay - a.grossPay || a.employeeName.localeCompare(b.employeeName)),
+          employees: sortEmployeeBreakdownsByLoadedCost(job.employees),
         }))
         .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
     }))
@@ -370,7 +370,7 @@ function mergeLabourCostBreakdowns(breakdowns: LabourCostBreakdown[]): LabourCos
       jobs: Array.from(property.jobs.values())
         .map((job) => ({
           ...job,
-          employees: Array.from(job.employees.values()).sort((a, b) => b.grossPay - a.grossPay || a.employeeName.localeCompare(b.employeeName)),
+          employees: sortEmployeeBreakdownsByLoadedCost(job.employees),
         }))
         .sort((a, b) => b.loadedCost - a.loadedCost || b.workHours - a.workHours || a.jobCodeLabel.localeCompare(b.jobCodeLabel)),
     }))
@@ -447,4 +447,8 @@ function addEmployeeContribution(
   } else {
     employees.set(profileId, { profileId, employeeName, grossPay: roundMoney(grossPay), loadedCost: roundMoney(loadedCost) });
   }
+}
+
+function sortEmployeeBreakdownsByLoadedCost(employees: Map<string, EmployeeAggregate>) {
+  return Array.from(employees.values()).sort((a, b) => b.loadedCost - a.loadedCost || a.employeeName.localeCompare(b.employeeName));
 }
