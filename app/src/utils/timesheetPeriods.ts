@@ -74,6 +74,12 @@ export function buildTimesheetWeeks({
   });
 }
 
+export function getDisplayTimesheetWeeks(weeks: TimesheetWeek[], todayKey = getAtlanticDateKey(new Date())) {
+  return weeks
+    .filter((week) => week.entries.length > 0 || week.weekStart <= todayKey)
+    .reverse();
+}
+
 function formatDateKeyRange(startDateKey: string, endDateKey: string) {
   const start = parseDateKey(startDateKey);
   const end = parseDateKey(endDateKey);

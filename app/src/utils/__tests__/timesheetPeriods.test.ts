@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getPayPeriodDays } from '../../hooks/usePayPeriodSettings';
 import { employeeProfile, resetEntrySequence, workEntry } from '../../test/fixtures/timeMathFixtures';
-import { buildTimesheetWeeks } from '../timesheetPeriods';
+import { buildTimesheetWeeks, getDisplayTimesheetWeeks } from '../timesheetPeriods';
 
 const baseSettings = {
   anchorStart: '2026-05-25',
@@ -98,5 +98,42 @@ describe('buildTimesheetWeeks', () => {
 
     expect(weeks[0].entries).toHaveLength(0);
     expect(weeks[0].summary.netWorkHours).toBe(0);
+  });
+
+  it('hides future empty weeks from the displayed timesheet list', () => {
+    const weeks = buildTimesheetWeeks({
+      periodDays: getPayPeriodDays({
+        ...baseSettings,
+        anchorStart: '2026-06-08',
+      }, '2026-06-08'),
+      entries: [],
+      profile: employeeProfile,
+      weeklyOvertimeThresholdHours: 48,
+      todayKey: '2026-06-09',
+    });
+
+    const displayWeeks = getDisplayTimesheetWeeks(weeks, '2026-06-09');
+
+    expect(weeks.map((week) => week.title)).toEqual(['Week of June 8th - 14th', 'Week of June 15th - 21st']);
+    expect(displayWeeks.map((week) => week.title)).toEqual(['Week of June 8th - 14th']);
+  });
+
+  it('keeps a future week visible when it already has entries', () => {
+    resetEntrySequence();
+    const futureEntry = workEntry({ id: 'future-week-entry', clockIn: '2026-06-16T12:00:00.000Z', hours: 2 });
+    const weeks = buildTimesheetWeeks({
+      periodDays: getPayPeriodDays({
+        ...baseSettings,
+        anchorStart: '2026-06-08',
+      }, '2026-06-08'),
+      entries: [futureEntry],
+      profile: employeeProfile,
+      weeklyOvertimeThresholdHours: 48,
+      todayKey: '2026-06-09',
+    });
+
+    const displayWeeks = getDisplayTimesheetWeeks(weeks, '2026-06-09');
+
+    expect(displayWeeks.map((week) => week.title)).toEqual(['Week of June 15th - 21st', 'Week of June 8th - 14th']);
   });
 });

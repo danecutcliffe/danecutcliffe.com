@@ -272,6 +272,11 @@ requireIncludes(
   'Timesheet work-week grouping must keep the simple Week of date-range title.',
 );
 requireIncludes(
+  timesheetPeriods,
+  'week.entries.length > 0 || week.weekStart <= todayKey',
+  'Timesheet display weeks must hide only future empty weeks, not current/past empty weeks.',
+);
+requireIncludes(
   adminTimesheets,
   'This week',
   'Admin weekly timesheet header must keep the separate current-week tag.',

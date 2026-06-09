@@ -5,7 +5,7 @@ import type { AdminTimeClockService } from '../services/TimeClockService';
 import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
-import { buildTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
+import { buildTimesheetWeeks, getDisplayTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
 
 interface AdminTimesheetsProps {
   adminProfile: Profile;
@@ -48,7 +48,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
         weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
       })
     : [];
-  const displayWeeks = [...timesheetWeeks].reverse();
+  const displayWeeks = getDisplayTimesheetWeeks(timesheetWeeks);
   const jobById = useMemo(() => new Map(jobCodes.map((job) => [job.id, job])), [jobCodes]);
   const selectableJobCodes = useMemo(() => jobCodes.filter(isSelectableJobCode), [jobCodes]);
   const siteById = useMemo(() => new Map(jobSites.map((site) => [site.id, site])), [jobSites]);
@@ -159,11 +159,12 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           </p>
         )}
         <div className="mt-4">
+          {displayWeeks.length === 0 && <p className="rounded-md bg-card-alt p-3 text-sm text-muted">No entries for this pay period.</p>}
           {viewMode === 'summary' && displayWeeks.map((week) => (
             <section key={week.weekStart} className="time-day-panel py-5 first:pt-0 last:pb-0">
               <WeekSectionHeader week={week} />
               {week.entries.length === 0 ? (
-                <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No entries for this week.</p>
+                <p className="mt-3 text-sm text-muted">No entries for this week.</p>
               ) : (
                 <div className="mt-4 space-y-4">
                   {[...week.days].reverse().map((day) => {
@@ -319,22 +320,17 @@ function DailyBreakdown({
 
 function WeekSectionHeader({ week }: { week: TimesheetWeek }) {
   return (
-    <div className="rounded-md border border-app-border-subtle bg-card-alt px-4 py-3">
-      <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="flex min-w-0 items-start gap-3">
-          <span aria-hidden="true" className="mt-1 h-8 w-1.5 shrink-0 rounded-full bg-accent" />
-          <div className="min-w-0">
-            <h3 className="text-base font-bold sm:text-lg">{week.title}</h3>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {week.isCurrentWeek && <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-white">This week</span>}
-              {week.isPartialWeek && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Partial work week</span>}
-              {week.isOpen && <span className="rounded-full bg-badge-neutral px-3 py-1 text-xs font-bold text-muted">Open entry</span>}
-            </div>
-          </div>
+    <div className="border-y border-app-border-subtle py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h3 className="text-base font-bold">{week.title}</h3>
+          {week.isCurrentWeek && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">This week</span>}
+          {week.isPartialWeek && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">Partial week</span>}
+          {week.isOpen && <span className="rounded-full bg-badge-neutral px-2.5 py-0.5 text-xs font-bold text-muted">Open entry</span>}
         </div>
-        <div className="shrink-0 text-right">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Net hours</p>
-          <p className="mt-1 text-2xl font-bold text-ink">{week.summary.netWorkHours.toFixed(2)}h</p>
+        <div className="shrink-0 text-sm font-bold">
+          <span className="text-muted">Net hours </span>
+          <span className="text-ink">{week.summary.netWorkHours.toFixed(2)}h</span>
         </div>
       </div>
     </div>
@@ -387,7 +383,7 @@ function PunchLogView({
           <section key={week.weekStart} className="time-day-panel py-5 first:pt-0 last:pb-0">
             <WeekSectionHeader week={week} />
             {punchEvents.length === 0 ? (
-              <p className="mt-4 rounded-md bg-card-alt p-3 text-sm text-muted">No punch events for this week.</p>
+              <p className="mt-3 text-sm text-muted">No punch events for this week.</p>
             ) : (
               <div className="mt-4 space-y-2">
               {punchEvents.map((event) => {
