@@ -113,6 +113,19 @@ test.describe('Time app smoke and layout contract', () => {
     await expect(page.locator('#employee-select')).toHaveValue('profile-stress-long');
     await expectNoDocumentOverflow(page);
 
+    const openEntryCard = page.locator('[data-entry-id="entry-stress-long-open"]');
+    await expect(openEntryCard.getByText('In progress')).toBeVisible();
+    await openEntryCard.locator('.timesheet-edit-button').click();
+    const editEntryModal = page.locator('.fixed');
+    await expect(editEntryModal.getByRole('heading', { name: 'Edit time entry' })).toBeVisible();
+    await expect(editEntryModal.getByLabel('Punch in date')).not.toHaveValue('');
+    await expect(editEntryModal.getByLabel('Punch in time')).not.toHaveValue('');
+    await expect(editEntryModal.getByLabel('Punch out date')).not.toHaveValue('');
+    await expect(editEntryModal.getByLabel('Punch out time')).toHaveValue('');
+    await editEntryModal.getByRole('button', { name: 'Save Entry' }).click();
+    await expect(page.locator('.fixed')).toHaveCount(0);
+    await expect(openEntryCard.getByText('In progress')).toBeVisible();
+
     await page.locator('#employee-select').selectOption('profile-stress-empty');
     await expect(page.getByText('No entries for this week.')).toHaveCount(1);
     await expect(page.locator('#ts-entries').getByText(/Week of /).first()).toBeVisible();
