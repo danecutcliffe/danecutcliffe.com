@@ -710,8 +710,8 @@ function FormModal({ children, onClose }: { children: ReactNode; onClose?: () =>
   // viewport. The card is height-bounded and scrolls internally so every field
   // (and Save) stays reachable regardless of the address bar or bottom nav.
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
-      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-md bg-card shadow-soft sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-black/40 px-3 pb-[max(1.5rem,calc(env(safe-area-inset-bottom)+1rem))] pt-[max(1.5rem,calc(env(safe-area-inset-top)+1rem))] sm:p-6">
+      <div className="flex w-full flex-col overflow-hidden rounded-md bg-card shadow-soft max-h-[calc(100dvh-max(1.5rem,calc(env(safe-area-inset-top)+1rem))-max(1.5rem,calc(env(safe-area-inset-bottom)+1rem)))] sm:max-h-[calc(100dvh-3rem)] sm:max-w-2xl">
         {onClose && (
           <div className="flex flex-none justify-end px-4 pt-3">
             <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>
