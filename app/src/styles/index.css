@@ -191,6 +191,23 @@ textarea {
   font: inherit;
 }
 
+/*
+ * iOS Safari centers the displayed value of native date/time inputs by default,
+ * which looks broken next to our left-aligned selects and text fields. Force the
+ * value and any placeholder text to the left edge so every field reads the same.
+ */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  text-align: left;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Override WebKit autofill yellow background (iOS PWA / Safari) */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

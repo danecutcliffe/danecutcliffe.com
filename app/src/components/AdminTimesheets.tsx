@@ -651,14 +651,14 @@ function combineManualDateTime(date: string, time: string): string {
 
 function ManualDateTimeInput({ label, date, time, setDate, setTime }: { label: string; date: string; time: string; setDate: (value: string) => void; setTime: (value: string) => void }) {
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+    <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <label className="block text-sm font-semibold text-muted">
         {label} date
-        <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <input className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
       </label>
       <label className="block text-sm font-semibold text-muted">
         {label} time
-        <input className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
+        <input className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
       </label>
     </div>
   );
@@ -731,7 +731,7 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
       <h3 className="text-lg font-bold">{props.title}</h3>
         {props.helperText && <p className="mt-1 text-sm font-semibold text-muted">{props.helperText}</p>}
       </div>
-      <div className="space-y-4 p-4">
+      <div className="space-y-3 p-4">
         {props.entryTypeControl}
         {props.requireJobCode && (
           <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
