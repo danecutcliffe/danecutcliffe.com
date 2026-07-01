@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
 import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import type { AdminTimeClockService } from '../services/TimeClockService';
@@ -651,7 +652,7 @@ function combineManualDateTime(date: string, time: string): string {
 
 function ManualDateTimeInput({ label, date, time, setDate, setTime }: { label: string; date: string; time: string; setDate: (value: string) => void; setTime: (value: string) => void }) {
   return (
-    <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <label className="block text-sm font-semibold text-muted">
         {label} date
         <input className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -701,21 +702,29 @@ function FormModal({ children, onClose }: { children: ReactNode; onClose?: () =>
     };
   }, []);
 
-  return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4">
-      <div className="flex min-h-full items-start sm:items-center">
-        <div className="w-full rounded-md bg-card shadow-soft sm:mx-auto sm:max-h-[92vh] sm:max-w-2xl sm:overflow-y-auto">
-          {onClose && (
-            <div className="flex justify-end px-4 pt-3">
-              <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-              </button>
-            </div>
-          )}
+  // Render into document.body via a portal. On mobile the app scrolls inside
+  // .app-shell-content (overflow-y:auto + -webkit-overflow-scrolling:touch).
+  // iOS Safari clips a position:fixed descendant of such a container and scrolls
+  // it with the page, which was trapping the modal's footer under the bottom nav
+  // and making Save unreachable. Portaling to body pins the overlay to the real
+  // viewport. The card is height-bounded and scrolls internally so every field
+  // (and Save) stays reachable regardless of the address bar or bottom nav.
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-md bg-card shadow-soft sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+        {onClose && (
+          <div className="flex flex-none justify-end px-4 pt-3">
+            <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-card-alt hover:text-ink" type="button" aria-label="Close" onClick={onClose}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+          </div>
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -731,7 +740,7 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
       <h3 className="text-lg font-bold">{props.title}</h3>
         {props.helperText && <p className="mt-1 text-sm font-semibold text-muted">{props.helperText}</p>}
       </div>
-      <div className="space-y-3 p-4">
+      <div className="space-y-4 p-4">
         {props.entryTypeControl}
         {props.requireJobCode && (
           <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
