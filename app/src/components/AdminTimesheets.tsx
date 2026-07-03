@@ -5,7 +5,8 @@ import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSett
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
-import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
+import { buildSplitPlan, findBreaksCrossingSplits, type SplitDividerDraft, type SplitSegment } from '../utils/splitEntry';
+import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
 import { buildTimesheetWeeks, getDisplayTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
 
 interface AdminTimesheetsProps {
@@ -30,6 +31,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [splittingEntryId, setSplittingEntryId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [viewMode, setViewMode] = useState<AdminTimesheetView>('summary');
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const siteById = useMemo(() => new Map(jobSites.map((site) => [site.id, site])), [jobSites]);
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const editingEntry = entries.find((entry) => entry.id === editingEntryId) ?? null;
+  const splittingEntry = entries.find((entry) => entry.id === splittingEntryId) ?? null;
   const periodApproval = employee ? approvals.find((approval) => approval.userId === employee.id && approval.weekStart === periodStart) : null;
   const isPeriodApproved = periodApproval?.status === 'approved';
 
@@ -77,6 +80,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
 
   useEffect(() => {
     setEditingEntryId(null);
+    setSplittingEntryId(null);
     setManualOpen(false);
   }, [selectedEmployeeId, periodStart]);
 
@@ -192,6 +196,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
                               profileById={profileById}
                               isPeriodApproved={isPeriodApproved}
                               onEdit={() => setEditingEntryId(entry.id)}
+                              onSplit={() => setSplittingEntryId(entry.id)}
                             />
                           ))}
                         </div>
@@ -211,11 +216,50 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
               siteById={siteById}
               isPeriodApproved={isPeriodApproved}
               onEdit={(entry) => setEditingEntryId(entry.id)}
+              onSplit={(entry) => setSplittingEntryId(entry.id)}
             />
           )}
         </div>
       </div>
       {editingEntry && !isPeriodApproved && <EntryEditor entry={editingEntry} jobSites={jobSites} jobCodes={jobCodes} isBusy={isBusy} onCancel={() => setEditingEntryId(null)} onSave={(patch) => runAction(async () => { await service.updateTimeEntry({ entryId: editingEntry.id, patch, editedBy: adminProfile.id }); setEditingEntryId(null); })} onDelete={() => runAction(async () => { await service.deleteTimeEntry({ entryId: editingEntry.id }); setEditingEntryId(null); })} />}
+      {splittingEntry && !isPeriodApproved && (
+        <SplitEntryModal
+          entry={splittingEntry}
+          jobSites={jobSites}
+          jobCodes={selectableJobCodes}
+          breakEntries={profileEntries.filter((candidate) => candidate.eventType === 'break')}
+          isBusy={isBusy}
+          onCancel={() => setSplittingEntryId(null)}
+          onSave={(segments) => runAction(async () => {
+            // The database rejects overlapping closed work entries and any change
+            // that leaves a punched break without a containing work entry. Creating
+            // the new segments open (exempt from the overlap guard, and covering
+            // every later break) before shrinking the original, then closing them
+            // left to right, satisfies both guards at every intermediate step.
+            const [first, ...rest] = segments;
+            let stage = 'creating the new segments';
+            try {
+              const createdIds: string[] = [];
+              for (const segment of rest) {
+                const createdEntry = await service.createManualEntry({ userId: splittingEntry.userId, jobCodeId: segment.jobCodeId, eventType: 'work', clockIn: segment.clockIn, clockOut: null, notes: splittingEntry.notes ?? '', createdBy: adminProfile.id });
+                createdIds.push(createdEntry.id);
+              }
+              stage = 'updating the original entry';
+              await service.updateTimeEntry({ entryId: splittingEntry.id, patch: { jobCodeId: first.jobCodeId, clockOut: first.clockOut }, editedBy: adminProfile.id });
+              stage = 'closing the new segments';
+              for (let i = 0; i < createdIds.length; i += 1) {
+                await service.updateTimeEntry({ entryId: createdIds[i], patch: { clockOut: rest[i].clockOut }, editedBy: adminProfile.id });
+              }
+            } catch (err) {
+              await onDataChange().catch(() => undefined);
+              const message = err instanceof Error ? err.message : 'Unable to split entry.';
+              throw new Error(`Split did not finish while ${stage}. Any unfinished segments show as "In progress" - review the day and fix with Edit or Delete Entry. (${message})`);
+            } finally {
+              setSplittingEntryId(null);
+            }
+          })}
+        />
+      )}
       {manualOpen && employee && !isPeriodApproved && <ManualEntryForm employee={employee} jobSites={jobSites} jobCodes={selectableJobCodes} isBusy={isBusy} onCancel={() => setManualOpen(false)} onSave={(values) => runAction(async () => { await service.createManualEntry({ ...values, userId: employee.id, createdBy: adminProfile.id }); setManualOpen(false); })} />}
     </section>
   );
@@ -256,6 +300,7 @@ function TimesheetEntryCard({
   profileById,
   isPeriodApproved,
   onEdit,
+  onSplit,
 }: {
   entry: TimeEntry;
   jobById: Map<string, JobCode>;
@@ -263,7 +308,9 @@ function TimesheetEntryCard({
   profileById: Map<string, Profile>;
   isPeriodApproved: boolean;
   onEdit: () => void;
+  onSplit: () => void;
 }) {
+  const canSplit = entry.eventType === 'work' && Boolean(entry.clockOut);
   return (
     <div className="grid grid-cols-1 gap-3 rounded-md bg-card-alt p-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-entry-id={entry.id}>
       <div className="min-w-0">
@@ -279,7 +326,12 @@ function TimesheetEntryCard({
         <GpsCue entry={entry} jobById={jobById} siteById={siteById} />
         <EntryTrustCue entry={entry} profileById={profileById} />
       </div>
-      <button className="timesheet-edit-button rounded-md border border-input-border px-4 font-bold disabled:opacity-40" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Use Unlock Period before editing entries.' : 'Edit entry'} onClick={onEdit}>Edit</button>
+      <div className="flex flex-col gap-2">
+        <button className="timesheet-edit-button rounded-md border border-input-border px-4 font-bold disabled:opacity-40" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Use Unlock Period before editing entries.' : 'Edit entry'} onClick={onEdit}>Edit</button>
+        {canSplit && (
+          <button className="timesheet-edit-button rounded-md border border-input-border px-4 font-bold disabled:opacity-40" type="button" disabled={isPeriodApproved} title={isPeriodApproved ? 'Use Unlock Period before splitting entries.' : 'Split this entry across job codes'} onClick={onSplit}>Split</button>
+        )}
+      </div>
     </div>
   );
 }
@@ -344,6 +396,7 @@ function PunchLogView({
   siteById,
   isPeriodApproved,
   onEdit,
+  onSplit,
 }: {
   weeks: TimesheetWeek[];
   groupedEntries: Record<string, TimeEntry[]>;
@@ -351,6 +404,7 @@ function PunchLogView({
   siteById: Map<string, JobSite>;
   isPeriodApproved: boolean;
   onEdit: (entry: TimeEntry) => void;
+  onSplit: (entry: TimeEntry) => void;
 }) {
   return (
     <div className="space-y-0">
@@ -401,14 +455,26 @@ function PunchLogView({
                         <PunchGpsCue lat={event.lat} lng={event.lng} site={site} />
                       </div>
                     </div>
-                    <button
-                      className="min-h-10 rounded-md border border-input-border px-3 text-sm font-bold disabled:opacity-40"
-                      type="button"
-                      disabled={isPeriodApproved}
-                      onClick={() => onEdit(event.entry)}
-                    >
-                      Edit Entry
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        className="min-h-10 rounded-md border border-input-border px-3 text-sm font-bold disabled:opacity-40"
+                        type="button"
+                        disabled={isPeriodApproved}
+                        onClick={() => onEdit(event.entry)}
+                      >
+                        Edit Entry
+                      </button>
+                      {event.direction === 'Punch in' && event.entry.clockOut && (
+                        <button
+                          className="min-h-10 rounded-md border border-input-border px-3 text-sm font-bold disabled:opacity-40"
+                          type="button"
+                          disabled={isPeriodApproved}
+                          onClick={() => onSplit(event.entry)}
+                        >
+                          Split Entry
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -548,6 +614,99 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
             <button className="min-h-10 rounded-md border border-input-border px-4 text-sm font-bold" type="button" disabled={isBusy} onClick={() => setConfirmDelete(false)}>No</button>
           </div>
         )}
+      </div>
+    </FormModal>
+  );
+}
+
+function SplitEntryModal({ entry, jobSites, jobCodes, breakEntries, isBusy, onCancel, onSave }: { entry: TimeEntry; jobSites: JobSite[]; jobCodes: JobCode[]; breakEntries: TimeEntry[]; isBusy: boolean; onCancel: () => void; onSave: (segments: SplitSegment[]) => void }) {
+  const [firstJobCodeId, setFirstJobCodeId] = useState(entry.jobCodeId ?? '');
+  const [dividers, setDividers] = useState<SplitDividerDraft[]>([{ time: '', jobCodeId: '' }]);
+  const siteById = jobSiteById(jobSites);
+  const jobById = new Map(jobCodes.map((job) => [job.id, job]));
+  const plan = buildSplitPlan({ clockIn: entry.clockIn, clockOut: entry.clockOut ?? '', firstJobCodeId, dividers });
+  const crossingBreaks = plan.ok ? findBreaksCrossingSplits(breakEntries, plan.segments) : [];
+
+  const jobLabel = (jobCodeId: string) => {
+    const job = jobById.get(jobCodeId);
+    return job ? jobDisplayName(job, job.jobSiteId ? siteById.get(job.jobSiteId) : null) : 'Unknown job';
+  };
+
+  const setDivider = (index: number, patch: Partial<SplitDividerDraft>) => {
+    setDividers((current) => current.map((divider, i) => (i === index ? { ...divider, ...patch } : divider)));
+  };
+
+  const jobCodeOptions = (
+    <>
+      <option value="">Select job code</option>
+      {jobCodes.map((job) => <option key={job.id} value={job.id}>{jobDisplayName(job, job.jobSiteId ? siteById.get(job.jobSiteId) : null)}</option>)}
+    </>
+  );
+
+  return (
+    <FormModal onClose={onCancel}>
+      <div className="rounded-md border border-app-border bg-card shadow-soft">
+        <div className="border-b border-app-border-subtle p-4">
+          <h3 className="text-lg font-bold">Split time entry</h3>
+          <p className="mt-1 text-sm font-semibold text-muted">Carve this punch into back-to-back segments with the right job for each stretch. The original punch in and punch out stay exactly as recorded.</p>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
+            <p className="text-sm font-bold text-muted-strong">Original punch</p>
+            <p className="mt-1 text-sm font-semibold">{formatAtlanticDate(getAtlanticDateKey(entry.clockIn))} · {formatAtlanticTime(entry.clockIn)} - {entry.clockOut ? formatAtlanticTime(entry.clockOut) : 'In progress'} · {formatDurationCompact(getEntryDurationHours(entry))}</p>
+            <p className="mt-1 text-sm text-muted">{entry.jobCodeId ? jobLabel(entry.jobCodeId) : 'No job code'}</p>
+          </div>
+          <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
+            <p className="text-sm font-bold text-muted-strong">First segment · starts at {formatAtlanticTime(entry.clockIn)}</p>
+            <label className="mt-2 block text-sm font-semibold text-muted">
+              Job code
+              <select className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={firstJobCodeId} onChange={(event) => setFirstJobCodeId(event.target.value)}>
+                {jobCodeOptions}
+              </select>
+            </label>
+          </div>
+          {dividers.map((divider, index) => (
+            <div key={index} className="rounded-md border border-app-border-subtle bg-card-alt p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-bold text-muted-strong">Split {index + 1}</p>
+                {dividers.length > 1 && (
+                  <button className="text-sm font-bold text-error-text" type="button" onClick={() => setDividers((current) => current.filter((_, i) => i !== index))}>Remove</button>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
+                <label className="block text-sm font-semibold text-muted">
+                  Switches at
+                  <input className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" type="time" value={divider.time} onChange={(event) => setDivider(index, { time: event.target.value })} />
+                </label>
+                <label className="block text-sm font-semibold text-muted">
+                  Job code after the switch
+                  <select className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" value={divider.jobCodeId} onChange={(event) => setDivider(index, { jobCodeId: event.target.value })}>
+                    {jobCodeOptions}
+                  </select>
+                </label>
+              </div>
+            </div>
+          ))}
+          <button className="min-h-12 w-full rounded-md border border-dashed border-input-border px-4 font-bold text-muted-strong" type="button" onClick={() => setDividers((current) => [...current, { time: '', jobCodeId: '' }])}>Add Another Split</button>
+          {plan.ok && (
+            <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
+              <p className="text-sm font-bold text-muted-strong">Result · {plan.segments.length} segments</p>
+              <ul className="mt-2 space-y-1">
+                {plan.segments.map((segment, index) => (
+                  <li key={index} className="text-sm font-semibold">
+                    {formatAtlanticTime(segment.clockIn)} - {formatAtlanticTime(segment.clockOut)} · {formatDurationCompact(Math.max(0, new Date(segment.clockOut).getTime() - new Date(segment.clockIn).getTime()) / 3_600_000)} · <span className="text-muted">{jobLabel(segment.jobCodeId)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {!plan.ok && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">{plan.error}</p>}
+        {crossingBreaks.length > 0 && <p className="mx-4 mt-2 rounded-md bg-warn-bg p-3 text-sm font-semibold text-warning">A recorded break spans one of the split times. Breaks attach to segments by time overlap, so double-check the day's hours after saving.</p>}
+        <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
+          <button className="min-h-12 rounded-md border border-input-border px-4 font-bold" type="button" onClick={onCancel}>Cancel</button>
+          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !plan.ok} onClick={() => plan.ok && onSave(plan.segments)}>Save Split</button>
+        </div>
       </div>
     </FormModal>
   );
