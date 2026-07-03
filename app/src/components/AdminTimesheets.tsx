@@ -26,7 +26,15 @@ type AdminTimesheetView = 'summary' | 'punch-log';
 
 export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, entries, approvals, payPeriodSettings, service, initialEmployeeId, onDataChange }: AdminTimesheetsProps) {
   const employees = profiles.filter((profile) => profile.role === 'employee');
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(employees[0]?.id ?? '');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => {
+    // Land on someone with hours in the current period instead of whoever sorts first overall.
+    const period = getPayPeriodForDate(payPeriodSettings);
+    const days = new Set(getPayPeriodDays(payPeriodSettings, period.start));
+    const withTime = employees
+      .filter((profile) => entries.some((entry) => entry.userId === profile.id && days.has(getAtlanticDateKey(entry.clockIn))))
+      .sort((a, b) => name(a).localeCompare(name(b)));
+    return (withTime[0] ?? employees[0])?.id ?? '';
+  });
   const [appliedInitialEmployeeId, setAppliedInitialEmployeeId] = useState<string | undefined>();
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
   const [periodStart, setPeriodStart] = useState(currentPeriod.start);
@@ -38,6 +46,11 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const [isBusy, setIsBusy] = useState(false);
   const employee = employees.find((profile) => profile.id === selectedEmployeeId) ?? employees[0];
   const periodDays = getPayPeriodDays(payPeriodSettings, periodStart);
+  const periodDaySet = new Set(periodDays);
+  const employeeIdsWithTime = new Set(entries.filter((entry) => periodDaySet.has(getAtlanticDateKey(entry.clockIn))).map((entry) => entry.userId));
+  const byEmployeeName = (a: Profile, b: Profile) => name(a).localeCompare(name(b));
+  const employeesWithTime = employees.filter((profile) => employeeIdsWithTime.has(profile.id)).sort(byEmployeeName);
+  const employeesWithoutTime = employees.filter((profile) => !employeeIdsWithTime.has(profile.id)).sort(byEmployeeName);
   const profileEntries = entries.filter((entry) => entry.userId === employee?.id && periodDays.includes(getAtlanticDateKey(entry.clockIn)));
   const summary = employee
     ? computeTimeSummary(profileEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
@@ -74,9 +87,9 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
       return;
     }
     if (!employees.some((profile) => profile.id === selectedEmployeeId)) {
-      setSelectedEmployeeId(employees[0].id);
+      setSelectedEmployeeId((employeesWithTime[0] ?? employees[0]).id);
     }
-  }, [employees, selectedEmployeeId]);
+  }, [employees, employeesWithTime, selectedEmployeeId]);
 
   useEffect(() => {
     setEditingEntryId(null);
@@ -111,7 +124,16 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           <label className="block text-sm font-semibold text-muted" htmlFor="employee-select">
             Employee
             <select id="employee-select" className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3 text-base text-ink" value={employee?.id ?? ''} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-              {employees.map((profile) => <option key={profile.id} value={profile.id}>{profile.firstName} {profile.lastName}</option>)}
+              {employeesWithTime.length > 0 && (
+                <optgroup label="Time this period">
+                  {employeesWithTime.map((profile) => <option key={profile.id} value={profile.id}>{name(profile)}</option>)}
+                </optgroup>
+              )}
+              {employeesWithoutTime.length > 0 && (
+                <optgroup label="No time this period">
+                  {employeesWithoutTime.map((profile) => <option key={profile.id} value={profile.id} className="text-muted-light">{name(profile)}</option>)}
+                </optgroup>
+              )}
             </select>
           </label>
           <div className="flex flex-col justify-end">
