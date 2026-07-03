@@ -74,6 +74,51 @@ export function buildSplitPlan(params: {
   return { ok: true, segments };
 }
 
+export type SplitSavePlan =
+  | {
+      ok: true;
+      /** Index of the segment the original entry keeps (contains all punched break starts). */
+      restIndex: number;
+      /** Patches applied to the original entry, in order, before any creates. */
+      updates: Array<Partial<Pick<TimeEntry, 'clockIn' | 'clockOut' | 'jobCodeId'>>>;
+      /** Segments created as new closed entries after the original is reshaped. */
+      creates: SplitSegment[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Orders the writes so every intermediate state satisfies the database rules:
+ * no overlapping closed work entries, no work change may orphan a punched
+ * break, and at most one open work entry per user (so nothing is ever created
+ * open). The original entry is first shrunk onto the one segment that contains
+ * every punched break start, then the vacated ranges are filled with new
+ * closed entries. If breaks start inside two different segments, no legal
+ * sequence exists without touching the break records, so the split is refused.
+ */
+export function buildSplitSavePlan(segments: SplitSegment[], breakEntries: TimeEntry[]): SplitSavePlan {
+  if (segments.length < 2) return { ok: false, error: 'Add at least one split.' };
+  const rangeStart = new Date(segments[0].clockIn).getTime();
+  const rangeEnd = new Date(segments[segments.length - 1].clockOut).getTime();
+  const segmentIndexes = new Set<number>();
+  for (const breakEntry of breakEntries) {
+    if (breakEntry.eventType !== 'break') continue;
+    const breakStart = new Date(breakEntry.clockIn).getTime();
+    if (breakStart < rangeStart || breakStart >= rangeEnd) continue;
+    segmentIndexes.add(segments.findIndex((segment) => breakStart >= new Date(segment.clockIn).getTime() && breakStart < new Date(segment.clockOut).getTime()));
+  }
+  if (segmentIndexes.size > 1) {
+    return { ok: false, error: 'Punched breaks fall inside more than one of these segments, so the day cannot be split in one pass. Adjust or delete the breaks first, split the entry, then re-add the breaks.' };
+  }
+  const restIndex = segmentIndexes.size === 1 ? [...segmentIndexes][0] : 0;
+
+  const updates: Array<Partial<Pick<TimeEntry, 'clockIn' | 'clockOut' | 'jobCodeId'>>> = [];
+  if (restIndex > 0) updates.push({ clockIn: segments[restIndex].clockIn });
+  if (restIndex < segments.length - 1) updates.push({ clockOut: segments[restIndex].clockOut });
+  updates[updates.length - 1] = { ...updates[updates.length - 1], jobCodeId: segments[restIndex].jobCodeId };
+
+  return { ok: true, restIndex, updates, creates: segments.filter((_, index) => index !== restIndex) };
+}
+
 /**
  * Breaks attach to work entries by time overlap, so a punched break that spans
  * a split boundary would straddle two segments after the split. Surface those

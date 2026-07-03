@@ -5,7 +5,7 @@ import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSett
 import type { AdminTimeClockService } from '../services/TimeClockService';
 import { getEntryGpsVerification, googleMapsCoordinatesUrl, gpsDistanceMeters, isSelectableJobCode, jobDisplayName, jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { computeTimeSummary, type TimeSummary } from '../utils/timecardHours';
-import { buildSplitPlan, findBreaksCrossingSplits, type SplitDividerDraft, type SplitSegment } from '../utils/splitEntry';
+import { buildSplitPlan, buildSplitSavePlan, findBreaksCrossingSplits, type SplitDividerDraft, type SplitSegment } from '../utils/splitEntry';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticDateTimeInput, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours, groupEntriesByAtlanticDate, parseAtlanticDateTimeInput } from '../utils/time';
 import { buildTimesheetWeeks, getDisplayTimesheetWeeks, type TimesheetWeek } from '../utils/timesheetPeriods';
 
@@ -231,29 +231,26 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           isBusy={isBusy}
           onCancel={() => setSplittingEntryId(null)}
           onSave={(segments) => runAction(async () => {
-            // The database rejects overlapping closed work entries and any change
-            // that leaves a punched break without a containing work entry. Creating
-            // the new segments open (exempt from the overlap guard, and covering
-            // every later break) before shrinking the original, then closing them
-            // left to right, satisfies both guards at every intermediate step.
-            const [first, ...rest] = segments;
-            let stage = 'creating the new segments';
+            // buildSplitSavePlan orders the writes so every intermediate state
+            // satisfies the database rules (no overlapping closed work entries,
+            // no orphaned punched breaks, at most one open work entry per user):
+            // the original entry is shrunk onto the segment holding the breaks,
+            // then the vacated ranges are filled with new closed entries.
+            const savePlan = buildSplitSavePlan(segments, profileEntries.filter((candidate) => candidate.eventType === 'break'));
+            if (!savePlan.ok) throw new Error(savePlan.error);
+            let stage = 'updating the original entry';
             try {
-              const createdIds: string[] = [];
-              for (const segment of rest) {
-                const createdEntry = await service.createManualEntry({ userId: splittingEntry.userId, jobCodeId: segment.jobCodeId, eventType: 'work', clockIn: segment.clockIn, clockOut: null, notes: splittingEntry.notes ?? '', createdBy: adminProfile.id });
-                createdIds.push(createdEntry.id);
+              for (const patch of savePlan.updates) {
+                await service.updateTimeEntry({ entryId: splittingEntry.id, patch, editedBy: adminProfile.id });
               }
-              stage = 'updating the original entry';
-              await service.updateTimeEntry({ entryId: splittingEntry.id, patch: { jobCodeId: first.jobCodeId, clockOut: first.clockOut }, editedBy: adminProfile.id });
-              stage = 'closing the new segments';
-              for (let i = 0; i < createdIds.length; i += 1) {
-                await service.updateTimeEntry({ entryId: createdIds[i], patch: { clockOut: rest[i].clockOut }, editedBy: adminProfile.id });
+              stage = 'creating the new segments';
+              for (const segment of savePlan.creates) {
+                await service.createManualEntry({ userId: splittingEntry.userId, jobCodeId: segment.jobCodeId, eventType: 'work', clockIn: segment.clockIn, clockOut: segment.clockOut, notes: splittingEntry.notes ?? '', createdBy: adminProfile.id });
               }
             } catch (err) {
               await onDataChange().catch(() => undefined);
               const message = err instanceof Error ? err.message : 'Unable to split entry.';
-              throw new Error(`Split did not finish while ${stage}. Any unfinished segments show as "In progress" - review the day and fix with Edit or Delete Entry. (${message})`);
+              throw new Error(`Split did not finish while ${stage}. The day may show the original entry shrunk with some segments missing - fill the gaps with Add Manual Entry or fix with Edit. (${message})`);
             } finally {
               setSplittingEntryId(null);
             }
@@ -625,6 +622,7 @@ function SplitEntryModal({ entry, jobSites, jobCodes, breakEntries, isBusy, onCa
   const siteById = jobSiteById(jobSites);
   const jobById = new Map(jobCodes.map((job) => [job.id, job]));
   const plan = buildSplitPlan({ clockIn: entry.clockIn, clockOut: entry.clockOut ?? '', firstJobCodeId, dividers });
+  const savePlan = plan.ok ? buildSplitSavePlan(plan.segments, breakEntries) : null;
   const crossingBreaks = plan.ok ? findBreaksCrossingSplits(breakEntries, plan.segments) : [];
 
   const jobLabel = (jobCodeId: string) => {
@@ -702,10 +700,11 @@ function SplitEntryModal({ entry, jobSites, jobCodes, breakEntries, isBusy, onCa
           )}
         </div>
         {!plan.ok && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">{plan.error}</p>}
+        {savePlan && !savePlan.ok && <p className="mx-4 rounded-md bg-error-bg p-3 text-sm font-semibold text-error-text">{savePlan.error}</p>}
         {crossingBreaks.length > 0 && <p className="mx-4 mt-2 rounded-md bg-warn-bg p-3 text-sm font-semibold text-warning">A recorded break spans one of the split times. Breaks attach to segments by time overlap, so double-check the day's hours after saving.</p>}
         <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
           <button className="min-h-12 rounded-md border border-input-border px-4 font-bold" type="button" onClick={onCancel}>Cancel</button>
-          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !plan.ok} onClick={() => plan.ok && onSave(plan.segments)}>Save Split</button>
+          <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isBusy || !plan.ok || !savePlan?.ok} onClick={() => plan.ok && onSave(plan.segments)}>Save Split</button>
         </div>
       </div>
     </FormModal>

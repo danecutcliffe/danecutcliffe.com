@@ -824,6 +824,10 @@ export const mockTimeClockService: AdminTimeClockService = {
     await delay();
     if (eventType === 'work' && !jobCodeId) throw new Error('Manual work entries need a job code.');
     if (eventType === 'break' && !clockOut) throw new Error('Manual break entries need a punch out time.');
+    // Mirrors the production time_entries_one_open_work_idx unique partial index.
+    if (eventType === 'work' && !clockOut && timeEntries.some((entry) => entry.userId === userId && entry.eventType === 'work' && !entry.clockOut)) {
+      throw new Error('duplicate key value violates unique constraint "time_entries_one_open_work_idx"');
+    }
     if (clockOut && new Date(clockOut).getTime() <= new Date(clockIn).getTime()) throw new Error('Clock out must be after clock in.');
     if (eventType === 'break') assertManualBreakHasWorkEntry(userId, clockIn);
     assertTimeEntryUnlocked(userId, clockIn, clockOut, 'adding time');

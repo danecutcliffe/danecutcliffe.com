@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TimeEntry } from '../../domain/types';
-import { buildSplitPlan, findBreaksCrossingSplits } from '../splitEntry';
+import { buildSplitPlan, buildSplitSavePlan, findBreaksCrossingSplits } from '../splitEntry';
 import { parseAtlanticDateTimeInput } from '../time';
 
 const at = (value: string) => parseAtlanticDateTimeInput(value);
@@ -88,17 +88,84 @@ describe('buildSplitPlan', () => {
   });
 });
 
-describe('findBreaksCrossingSplits', () => {
-  const makeBreak = (clockIn: string, clockOut: string): TimeEntry => ({
-    id: 'break-1',
-    userId: 'user-1',
-    jobCodeId: null,
-    eventType: 'break',
-    clockIn,
-    clockOut,
-    isAutoClockedOut: false,
-    createdAt: clockIn,
+const makeBreak = (clockIn: string, clockOut: string): TimeEntry => ({
+  id: `break-${clockIn}`,
+  userId: 'user-1',
+  jobCodeId: null,
+  eventType: 'break',
+  clockIn,
+  clockOut,
+  isAutoClockedOut: false,
+  createdAt: clockIn,
+});
+
+describe('buildSplitSavePlan', () => {
+  const isaiahSegments = (() => {
+    const plan = buildSplitPlan({
+      ...isaiahDay,
+      dividers: [
+        { time: '12:45', jobCodeId: 'cumberland' },
+        { time: '15:15', jobCodeId: 'queen' },
+        { time: '16:00', jobCodeId: 'cumberland' },
+        { time: '16:45', jobCodeId: 'orlebar' },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.error);
+    return plan.segments;
+  })();
+
+  it('keeps the original as the first segment when there are no breaks', () => {
+    const savePlan = buildSplitSavePlan(isaiahSegments, []);
+    if (!savePlan.ok) throw new Error(savePlan.error);
+    expect(savePlan.restIndex).toBe(0);
+    expect(savePlan.updates).toEqual([{ clockOut: at('2026-07-02T12:45'), jobCodeId: 'queen' }]);
+    expect(savePlan.creates).toEqual(isaiahSegments.slice(1));
   });
+
+  it('never plans an open entry (regression: time_entries_one_open_work_idx)', () => {
+    const savePlan = buildSplitSavePlan(isaiahSegments, []);
+    if (!savePlan.ok) throw new Error(savePlan.error);
+    for (const segment of savePlan.creates) {
+      expect(segment.clockOut).toBeTruthy();
+    }
+  });
+
+  it('parks the original on the segment containing a punched break', () => {
+    const lunch = makeBreak(at('2026-07-02T13:00'), at('2026-07-02T13:30'));
+    const savePlan = buildSplitSavePlan(isaiahSegments, [lunch]);
+    if (!savePlan.ok) throw new Error(savePlan.error);
+    expect(savePlan.restIndex).toBe(1);
+    expect(savePlan.updates).toEqual([
+      { clockIn: at('2026-07-02T12:45') },
+      { clockOut: at('2026-07-02T15:15'), jobCodeId: 'cumberland' },
+    ]);
+    expect(savePlan.creates.map((segment) => segment.jobCodeId)).toEqual(['queen', 'queen', 'cumberland', 'orlebar']);
+  });
+
+  it('parks the original on the last segment without a trailing clockOut update', () => {
+    const lateBreak = makeBreak(at('2026-07-02T17:00'), at('2026-07-02T17:10'));
+    const savePlan = buildSplitSavePlan(isaiahSegments, [lateBreak]);
+    if (!savePlan.ok) throw new Error(savePlan.error);
+    expect(savePlan.restIndex).toBe(4);
+    expect(savePlan.updates).toEqual([{ clockIn: at('2026-07-02T16:45'), jobCodeId: 'orlebar' }]);
+  });
+
+  it('ignores breaks outside the entry range', () => {
+    const otherDay = makeBreak(at('2026-07-01T12:00'), at('2026-07-01T12:30'));
+    const savePlan = buildSplitSavePlan(isaiahSegments, [otherDay]);
+    if (!savePlan.ok) throw new Error(savePlan.error);
+    expect(savePlan.restIndex).toBe(0);
+  });
+
+  it('refuses when breaks start inside two different segments', () => {
+    const morning = makeBreak(at('2026-07-02T10:00'), at('2026-07-02T10:15'));
+    const lunch = makeBreak(at('2026-07-02T13:00'), at('2026-07-02T13:30'));
+    const savePlan = buildSplitSavePlan(isaiahSegments, [morning, lunch]);
+    expect(savePlan.ok).toBe(false);
+  });
+});
+
+describe('findBreaksCrossingSplits', () => {
 
   const plan = buildSplitPlan({ ...isaiahDay, dividers: [{ time: '12:45', jobCodeId: 'cumberland' }] });
   const segments = plan.ok ? plan.segments : [];
