@@ -444,7 +444,7 @@ function LabourCostPropertyCard({
 }
 
 function ReportPreview({ model }: { model: ReportModel }) {
-  const previewRows = model.rows.slice(0, 50);
+  const previewRows = model.rows.slice(0, 500);
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -461,9 +461,9 @@ function ReportPreview({ model }: { model: ReportModel }) {
         ))}
       </div>
 
-      <div className="mt-4 max-h-[42rem] overflow-auto rounded-md border border-app-border">
+      <div className="mt-4 overflow-x-auto rounded-md border border-app-border">
         <table className="min-w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-card text-xs uppercase text-muted">
+          <thead className="sticky top-0 z-10 bg-card text-xs uppercase text-muted lg:top-16">
             <tr>
               {model.columns.map((column) => (
                 <th key={column.key} className={`border-b border-app-border px-3 py-2 font-bold ${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : 'text-left'}`}>
