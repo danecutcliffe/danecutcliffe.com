@@ -157,6 +157,50 @@ describe('filtered report context', () => {
     expect(payrollSummary.rows[0].otHours).toBeCloseTo(2, 5);
   });
 
+  it('nests hours-by-location rows as property, then job, then employee', () => {
+    resetEntrySequence();
+    const entries = [
+      workEntry({ id: 'queen-qa', jobCodeId: 'job-qa0358', clockIn: '2026-06-01T12:00:00.000Z', hours: 4 }),
+      workEntry({ id: 'queen-qs', jobCodeId: 'job-qs0358', clockIn: '2026-06-02T12:00:00.000Z', hours: 3 }),
+      workEntry({ id: 'other-site', jobCodeId: 'job-other', clockIn: '2026-06-03T12:00:00.000Z', hours: 2 }),
+    ];
+
+    const report = buildHoursByLocationReport({
+      entries,
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-14',
+      now: new Date('2026-06-04T12:00:00.000Z'),
+    });
+
+    const shape = report.rows.map((row) => `${row.rowKind}:${row.description}`);
+    expect(shape).toEqual([
+      'property:356-358 Queen St',
+      'group:QA0358 QA',
+      'detail:Emmanuel Ero',
+      'total:Total QA0358 QA',
+      'group:QS0358 QS',
+      'detail:Emmanuel Ero',
+      'total:Total QS0358 QS',
+      'propertyTotal:Total 356-358 Queen St',
+      'property:Other Property',
+      'group:EX0814 Other',
+      'detail:Emmanuel Ero',
+      'propertyTotal:Total Other Property',
+      'grandTotal:Total (2026-06-01 - 2026-06-14)',
+    ]);
+
+    const queenTotal = report.rows.find((row) => row.description === 'Total 356-358 Queen St');
+    expect(queenTotal?.totalHours).toBeCloseTo(7, 5);
+    const otherTotal = report.rows.find((row) => row.description === 'Total Other Property');
+    expect(otherTotal?.totalHours).toBeCloseTo(2, 5);
+    expect(report.rows.find((row) => row.rowKind === 'grandTotal')?.totalHours).toBeCloseTo(9, 5);
+    expect(report.summary.find((item) => item.label === 'Properties / jobs')?.value).toBe('2 / 3');
+  });
+
   it('calculates exported estimated pay from displayed two-decimal hours', () => {
     resetEntrySequence();
     const work = workEntry({ id: 'precision-work', clockIn: '2026-06-02T12:00:00.000Z', hours: 7.484 });

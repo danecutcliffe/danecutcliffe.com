@@ -7,6 +7,8 @@ const COLORS = {
   accent: 'E07755',
   accentLight: 'F6E4DB',
   border: 'BFB7B2',
+  grayLight: 'E7E5E4',
+  grayMedium: 'D6D3D1',
   white: 'FFFFFF',
   error: 'F4CCCC',
   warning: 'FCE4D6',
@@ -98,20 +100,30 @@ function writeReportSheet(sheet: ExcelJS.Worksheet, model: ReportModel) {
       if (column.format === 'time') cell.numFmt = 'h:mm AM/PM';
       if (row.entryStatus === 'Open') cell.fill = solidFill(COLORS.warning);
       if (rowKind === 'detail' && index === 0) cell.alignment = { ...cell.alignment, indent: 2 };
+      if (rowKind === 'total' && index === 0) cell.alignment = { ...cell.alignment, indent: 1 };
       if (rowKind === 'total') {
         cell.font = { bold: true };
         cell.fill = solidFill(COLORS.accentLight);
+      }
+      if (rowKind === 'propertyTotal') {
+        cell.font = { bold: true };
+        cell.fill = solidFill(COLORS.grayMedium);
       }
       if (rowKind === 'grandTotal') {
         cell.font = { bold: true, color: { argb: COLORS.white } };
         cell.fill = solidFill(COLORS.header);
       }
-      if (rowKind === 'group') {
+      if (rowKind === 'property') {
         cell.font = { bold: true, color: { argb: COLORS.white } };
         cell.fill = solidFill(COLORS.charcoal);
       }
+      if (rowKind === 'group') {
+        cell.font = { bold: true };
+        cell.fill = solidFill(COLORS.grayLight);
+        if (index === 0) cell.alignment = { ...cell.alignment, indent: 1 };
+      }
     });
-    if (rowKind === 'group' && columnCount > 1) {
+    if ((rowKind === 'group' || rowKind === 'property') && columnCount > 1) {
       sheet.mergeCells(excelRow.number, 1, excelRow.number, columnCount);
     }
   });

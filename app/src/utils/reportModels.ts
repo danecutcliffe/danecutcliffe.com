@@ -148,33 +148,56 @@ export function buildDetailedTimecardReport({
 export function buildHoursByLocationReport(params: BuildPeriodReportParams): ReportModel {
   const detail = buildDetailedTimecardReport(params);
   const profileByName = new Map(params.profiles.map((profile) => [`${profile.firstName} ${profile.lastName}`, profile]));
-  const groups = new Map<string, {
-    label: string;
-    employees: Map<string, Record<string, ReportCellValue>>;
+
+  interface HoursAggregate {
     regularHours: number;
     otHours: number;
     totalHours: number;
     estPay: number;
-  }>();
+  }
+  interface JobGroup extends HoursAggregate {
+    label: string;
+    employees: Map<string, Record<string, ReportCellValue>>;
+  }
+  interface PropertyGroup extends HoursAggregate {
+    label: string;
+    jobs: Map<string, JobGroup>;
+  }
+
+  const properties = new Map<string, PropertyGroup>();
 
   detail.rows.forEach((row) => {
     if (row.entryStatus === 'Open') return;
-    const key = `${row.property}|${row.jobCode}|${row.job}`;
-    const profile = profileByName.get(String(row.employee));
-    const current = groups.get(key) ?? {
-      label: String(row.job || row.property),
+    const propertyLabel = String(row.property);
+    const property = properties.get(propertyLabel) ?? {
+      label: propertyLabel,
+      jobs: new Map<string, JobGroup>(),
+      regularHours: 0,
+      otHours: 0,
+      totalHours: 0,
+      estPay: 0,
+    };
+    // Detail rows carry the full "property | code name" display; the property
+    // band already names the property, so the job band drops that prefix.
+    const jobLabelFull = String(row.job || row.property);
+    const propertyPrefix = `${propertyLabel} | `;
+    const jobLabel = jobLabelFull.startsWith(propertyPrefix) ? jobLabelFull.slice(propertyPrefix.length) : jobLabelFull;
+    const jobKey = `${row.jobCode}|${jobLabelFull}`;
+    const job = property.jobs.get(jobKey) ?? {
+      label: jobLabel,
       employees: new Map<string, Record<string, ReportCellValue>>(),
       regularHours: 0,
       otHours: 0,
       totalHours: 0,
       estPay: 0,
     };
+
     const regularHours = Number(row.regularHours ?? 0);
     const otHours = Number(row.otHours ?? 0);
-    const rate = profile?.hourlyRate ?? 0;
+    const rate = profileByName.get(String(row.employee))?.hourlyRate ?? 0;
     const estPay = calculatePayrollGrossPay({ regularHours, overtimeHours: otHours, hourlyRate: rate });
     const employeeKey = String(row.employee);
-    const employee = current.employees.get(employeeKey) ?? {
+    const employee = job.employees.get(employeeKey) ?? {
       rowKind: 'detail',
       description: row.employee,
       regularHours: 0,
@@ -187,31 +210,56 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
     employee.otHours = roundHours(Number(employee.otHours ?? 0) + otHours);
     employee.totalHours = roundHours(Number(employee.totalHours ?? 0) + regularHours + otHours);
     employee.estPay = roundMoney(Number(employee.estPay ?? 0) + estPay);
-    current.employees.set(employeeKey, employee);
-    current.regularHours = roundHours(current.regularHours + regularHours);
-    current.otHours = roundHours(current.otHours + otHours);
-    current.totalHours = roundHours(current.totalHours + regularHours + otHours);
-    current.estPay = roundMoney(current.estPay + estPay);
-    groups.set(key, current);
+    job.employees.set(employeeKey, employee);
+    job.regularHours = roundHours(job.regularHours + regularHours);
+    job.otHours = roundHours(job.otHours + otHours);
+    job.totalHours = roundHours(job.totalHours + regularHours + otHours);
+    job.estPay = roundMoney(job.estPay + estPay);
+    property.jobs.set(jobKey, job);
+    property.regularHours = roundHours(property.regularHours + regularHours);
+    property.otHours = roundHours(property.otHours + otHours);
+    property.totalHours = roundHours(property.totalHours + regularHours + otHours);
+    property.estPay = roundMoney(property.estPay + estPay);
+    properties.set(propertyLabel, property);
   });
 
-  const sortedGroups = [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
-  const rows = sortedGroups.flatMap((group) => [
-    { rowKind: 'group', description: group.label, regularHours: null, otHours: null, estPay: null, totalHours: null },
-    ...[...group.employees.values()].sort((a, b) => String(a.description).localeCompare(String(b.description))),
-    {
-      rowKind: 'total',
-      description: `Total ${group.label}`,
-      regularHours: roundHours(group.regularHours),
-      otHours: roundHours(group.otHours),
-      estPay: roundMoney(group.estPay),
-      totalHours: roundHours(group.totalHours),
-    },
-  ]);
-  const totalRegularHours = sortedGroups.reduce((total, group) => total + group.regularHours, 0);
-  const totalOtHours = sortedGroups.reduce((total, group) => total + group.otHours, 0);
-  const totalHours = sortedGroups.reduce((total, group) => total + group.totalHours, 0);
-  const totalPay = sortedGroups.reduce((total, group) => total + group.estPay, 0);
+  const emptyCells = { regularHours: null, otHours: null, estPay: null, totalHours: null };
+  const sortedProperties = [...properties.values()].sort((a, b) => a.label.localeCompare(b.label));
+  const jobCount = sortedProperties.reduce((total, property) => total + property.jobs.size, 0);
+  const rows = sortedProperties.flatMap((property) => {
+    const jobs = [...property.jobs.values()].sort((a, b) => a.label.localeCompare(b.label));
+    const jobRows = jobs.flatMap((job) => [
+      { rowKind: 'group', description: job.label, ...emptyCells },
+      ...[...job.employees.values()].sort((a, b) => String(a.description).localeCompare(String(b.description))),
+      // A single-job property's subtotal would just repeat the property total.
+      ...(jobs.length > 1
+        ? [{
+            rowKind: 'total',
+            description: `Total ${job.label}`,
+            regularHours: roundHours(job.regularHours),
+            otHours: roundHours(job.otHours),
+            estPay: roundMoney(job.estPay),
+            totalHours: roundHours(job.totalHours),
+          }]
+        : []),
+    ]);
+    return [
+      { rowKind: 'property', description: property.label, ...emptyCells },
+      ...jobRows,
+      {
+        rowKind: 'propertyTotal',
+        description: `Total ${property.label}`,
+        regularHours: roundHours(property.regularHours),
+        otHours: roundHours(property.otHours),
+        estPay: roundMoney(property.estPay),
+        totalHours: roundHours(property.totalHours),
+      },
+    ];
+  });
+  const totalRegularHours = sortedProperties.reduce((total, property) => total + property.regularHours, 0);
+  const totalOtHours = sortedProperties.reduce((total, property) => total + property.otHours, 0);
+  const totalHours = sortedProperties.reduce((total, property) => total + property.totalHours, 0);
+  const totalPay = sortedProperties.reduce((total, property) => total + property.estPay, 0);
   rows.push({
     rowKind: 'grandTotal',
     description: `Total (${params.periodStart} - ${params.periodEnd})`,
@@ -225,7 +273,7 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
     title: 'Hours by Location',
     subtitle: `${params.periodStart} to ${params.periodEnd}`,
     columns: [
-      { key: 'description', label: 'Location / Employee', width: 44 },
+      { key: 'description', label: 'Property / Job / Employee', width: 44 },
       { key: 'regularHours', label: 'Reg', width: 11, format: 'hours', align: 'right' },
       { key: 'otHours', label: 'OT', width: 11, format: 'hours', align: 'right' },
       { key: 'estPay', label: 'Est Pay', width: 13, format: 'currency', align: 'right' },
@@ -233,7 +281,7 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
     ],
     rows,
     summary: [
-      { label: 'Locations / jobs', value: sortedGroups.length.toString() },
+      { label: 'Properties / jobs', value: `${sortedProperties.length} / ${jobCount}` },
       { label: 'Total hours', value: `${roundHours(totalHours).toFixed(2)}h` },
       { label: 'Estimated pay', value: formatMoney(totalPay) },
       { label: 'Open entries excluded', value: detail.exceptions.some((exception) => exception.message.includes('open')) ? 'Yes' : 'No' },

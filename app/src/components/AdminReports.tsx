@@ -474,10 +474,10 @@ function ReportPreview({ model }: { model: ReportModel }) {
           </thead>
           <tbody>
             {previewRows.map((row, index) => {
-              if (row.rowKind === 'group') {
+              if (row.rowKind === 'property' || row.rowKind === 'group') {
                 return (
                   <tr key={index} className={reportRowClass(row)}>
-                    <td className="px-3 py-2 font-bold" colSpan={model.columns.length}>{formatPreviewCell(row.description)}</td>
+                    <td className={`px-3 py-2 font-bold ${row.rowKind === 'group' ? 'pl-6' : ''}`} colSpan={model.columns.length}>{formatPreviewCell(row.description)}</td>
                   </tr>
                 );
               }
@@ -507,15 +507,19 @@ function ReportPreview({ model }: { model: ReportModel }) {
 
 function reportRowClass(row: Record<string, unknown>) {
   if (row.entryStatus === 'Open') return 'bg-warn-bg';
-  if (row.rowKind === 'group') return 'bg-ink text-card';
+  if (row.rowKind === 'property') return 'bg-ink text-card';
+  if (row.rowKind === 'group') return 'bg-badge-neutral';
   if (row.rowKind === 'total') return 'bg-card-alt font-bold';
+  if (row.rowKind === 'propertyTotal') return 'bg-badge-neutral font-bold';
   if (row.rowKind === 'grandTotal') return 'bg-accent text-white font-bold';
   return '';
 }
 
 function reportCellClass(row: Record<string, unknown>, columnKey: string, align?: 'left' | 'right' | 'center') {
   const alignment = align === 'right' ? 'text-right tabular-nums' : align === 'center' ? 'text-center' : '';
-  const indent = row.rowKind === 'detail' && columnKey === 'description' ? 'pl-8' : '';
+  const indent = columnKey === 'description'
+    ? (row.rowKind === 'detail' ? 'pl-10' : row.rowKind === 'total' ? 'pl-6' : '')
+    : '';
   return `${alignment} ${indent}`;
 }
 
