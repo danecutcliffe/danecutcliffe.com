@@ -463,7 +463,7 @@ function ReportPreview({ model }: { model: ReportModel }) {
 
       <div className="mt-4 overflow-x-auto rounded-md border border-app-border">
         <table className="min-w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-card text-xs uppercase text-muted lg:top-16">
+          <thead className="sticky top-0 z-10 bg-card text-xs uppercase text-muted lg:static">
             <tr>
               {model.columns.map((column) => (
                 <th key={column.key} className={`border-b border-app-border px-3 py-2 font-bold ${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : 'text-left'}`}>
