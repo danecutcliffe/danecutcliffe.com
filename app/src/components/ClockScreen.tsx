@@ -29,6 +29,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
   const [switchPropertyId, setSwitchPropertyId] = useState(selectableJobs[1]?.jobSiteId ?? firstSelectableJob?.jobSiteId ?? unassignedPropertyId);
   const [switchJobId, setSwitchJobId] = useState(selectableJobs[1]?.id ?? firstSelectableJob?.id ?? '');
   const [shiftNotes, setShiftNotes] = useState(openWorkEntry?.notes ?? '');
+  const [switchNote, setSwitchNote] = useState('');
   const [isSwitchMenuOpen, setIsSwitchMenuOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +169,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
               )}
 
               {!openBreakEntry && (
-                <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong disabled:opacity-50" type="button" onClick={() => setIsSwitchMenuOpen(!isSwitchMenuOpen)} disabled={isBusy}>
+                <button className="min-h-12 rounded-md border border-input-border px-4 font-bold text-muted-strong disabled:opacity-50" type="button" onClick={() => { setSwitchNote(''); setIsSwitchMenuOpen(!isSwitchMenuOpen); }} disabled={isBusy}>
                   {isSwitchMenuOpen ? 'Cancel Switch' : 'Switch Jobs'}
                 </button>
               )}
@@ -189,7 +190,11 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
                       </select>
                     </label>
                   </div>
-                  <button className="mt-3 min-h-11 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-50" type="button" onClick={() => runAction(async () => { const gps = await captureGps(); await service.switchJob({ userId: profile.id, fromEntryId: openWorkEntry.id, toJobCodeId: switchJobId, at: new Date().toISOString(), gps }); setIsSwitchMenuOpen(false); })} disabled={isBusy || !switchJobId}>Confirm Switch</button>
+                  <label className="mt-2 block text-sm font-semibold text-muted">
+                    Note for the job you're leaving
+                    <textarea className="mt-1.5 min-h-20 w-full rounded-md border border-input-border bg-card p-3 text-base" value={switchNote} onChange={(event) => setSwitchNote(event.target.value)} placeholder="Required before switching" />
+                  </label>
+                  <button className="mt-3 min-h-11 w-full rounded-md bg-accent px-4 font-bold text-white disabled:opacity-50" type="button" onClick={() => runAction(async () => { const gps = await captureGps(); await service.switchJob({ userId: profile.id, fromEntryId: openWorkEntry.id, toJobCodeId: switchJobId, at: new Date().toISOString(), gps, note: switchNote }); setSwitchNote(''); setIsSwitchMenuOpen(false); })} disabled={isBusy || !switchJobId || !switchNote.trim()}>Confirm Switch</button>
                 </div>
               )}
 

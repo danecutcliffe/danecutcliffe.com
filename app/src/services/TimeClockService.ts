@@ -93,6 +93,8 @@ export interface TimeClockService {
     toJobCodeId: string;
     at: string;
     gps?: GpsPoint | null;
+    /** Note describing the work segment being closed by the switch. Required non-blank; no minimum length. */
+    note: string;
   }): Promise<{ closedEntry: TimeEntry; openedEntry: TimeEntry }>;
 
   updateEntryNotes(params: {

@@ -287,6 +287,7 @@ describe('SupabaseTimeClockService employee punch guardrails', () => {
       toJobCodeId: 'job-2',
       at: '1999-01-01T00:00:00.000Z',
       gps: { status: 'captured', lat: 46.2382, lng: -63.1311 },
+      note: 'Wrapped exterior trim',
     });
 
     expect(result.closedEntry.id).toBe('closed-entry');
@@ -296,7 +297,42 @@ describe('SupabaseTimeClockService employee punch guardrails', () => {
       p_to_job_code_id: 'job-2',
       p_clock_lat: 46.2382,
       p_clock_lng: -63.1311,
+      p_note: 'Wrapped exterior trim',
     });
+  });
+
+  it('rejects a blank switch note before calling the RPC', async () => {
+    const { service, rpc } = createFakeClient();
+
+    await expect(service.switchJob({
+      userId: employeeId,
+      fromEntryId: 'entry-1',
+      toJobCodeId: 'job-2',
+      at: '1999-01-01T00:00:00.000Z',
+      note: '   ',
+    })).rejects.toThrow('Add a shift note before switching jobs.');
+    expect(rpc).not.toHaveBeenCalledWith('employee_switch_job', expect.anything());
+  });
+
+  it('passes a trimmed note to the switch RPC for the closed segment', async () => {
+    const closedEntry = timeEntryRow({ id: 'closed-entry', clock_out: '2026-06-04T14:00:00.000Z', notes: 'Framing done' });
+    const openedEntry = timeEntryRow({ id: 'opened-entry', job_code_id: 'job-2' });
+    const { service, rpc } = createFakeClient({
+      rpcResults: {
+        employee_switch_job: { closedEntry, openedEntry },
+      },
+    });
+
+    await service.switchJob({
+      userId: employeeId,
+      fromEntryId: 'entry-1',
+      toJobCodeId: 'job-2',
+      at: '1999-01-01T00:00:00.000Z',
+      gps: { status: 'captured', lat: 46.2382, lng: -63.1311 },
+      note: '  Framing done  ',
+    });
+
+    expect(rpc).toHaveBeenCalledWith('employee_switch_job', expect.objectContaining({ p_note: 'Framing done' }));
   });
 
   it('rejects punch attempts for anyone other than the signed-in user', async () => {

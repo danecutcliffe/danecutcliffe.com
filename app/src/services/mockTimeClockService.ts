@@ -775,7 +775,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     return cloneEntry(entry);
   },
 
-  async switchJob({ userId, fromEntryId, toJobCodeId, at, gps }) {
+  async switchJob({ userId, fromEntryId, toJobCodeId, at, gps, note }) {
     await delay();
     assertCanPunchFor(userId);
     assertSelectableJobCode(toJobCodeId);
@@ -790,8 +790,10 @@ export const mockTimeClockService: AdminTimeClockService = {
     assertTimeEntryUnlocked(fromEntry.userId, fromEntry.clockIn, at, 'editing');
     assertTimeEntryUnlocked(userId, at, null, 'adding time');
     assertNoClosedWorkOverlap({ ...fromEntry, clockOut: at });
+    if (!note?.trim()) throw new Error('Add a shift note before switching jobs.');
     fromEntry.clockOut = at;
     applyClockOutGps(fromEntry, gps);
+    fromEntry.notes = note.trim();
     const openedEntry: TimeEntry = {
       id: makeId('entry'),
       userId,

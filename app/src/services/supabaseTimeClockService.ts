@@ -278,14 +278,17 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     return mapTimeEntry(row);
   }
 
-  async switchJob({ userId, fromEntryId, toJobCodeId, at, gps }: { userId: string; fromEntryId: string; toJobCodeId: string; at: string; gps?: GpsPoint | null }) {
+  async switchJob({ userId, fromEntryId, toJobCodeId, at, gps, note }: { userId: string; fromEntryId: string; toJobCodeId: string; at: string; gps?: GpsPoint | null; note: string }) {
     await this.assertCanPunchFor(userId);
+    const trimmedNote = note.trim();
+    if (!trimmedNote) throw new Error('Add a shift note before switching jobs.');
     const result = unwrap(
       await this.client.rpc('employee_switch_job', {
         p_from_entry_id: fromEntryId,
         p_to_job_code_id: toJobCodeId,
         p_clock_lat: capturedLat(gps),
         p_clock_lng: capturedLng(gps),
+        p_note: trimmedNote,
       }) as SupabaseResponse<SwitchJobRpcResult>,
       'Unable to switch jobs.',
     );
