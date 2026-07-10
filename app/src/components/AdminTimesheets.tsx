@@ -576,15 +576,16 @@ function PunchGpsCue({ lat, lng, site }: { lat?: number | null; lng?: number | n
 }
 
 function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDelete }: { entry: TimeEntry; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; onCancel: () => void; onSave: (patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>) => void; onDelete: () => void }) {
-  const initialClockIn = splitAtlanticDateTimeInput(entry.clockIn);
-  const initialClockOut = entry.clockOut ? splitAtlanticDateTimeInput(entry.clockOut) : { date: initialClockIn.date, time: '' };
-  const [jobCodeId, setJobCodeId] = useState(entry.jobCodeId ?? '');
+  const [originalEntry] = useState(entry);
+  const initialClockIn = splitAtlanticDateTimeInput(originalEntry.clockIn);
+  const initialClockOut = originalEntry.clockOut ? splitAtlanticDateTimeInput(originalEntry.clockOut) : { date: initialClockIn.date, time: '' };
+  const [jobCodeId, setJobCodeId] = useState(originalEntry.jobCodeId ?? '');
   const [clockInDate, setClockInDate] = useState(initialClockIn.date);
   const [clockInTime, setClockInTime] = useState(initialClockIn.time);
   const [clockOutDate, setClockOutDate] = useState(initialClockOut.date);
   const [clockOutTime, setClockOutTime] = useState(initialClockOut.time);
-  const [clockOutDateEdited, setClockOutDateEdited] = useState(Boolean(entry.clockOut));
-  const [notes, setNotes] = useState(entry.notes ?? '');
+  const [clockOutDateEdited, setClockOutDateEdited] = useState(Boolean(originalEntry.clockOut));
+  const [notes, setNotes] = useState(originalEntry.notes ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const clockIn = combineManualDateTime(clockInDate, clockInTime);
   const clockOut = combineManualDateTime(clockOutDate, clockOutTime);
@@ -602,7 +603,7 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
         requireJobCode={entry.eventType === 'work'}
         requireNotes={false}
         onCancel={onCancel}
-        onSave={() => onSave({ jobCodeId: jobCodeId || null, clockIn: parseAtlanticDateTimeInput(clockIn), clockOut: resolveEditedClockOutForSave(clockOut, entry.clockOut ?? null), notes })}
+        onSave={() => onSave(buildEntryEditorPatch({ entry: originalEntry, jobCodeId, clockIn, clockOut, notes }))}
         submitLabel="Save Entry"
         jobSites={jobSites}
         jobCodes={jobCodes}
@@ -614,7 +615,7 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
         setClockOut={() => undefined}
         notes={notes}
         setNotes={setNotes}
-        requireClockOut={entry.eventType === 'break' && !entry.clockOut}
+        requireClockOut={originalEntry.eventType === 'break' && !originalEntry.clockOut}
         timeFields={(
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <ManualDateTimeInput label="Punch in" date={clockInDate} time={clockInTime} setDate={setClockInDate} setTime={setClockInTime} />
@@ -740,6 +741,33 @@ function splitAtlanticDateTimeInput(input: string) {
 
 export function resolveEditedClockOutForSave(clockOut: string, existingClockOut: string | null) {
   return clockOut ? parseAtlanticDateTimeInput(clockOut) : existingClockOut ?? null;
+}
+
+export function buildEntryEditorPatch({
+  entry,
+  jobCodeId,
+  clockIn,
+  clockOut,
+  notes,
+}: {
+  entry: TimeEntry;
+  jobCodeId: string;
+  clockIn: string;
+  clockOut: string;
+  notes: string;
+}): Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>> {
+  const patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>> = {};
+  const nextJobCodeId = jobCodeId || null;
+  const displayedClockIn = formatAtlanticDateTimeInput(entry.clockIn);
+  const displayedClockOut = entry.clockOut ? formatAtlanticDateTimeInput(entry.clockOut) : '';
+  const resolvedClockOut = resolveEditedClockOutForSave(clockOut, entry.clockOut ?? null);
+
+  if (nextJobCodeId !== entry.jobCodeId) patch.jobCodeId = nextJobCodeId;
+  if (clockIn !== displayedClockIn) patch.clockIn = parseAtlanticDateTimeInput(clockIn);
+  if (clockOut !== displayedClockOut && resolvedClockOut !== entry.clockOut) patch.clockOut = resolvedClockOut;
+  if (notes !== (entry.notes ?? '')) patch.notes = notes;
+
+  return patch;
 }
 
 function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSave }: { employee: Profile; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; onCancel: () => void; onSave: (values: { jobCodeId: string | null; eventType: TimeEntry['eventType']; clockIn: string; clockOut: string | null; notes: string }) => void }) {

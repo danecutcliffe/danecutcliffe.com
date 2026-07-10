@@ -122,9 +122,12 @@ test.describe('Time app smoke and layout contract', () => {
     await expect(editEntryModal.getByLabel('Punch in time')).not.toHaveValue('');
     await expect(editEntryModal.getByLabel('Punch out date')).not.toHaveValue('');
     await expect(editEntryModal.getByLabel('Punch out time')).toHaveValue('');
+    const jobCodeSelect = editEntryModal.getByLabel('Job code');
+    await jobCodeSelect.selectOption('job-cumberland');
     await editEntryModal.getByRole('button', { name: 'Save Entry' }).click();
     await expect(page.locator('.fixed')).toHaveCount(0);
     await expect(openEntryCard.getByText('In progress')).toBeVisible();
+    await expect(openEntryCard).toContainText('Condo renovation');
 
     await page.locator('#employee-select').selectOption('profile-stress-empty');
     await expect(page.getByText('No entries for this week.')).toHaveCount(1);
