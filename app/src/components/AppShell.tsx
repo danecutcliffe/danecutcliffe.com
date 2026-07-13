@@ -156,12 +156,13 @@ export function AppShell({ activeTab, currentProfile, signedInProfile, isLoading
                       <ul className="mb-1 ml-3 mt-0.5 border-l border-app-border pl-2">
                         {tab.sections.map((s) => (
                           <li key={s.id}>
-                            <a
-                              href={`#${s.id}`}
-                              className="block rounded-md px-2 py-1.5 text-xs font-medium text-muted transition hover:bg-badge-neutral hover:text-ink"
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById(s.id)?.scrollIntoView({ block: 'start' })}
+                              className="block w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted transition hover:bg-badge-neutral hover:text-ink"
                             >
                               {s.label}
-                            </a>
+                            </button>
                           </li>
                         ))}
                       </ul>

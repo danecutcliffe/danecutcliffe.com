@@ -158,3 +158,94 @@ test.describe('Time app smoke and layout contract', () => {
     await expect(page.locator('.fixed')).toHaveCount(0);
   });
 });
+
+test.describe('desktop hash route contract', () => {
+  test('keeps employee routes refreshable without subsection hash collisions', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop route writing starts at the lg breakpoint.');
+
+    await page.goto('/?source=route-test');
+    await expect(page.getByRole('heading', { name: 'Time Clock' })).toBeVisible();
+    await expect(page).toHaveURL(/\?source=route-test$/);
+
+    await clickAppTab(page, 'Timesheets', false);
+    await expect(page.locator('#daily-breakdown')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+    expect(new URL(page.url()).search).toBe('?source=route-test');
+
+    const mainNavigation = page.getByRole('navigation', { name: 'Main navigation' });
+    await mainNavigation.getByRole('button', { name: 'Time Cards', exact: true }).click();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+
+    await page.reload();
+    await expect(page.locator('#daily-breakdown')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+
+    await clickAppTab(page, 'Settings', false);
+    await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/settings');
+
+    await clickAppTab(page, 'Clock', false);
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+  });
+
+  test('keeps admin routes coherent and corrects role-invalid routes', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop route writing starts at the lg breakpoint.');
+
+    await waitForApp(page);
+    await page.getByRole('button', { name: 'admin' }).click();
+    await expect(page.locator('#working-now')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+
+    await clickAppTab(page, 'Reports', false);
+    await expect(page.locator('#payroll-export')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/reports');
+
+    const mainNavigation = page.getByRole('navigation', { name: 'Main navigation' });
+    await mainNavigation.getByRole('button', { name: 'Payroll Reports', exact: true }).click();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/reports');
+
+    await clickAppTab(page, 'Timesheets', false);
+    await expect(page.locator('#ts-summary')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+
+    await page.getByRole('button', { name: 'employee', exact: true }).click();
+    await expect(page.getByText('Jamie Carpenter')).toBeVisible();
+    await page.evaluate(() => { window.location.hash = '#/reports'; });
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+    await expect(page.getByRole('button', { name: /Clock In|Switch Job|End Break/ })).toBeVisible();
+  });
+
+  test('preserves auth callback fragments and normalizes across the desktop breakpoint', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop resize behavior requires a resizable desktop context.');
+
+    await page.goto('/#access_token=test-token&type=recovery');
+    await expect(page.getByRole('heading', { name: 'Time Clock' })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#access_token=test-token&type=recovery');
+
+    await page.goto('/#/timesheets');
+    await expect(page.locator('#daily-breakdown')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+
+    await page.setViewportSize({ width: 430, height: 932 });
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/timesheets');
+  });
+});
+
+test.describe('mobile hash route contract', () => {
+  test('keeps ordinary navigation clean and normalizes an incoming route', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'This contract applies below the desktop route breakpoint.');
+
+    await page.goto('/#/timesheets');
+    await expect(page.locator('#daily-breakdown')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+
+    await clickAppTab(page, 'Settings', true);
+    await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+
+    await clickAppTab(page, 'Clock', true);
+    await expect.poll(() => new URL(page.url()).hash).toBe('');
+  });
+});

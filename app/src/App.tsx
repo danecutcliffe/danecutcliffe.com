@@ -23,11 +23,21 @@ const adminDefaultTab: AppTab = 'dashboard';
 const employeeTabs: AppTab[] = ['clock', 'timesheets', 'scope', 'settings'];
 const employeeTabsWithoutScope: AppTab[] = ['clock', 'timesheets', 'settings'];
 const adminTabs: AppTab[] = ['dashboard', 'timesheets', 'employees', 'reports', 'scope-builder', 'scope'];
+const allTabs: AppTab[] = ['clock', 'timesheets', 'settings', 'dashboard', 'employees', 'reports', 'scope', 'scope-builder'];
+
+// Each main page keeps a discrete hash route (e.g. #/timesheets) so a refresh
+// stays on the prevailing page. Hash routing needs no server support on
+// GitHub Pages. Foreign fragments (Supabase auth callbacks like
+// #access_token=...) are never treated as tabs or overwritten.
+function tabFromHash(): AppTab | null {
+  const match = window.location.hash.match(/^#\/([a-z-]+)$/);
+  return match && allTabs.includes(match[1] as AppTab) ? (match[1] as AppTab) : null;
+}
 
 const hasScopeAccess = (profile: Profile | null) => profile?.role === 'admin' || profile?.canAccessScopes !== false;
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<AppTab>('clock');
+  const [activeTab, setActiveTab] = useState<AppTab>(() => tabFromHash() ?? 'clock');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [jobSites, setJobSites] = useState<JobSite[]>([]);
@@ -177,6 +187,36 @@ export default function App() {
     setStagingViewRole(role);
     setActiveTab(role === 'admin' ? adminDefaultTab : employeeDefaultTab);
   };
+
+  useEffect(() => {
+    const desktopRouteViewport = window.matchMedia('(min-width: 1024px)');
+    const syncRouteHash = () => {
+      const currentHash = window.location.hash;
+      if (currentHash && !currentHash.startsWith('#/')) return;
+      // The landing pages keep the bare URL the app has always had; only pages
+      // beyond them get a route. URL writing is desktop-only by request -
+      // phones keep the classic clean URL (incoming route links still open the
+      // right page on any device, then the URL normalizes back to bare).
+      const isLandingTab = activeTab === 'clock' || activeTab === 'dashboard';
+      const nextHash = desktopRouteViewport.matches && !isLandingTab ? `#/${activeTab}` : '';
+      if (currentHash !== nextHash) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+      }
+    };
+
+    syncRouteHash();
+    desktopRouteViewport.addEventListener('change', syncRouteHash);
+    return () => desktopRouteViewport.removeEventListener('change', syncRouteHash);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const tab = tabFromHash();
+      if (tab) setActiveTab(tab);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   const changeTab = (tab: AppTab) => {
     setAdminTimesheetEmployeeId(undefined);
