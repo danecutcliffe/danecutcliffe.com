@@ -6,6 +6,7 @@ import { jobDisplayNameById, jobSiteById } from '../utils/jobs';
 import { buildLabourCostBreakdownAcrossPayPeriods, type LabourCostPropertyBreakdown } from '../utils/labour';
 import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSummaryReport, type ReportModel } from '../utils/reportModels';
 import { buildReportContextEntries, buildReportWarningEntries } from '../utils/reportContext';
+import { buildPayPeriodOptions, resolveReportRange, type ReportRangeMode } from '../utils/reportRange';
 import { buildPayrollExportReadiness } from '../utils/reportReadiness';
 import { computeTimeSummary } from '../utils/timecardHours';
 import { downloadReportXlsx } from '../utils/xlsxReports';
@@ -33,7 +34,9 @@ type ExportBlock = { title: string; body: string; items?: string[] };
 
 export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs, payPeriodSettings, grossUpMultipliers }: AdminReportsProps) {
   const currentPeriod = useMemo(() => getPayPeriodForDate(payPeriodSettings), [payPeriodSettings]);
+  const [rangeMode, setRangeMode] = useState<ReportRangeMode>('single');
   const [reportPeriodStart, setReportPeriodStart] = useState(currentPeriod.start);
+  const [reportPeriodThroughStart, setReportPeriodThroughStart] = useState(currentPeriod.start);
   const [isLabourCostsOpen, setIsLabourCostsOpen] = useState(true);
   const [openPropertyIds, setOpenPropertyIds] = useState<Record<string, boolean>>({});
   const [reportType, setReportType] = useState<ReportType>('detailed');
@@ -54,12 +57,24 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       : jobCodes.filter((job) => job.jobSiteId && propertyIds.includes(job.jobSiteId)),
     [jobCodes, propertyIds],
   );
-  const reportPeriodEnd = addDaysToDateKey(reportPeriodStart, payPeriodSettings.lengthDays - 1);
-  const payPeriodOptions = useMemo(() => buildPayPeriodOptions(payPeriodSettings, entries, currentPeriod.start, reportPeriodStart), [currentPeriod.start, entries, payPeriodSettings, reportPeriodStart]);
+  const reportRange = useMemo(() => resolveReportRange({
+    mode: rangeMode,
+    periodStart: reportPeriodStart,
+    throughPeriodStart: reportPeriodThroughStart,
+    settings: payPeriodSettings,
+    entries,
+    currentPeriodStart: currentPeriod.start,
+  }), [currentPeriod.start, entries, payPeriodSettings, rangeMode, reportPeriodStart, reportPeriodThroughStart]);
+  const reportPeriodStartKey = reportRange.start;
+  const reportPeriodEnd = reportRange.end;
+  const payPeriodOptions = useMemo(
+    () => buildPayPeriodOptions(payPeriodSettings, entries, currentPeriod.start, [reportPeriodStart, reportPeriodThroughStart]),
+    [currentPeriod.start, entries, payPeriodSettings, reportPeriodStart, reportPeriodThroughStart],
+  );
   const periodEntries = useMemo(() => entries.filter((entry) => {
     const key = getAtlanticDateKey(entry.clockIn);
-    return key >= reportPeriodStart && key <= reportPeriodEnd;
-  }), [entries, reportPeriodEnd, reportPeriodStart]);
+    return key >= reportPeriodStartKey && key <= reportPeriodEnd;
+  }), [entries, reportPeriodEnd, reportPeriodStartKey]);
   const filteredEntries = useMemo(
     () => periodEntries.filter((entry) => {
       if (employeeIds.length > 0 && !employeeIds.includes(entry.userId)) return false;
@@ -74,8 +89,8 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   );
   const filteredWorkEntries = useMemo(() => filteredEntries.filter((entry) => entry.eventType === 'work'), [filteredEntries]);
   const reportContextEntries = useMemo(
-    () => buildReportContextEntries(entries, filteredEntries, filteredWorkEntries, reportPeriodStart, reportPeriodEnd),
-    [entries, filteredEntries, filteredWorkEntries, reportPeriodEnd, reportPeriodStart],
+    () => buildReportContextEntries(entries, filteredEntries, filteredWorkEntries, reportPeriodStartKey, reportPeriodEnd),
+    [entries, filteredEntries, filteredWorkEntries, reportPeriodEnd, reportPeriodStartKey],
   );
   const reportWarningEntries = useMemo(
     () => buildReportWarningEntries(periodEntries, filteredEntries, filteredWorkEntries),
@@ -94,7 +109,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     }),
     [entries, grossUpMultipliers, jobCodes, jobSites, payPeriodSettings, profiles],
   );
-  const detailedFilename = `time-detail-${reportPeriodStart}_to_${reportPeriodEnd}.csv`;
+  const detailedFilename = `time-detail-${reportPeriodStartKey}_to_${reportPeriodEnd}.csv`;
   const detailedTimecardModel = useMemo(() => buildDetailedTimecardReport({
     entries: filteredEntries,
     contextEntries: reportContextEntries,
@@ -103,9 +118,10 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart: reportPeriodStart,
+    periodStart: reportPeriodStartKey,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
+    periodLabel: reportRange.reportLabel,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStartKey, reportRange.reportLabel, reportWarningEntries, profiles]);
   const detailedCsv = useMemo(() => buildDetailedCsv(detailedTimecardModel), [detailedTimecardModel]);
   const hoursByLocationModel = useMemo(() => buildHoursByLocationReport({
     entries: filteredEntries,
@@ -115,9 +131,10 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart: reportPeriodStart,
+    periodStart: reportPeriodStartKey,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
+    periodLabel: reportRange.reportLabel,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStartKey, reportRange.reportLabel, reportWarningEntries, profiles]);
   const payrollSummaryModel = useMemo(() => buildPayrollSummaryReport({
     entries: filteredEntries,
     contextEntries: reportContextEntries,
@@ -126,9 +143,10 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     jobSites,
     jobCodes,
     payPeriodSettings,
-    periodStart: reportPeriodStart,
+    periodStart: reportPeriodStartKey,
     periodEnd: reportPeriodEnd,
-  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStart, reportWarningEntries, profiles]);
+    periodLabel: reportRange.reportLabel,
+  }), [filteredEntries, jobCodes, jobSites, payPeriodSettings, reportContextEntries, reportPeriodEnd, reportPeriodStartKey, reportRange.reportLabel, reportWarningEntries, profiles]);
   const selectedReportModel = reportType === 'detailed'
     ? detailedTimecardModel
     : reportType === 'hoursByLocation'
@@ -136,7 +154,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
       : reportType === 'payrollSummary'
         ? payrollSummaryModel
         : null;
-  const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${reportPeriodStart}_to_${reportPeriodEnd}.xlsx`;
+  const selectedXlsxFilename = `${reportFilenamePrefix(reportType)}-${reportPeriodStartKey}_to_${reportPeriodEnd}.xlsx`;
   const canExportSelectedReport = exportFormat === 'xlsx'
     ? Boolean(selectedReportModel && selectedReportModel.rows.length > 0)
     : filteredEntries.length > 0;
@@ -149,6 +167,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
 
   useEffect(() => {
     setReportPeriodStart(currentPeriod.start);
+    setReportPeriodThroughStart(currentPeriod.start);
   }, [currentPeriod.start, payPeriodSettings.lengthDays]);
 
   useEffect(() => {
@@ -171,7 +190,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     if (selectedOpenEntryCount > 0) {
       setExportBlock({
         title: 'Cannot export as there are open entries.',
-        body: `Close ${selectedOpenEntryCount} open ${selectedOpenEntryCount === 1 ? 'entry' : 'entries'} in this pay period, then export again.`,
+        body: `Close ${selectedOpenEntryCount} open ${selectedOpenEntryCount === 1 ? 'entry' : 'entries'} in ${reportRange.spansMultiplePeriods ? 'the selected date range' : 'this pay period'}, then export again.`,
       });
       return;
     }
@@ -198,8 +217,36 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
     if (selectedReportModel) downloadReportXlsx(selectedReportModel, selectedXlsxFilename);
   };
 
-  const changePeriodStart = (start: string) => {
+  // Previous/Next slide the whole selection, so a multi-period window keeps its width.
+  const shiftPeriods = (direction: -1 | 1) => {
+    const step = direction * payPeriodSettings.lengthDays;
+    setReportPeriodStart((start) => addDaysToDateKey(start, step));
+    setReportPeriodThroughStart((start) => addDaysToDateKey(start, step));
+  };
+
+  const resetToCurrentPeriod = () => {
+    setRangeMode('single');
+    setReportPeriodStart(currentPeriod.start);
+    setReportPeriodThroughStart(currentPeriod.start);
+  };
+
+  const changeRangeMode = (mode: ReportRangeMode) => {
+    setRangeMode(mode);
+    // Entering multi-period from a single period seeds a one-period window rather
+    // than silently reusing a stale "through" value from an earlier selection.
+    if (mode === 'multiple' && reportPeriodThroughStart < reportPeriodStart) {
+      setReportPeriodThroughStart(reportPeriodStart);
+    }
+  };
+
+  const changeFromPeriod = (start: string) => {
     setReportPeriodStart(start);
+    if (start > reportPeriodThroughStart) setReportPeriodThroughStart(start);
+  };
+
+  const changeThroughPeriod = (start: string) => {
+    setReportPeriodThroughStart(start);
+    if (start < reportPeriodStart) setReportPeriodStart(start);
   };
 
   return (
@@ -256,12 +303,12 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold leading-tight">Payroll report period</h2>
-            <p className="mt-1 text-sm text-muted">{formatAtlanticDate(reportPeriodStart)} - {formatAtlanticDate(reportPeriodEnd)}</p>
+            <p className="mt-1 text-sm text-muted">{reportRange.label}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => changePeriodStart(addDaysToDateKey(reportPeriodStart, -payPeriodSettings.lengthDays))}>Previous</button>
-            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong" type="button" onClick={() => changePeriodStart(addDaysToDateKey(reportPeriodStart, payPeriodSettings.lengthDays))}>Next</button>
-            <button className="col-span-2 min-h-12 rounded-md bg-accent px-3 font-bold text-white" type="button" onClick={() => changePeriodStart(currentPeriod.start)}>Current Period</button>
+            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong disabled:opacity-50" type="button" disabled={rangeMode === 'allTime'} onClick={() => shiftPeriods(-1)}>Previous</button>
+            <button className="min-h-12 rounded-md border border-input-border px-3 font-bold text-muted-strong disabled:opacity-50" type="button" disabled={rangeMode === 'allTime'} onClick={() => shiftPeriods(1)}>Next</button>
+            <button className="col-span-2 min-h-12 rounded-md bg-accent px-3 font-bold text-white" type="button" onClick={resetToCurrentPeriod}>Current Period</button>
           </div>
         </div>
 
@@ -292,11 +339,35 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
           <ChecklistFilter filterId="properties" label="Properties" allLabel="All properties" selectedIds={propertyIds} options={jobSites.map((site) => ({ id: site.id, label: site.name }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setPropertyIds} />
           <ChecklistFilter filterId="jobs" label="Jobs" allLabel="All jobs" selectedIds={jobCodeIds} options={availableJobCodes.map((job) => ({ id: job.id, label: jobDisplayNameById(job.id, jobById, siteById) }))} openFilter={openFilter} onOpenFilterChange={setOpenFilter} onChange={setJobCodeIds} />
           <LabeledSelect
-            label="Payroll Period"
-            value={reportPeriodStart}
-            onChange={setReportPeriodStart}
-            options={payPeriodOptions}
+            label="Period Range"
+            value={rangeMode}
+            onChange={(value) => changeRangeMode(value as ReportRangeMode)}
+            options={[
+              { value: 'single', label: 'Single pay period' },
+              { value: 'multiple', label: 'Multiple pay periods' },
+              { value: 'allTime', label: 'All time' },
+            ]}
           />
+          {rangeMode === 'allTime'
+            ? <div className="hidden lg:block" aria-hidden="true" />
+            : (
+              <LabeledSelect
+                label={rangeMode === 'multiple' ? 'From Period' : 'Payroll Period'}
+                value={reportPeriodStart}
+                onChange={changeFromPeriod}
+                options={payPeriodOptions}
+              />
+            )}
+          {rangeMode === 'multiple'
+            ? (
+              <LabeledSelect
+                label="Through Period"
+                value={reportPeriodThroughStart}
+                onChange={changeThroughPeriod}
+                options={payPeriodOptions}
+              />
+            )
+            : <div className="hidden lg:block" aria-hidden="true" />}
           <LabeledSelect
             label="Export Format"
             value={exportFormat}
@@ -306,7 +377,6 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
               { value: 'detailedCsv', label: 'Detailed Time Entries CSV' },
             ]}
           />
-          <div className="hidden lg:block" aria-hidden="true" />
           <button className="min-h-12 self-start rounded-md bg-accent px-6 font-bold text-white disabled:opacity-60" type="button" disabled={!canExportSelectedReport} onClick={handleExport}>Export</button>
         </div>
       </div>
@@ -818,34 +888,6 @@ function reportFilenamePrefix(reportType: ReportType) {
   if (reportType === 'jobs') return 'job-hours';
   if (reportType === 'overtime') return 'overtime';
   return 'timecard-detail';
-}
-
-function buildPayPeriodOptions(settings: PayPeriodSettings, entries: TimeEntry[], currentPeriodStart: string, selectedPeriodStart: string) {
-  const lengthDays = Math.max(1, settings.lengthDays);
-  const entryDateKeys = entries.map((entry) => getAtlanticDateKey(entry.clockIn)).sort();
-  const earliestDateKey = entryDateKeys[0] ?? currentPeriodStart;
-  const earliestPeriodStart = getPayPeriodForDate(settings, earliestDateKey).start;
-  const latestStart = selectedPeriodStart > currentPeriodStart ? selectedPeriodStart : currentPeriodStart;
-  const options: Array<{ value: string; label: string }> = [];
-
-  for (let start = latestStart, count = 0; start >= earliestPeriodStart && count < 80; start = addDaysToDateKey(start, -lengthDays), count += 1) {
-    const end = addDaysToDateKey(start, lengthDays - 1);
-    const prefix = start === currentPeriodStart ? 'Current: ' : '';
-    options.push({
-      value: start,
-      label: `${prefix}${formatAtlanticDate(start)} - ${formatAtlanticDate(end)}`,
-    });
-  }
-
-  if (!options.some((option) => option.value === selectedPeriodStart)) {
-    const end = addDaysToDateKey(selectedPeriodStart, lengthDays - 1);
-    options.unshift({
-      value: selectedPeriodStart,
-      label: `${selectedPeriodStart === currentPeriodStart ? 'Current: ' : ''}${formatAtlanticDate(selectedPeriodStart)} - ${formatAtlanticDate(end)}`,
-    });
-  }
-
-  return options;
 }
 
 function formatMultiplier(value: number) {

@@ -157,6 +157,66 @@ test.describe('Time app smoke and layout contract', () => {
     await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.locator('.fixed')).toHaveCount(0);
   });
+
+  test('reports cover a single period, a multi-period span, and all time', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'The report range controls are laid out and verified on desktop.');
+    await waitForApp(page);
+    await page.getByRole('button', { name: 'admin' }).click();
+    await expect(page.locator('#working-now')).toBeVisible();
+
+    const payrollExport = page.locator('#payroll-export');
+    // changeRole() awaits a refresh() captured before the switch, so that stale call
+    // can re-assert the default tab a beat after we navigate away. Re-open Reports
+    // until it sticks rather than racing that one-shot bounce.
+    await expect.poll(async () => {
+      await clickAppTab(page, 'Reports', isMobile);
+      await page.waitForTimeout(250);
+      return payrollExport.isVisible();
+    }, { timeout: 15_000 }).toBe(true);
+
+    const reportDetail = page.locator('#report-detail');
+    const rangeSelect = page.getByLabel('Period Range');
+
+    // Single period is the default and must stay a bare date span.
+    await expect(page.getByLabel('Payroll Period')).toBeVisible();
+    await expect(page.getByLabel('Through Period')).toHaveCount(0);
+    await expect(payrollExport).not.toContainText('pay periods');
+
+    // Fixture time all sits in the current period, so step back once to make a second
+    // period selectable. Previous must slide the whole window, not just one edge.
+    const currentPeriod = await page.getByLabel('Payroll Period').inputValue();
+    await payrollExport.getByRole('button', { name: 'Previous' }).click();
+    const priorPeriod = await page.getByLabel('Payroll Period').inputValue();
+    expect(priorPeriod).not.toBe(currentPeriod);
+
+    await rangeSelect.selectOption('multiple');
+    const fromSelect = page.getByLabel('From Period');
+    const throughSelect = page.getByLabel('Through Period');
+    await expect(fromSelect).toHaveValue(priorPeriod);
+    await expect(throughSelect).toHaveValue(priorPeriod);
+    await expect(payrollExport).not.toContainText('pay periods');
+
+    await throughSelect.selectOption(currentPeriod);
+    await expect(payrollExport).toContainText('(2 pay periods)');
+    await expect(reportDetail).toContainText('(2 pay periods)');
+
+    // Pulling "through" back before "from" must drag "from" with it, never invert.
+    await throughSelect.selectOption(priorPeriod);
+    await expect(fromSelect).toHaveValue(priorPeriod);
+    await expect(payrollExport).not.toContainText('pay periods');
+
+    await rangeSelect.selectOption('allTime');
+    await expect(page.getByLabel('From Period')).toHaveCount(0);
+    await expect(page.getByLabel('Through Period')).toHaveCount(0);
+    await expect(payrollExport).toContainText('All time:');
+    await expect(reportDetail).toContainText('All time:');
+    await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await expectNoDocumentOverflow(page);
+
+    await page.getByRole('button', { name: 'Current Period' }).click();
+    await expect(rangeSelect).toHaveValue('single');
+    await expect(payrollExport).not.toContainText('All time:');
+  });
 });
 
 test.describe('desktop hash route contract', () => {

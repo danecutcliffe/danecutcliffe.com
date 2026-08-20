@@ -40,6 +40,12 @@ interface BuildDetailedTimecardReportParams {
   payPeriodSettings: PayPeriodSettings;
   periodStart: string;
   periodEnd: string;
+  /**
+   * How the selected range reads in titles and totals. Defaults to the bare
+   * `start to end` span; multi-period and all-time selections pass a label that
+   * says how many pay periods are covered.
+   */
+  periodLabel?: string;
   now?: Date;
 }
 
@@ -75,6 +81,7 @@ export function buildDetailedTimecardReport({
   payPeriodSettings,
   periodStart,
   periodEnd,
+  periodLabel,
   now = new Date(),
 }: BuildDetailedTimecardReportParams): ReportModel {
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -127,7 +134,7 @@ export function buildDetailedTimecardReport({
 
   return {
     title: 'Timecard Detail',
-    subtitle: `${periodStart} to ${periodEnd} | OT after ${payPeriodSettings.weeklyOvertimeThresholdHours} paid hours/week`,
+    subtitle: `${periodLabel ?? `${periodStart} to ${periodEnd}`} | OT after ${payPeriodSettings.weeklyOvertimeThresholdHours} paid hours/week`,
     columns: DETAIL_COLUMNS,
     rows,
     summary: [
@@ -262,6 +269,8 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
   const totalPay = sortedProperties.reduce((total, property) => total + property.estPay, 0);
   rows.push({
     rowKind: 'grandTotal',
+    // The subtitle right above already states how many pay periods this covers, so the
+    // total row stays a plain span rather than nesting a parenthetical inside one.
     description: `Total (${params.periodStart} - ${params.periodEnd})`,
     regularHours: roundHours(totalRegularHours),
     otHours: roundHours(totalOtHours),
@@ -271,7 +280,7 @@ export function buildHoursByLocationReport(params: BuildPeriodReportParams): Rep
 
   return {
     title: 'Hours by Location',
-    subtitle: `${params.periodStart} to ${params.periodEnd}`,
+    subtitle: params.periodLabel ?? `${params.periodStart} to ${params.periodEnd}`,
     columns: [
       { key: 'description', label: 'Property / Job / Employee', width: 44 },
       { key: 'regularHours', label: 'Reg', width: 11, format: 'hours', align: 'right' },
@@ -342,7 +351,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
 
   return {
     title: 'Payroll Summary',
-    subtitle: `${params.periodStart} to ${params.periodEnd} | Payroll review`,
+    subtitle: `${params.periodLabel ?? `${params.periodStart} to ${params.periodEnd}`} | Payroll review`,
     columns: [
       { key: 'firstName', label: 'First Name', width: 14 },
       { key: 'lastName', label: 'Last Name', width: 18 },
