@@ -1,4 +1,5 @@
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
+import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getAtlanticDateKey } from './time';
 import { jobDisplayNameById, jobPropertyName, jobSiteById } from './jobs';
 import { computeEntryHours } from './timecardHours';
@@ -305,12 +306,14 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
 
   detail.rows.forEach((row) => {
     if (row.entryStatus === 'Open') return;
-    const key = `${row.employee}|${row.property}|${row.jobCode}`;
+    const payCycleEnding = getPayPeriodForDate(params.payPeriodSettings, String(row.date)).end;
+    const key = `${payCycleEnding}|${row.employee}|${row.property}|${row.jobCode}`;
     const current = grouped.get(key) ?? {
       employee: row.employee,
       employeeType: row.employeeType,
       property: row.property,
       jobCode: row.jobCode,
+      payCycleEnding,
       regularHours: 0,
       otHours: 0,
       totalHours: 0,
@@ -324,7 +327,10 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
   });
 
   const profileByName = new Map(params.profiles.map((profile) => [`${profile.firstName} ${profile.lastName}`, profile]));
-  const rows = [...grouped.values()].sort((a, b) => `${a.employee}${a.property}${a.jobCode}`.localeCompare(`${b.employee}${b.property}${b.jobCode}`)).map((row) => {
+  const rows = [...grouped.values()].sort((a, b) => (
+    String(b.payCycleEnding).localeCompare(String(a.payCycleEnding))
+      || `${a.employee}${a.property}${a.jobCode}`.localeCompare(`${b.employee}${b.property}${b.jobCode}`)
+  )).map((row) => {
     const [firstName, ...lastNameParts] = String(row.employee).split(' ');
     const profile = profileByName.get(String(row.employee));
     const regularHours = Number(row.regularHours ?? 0);
@@ -340,7 +346,7 @@ export function buildPayrollSummaryReport(params: BuildPeriodReportParams): Repo
       estPay: calculatePayrollGrossPay({ regularHours, overtimeHours: otHours, hourlyRate: rate }),
       name: row.employee,
       jobCode: row.jobCode,
-      payCycleEnding: params.periodEnd,
+      payCycleEnding: row.payCycleEnding,
       employeeType: row.employeeType,
     };
   });

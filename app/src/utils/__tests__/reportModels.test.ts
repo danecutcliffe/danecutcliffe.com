@@ -218,6 +218,54 @@ describe('filtered report context', () => {
 
     expect(payrollSummary.rows[0].regularHours).toBe(7.48);
     expect(payrollSummary.rows[0].estPay).toBe(134.64);
+    expect(payrollSummary.rows[0].payCycleEnding).toBe('2026-06-14');
+  });
+
+  it('preserves pay-period boundaries in payroll summary without splitting hours by location', async () => {
+    resetEntrySequence();
+    const firstPeriodWork = workEntry({
+      id: 'first-period-work',
+      jobCodeId: 'job-qa0358',
+      clockIn: '2026-06-02T12:00:00.000Z',
+      hours: 4,
+    });
+    const secondPeriodWork = workEntry({
+      id: 'second-period-work',
+      jobCodeId: 'job-qa0358',
+      clockIn: '2026-06-16T12:00:00.000Z',
+      hours: 3,
+    });
+    const params = {
+      entries: [firstPeriodWork, secondPeriodWork],
+      profiles,
+      jobSites,
+      jobCodes,
+      payPeriodSettings,
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-28',
+      periodLabel: '2026-06-01 to 2026-06-28 (2 pay periods)',
+      now: new Date('2026-06-17T12:00:00.000Z'),
+    };
+
+    const payrollSummary = buildPayrollSummaryReport(params);
+    const hoursByLocation = buildHoursByLocationReport(params);
+    const payrollRows = payrollSummary.rows.filter((row) => row.jobCode === 'QA0358');
+    const locationEmployeeRows = hoursByLocation.rows.filter((row) => row.rowKind === 'detail' && row.description === 'Emmanuel Ero');
+
+    expect(payrollRows).toHaveLength(2);
+    expect(payrollRows.map((row) => row.payCycleEnding)).toEqual(['2026-06-28', '2026-06-14']);
+    expect(payrollRows.map((row) => row.totalHours)).toEqual([3, 4]);
+    expect(locationEmployeeRows).toHaveLength(1);
+    expect(locationEmployeeRows[0].totalHours).toBe(7);
+
+    const workbook = await buildReportWorkbook(payrollSummary);
+    const sheet = workbook.getWorksheet('Payroll Summary');
+    if (!sheet) throw new Error('Payroll Summary worksheet was not generated.');
+    const exportedCycleEndings = payrollRows.map((_, index) => sheet.getRow(index + 5).getCell(10).value);
+    expect(exportedCycleEndings.map((value) => value instanceof Date ? value.toISOString().slice(0, 10) : value)).toEqual([
+      '2026-06-28',
+      '2026-06-14',
+    ]);
   });
 
   it('reconciles detailed, location, payroll summary, and XLSX outputs on unpaid-break scenarios', async () => {
