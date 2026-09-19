@@ -417,7 +417,8 @@ function UnitEditor({ records, buildings, entities, options, selectedId, onSelec
     setValue({ ...value, [key]: ids, [stateKey]: ids.length > 0 ? 'known_populated' as const : 'known_empty' as const });
   };
   const computedDisplayName = value ? generateUnitDisplayName(value.unitNumber, value.premisesStreetAddress) : '';
-  const handleSave = (event: FormEvent) => { event.preventDefault(); if (value) onSave({ ...value, displayName: computedDisplayName || value.displayName }); };
+  const duplicate = value?.unitNumber.trim() ? records.find((r) => r.id !== value.id && r.buildingId === value.buildingId && r.unitNumber.trim().toLowerCase() === value.unitNumber.trim().toLowerCase()) : undefined;
+  const handleSave = (event: FormEvent) => { event.preventDefault(); if (value && !duplicate) onSave({ ...value, displayName: computedDisplayName || value.displayName }); };
   const isNew = (value?.recordRevision ?? 0) === 0;
   const newUnit = () => {
     const firstBuilding = buildings[0];
@@ -427,6 +428,7 @@ function UnitEditor({ records, buildings, entities, options, selectedId, onSelec
   };
   return <Editor title="Units"><div className="picker-row"><RecordPicker records={records} selectedId={selectedId} onSelect={onSelect} label={(record) => `${buildings.find((building) => building.id === record.buildingId)?.displayName ?? ''} · ${record.displayName}`} /><button className="secondary" onClick={newUnit}>+ New unit</button></div>{value && <form onSubmit={handleSave}>
     {computedDisplayName && <p className="resolved">Display name: <strong>{computedDisplayName}</strong></p>}
+    {duplicate && <p className="notice error">Unit number "{value.unitNumber}" already exists in this building ({buildings.find((b) => b.id === value.buildingId)?.displayName}).</p>}
     <div className="form-grid two">
     <label>Building<select value={value.buildingId} onChange={(event) => setValue({...value,buildingId:event.target.value})}><option value="">Select…</option>{buildings.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}</select></label>
     <label>Leasing entity<select value={value.entityId} onChange={(event) => setValue({...value,entityId:event.target.value})}><option value="">Select…</option>{entities.map((record) => <option key={record.id} value={record.id}>{record.legalName}</option>)}</select></label>
@@ -435,7 +437,7 @@ function UnitEditor({ records, buildings, entities, options, selectedId, onSelec
     <label>Default rental rate<span className="money-input"><span>$</span><input inputMode="decimal" value={value.defaultRentalRate ?? ''} onChange={(event) => setValue({...value,defaultRentalRate:event.target.value === '' ? null : Number(event.target.value)})} /></span></label>
     <StateSelect label="Inclusions state" value={value.inclusionConfigurationState} onChange={(state) => setValue({...value,inclusionConfigurationState:state})} />
     <StateSelect label="Responsibilities state" value={value.responsibilityConfigurationState} onChange={(state) => setValue({...value,responsibilityConfigurationState:state})} />
-  </div><TermOptions title="Included in rent" options={options.filter((option) => option.active && option.category.startsWith('included_'))} selectedIds={value.includedOptionIds} onToggle={(option,checked) => toggle('includedOptionIds',option.id,checked)} /><TermOptions title="Tenant responsibilities" options={options.filter((option) => option.active && option.category === 'tenant_responsibility')} selectedIds={value.tenantResponsibilityOptionIds} onToggle={(option,checked) => toggle('tenantResponsibilityOptionIds',option.id,checked)} /><div className="editor-actions"><button className="primary">{isNew ? 'Create Unit' : 'Save Unit'}</button>{!isNew && <button type="button" className="text-button danger" onClick={() => onArchive(value)}>Archive</button>}</div></form>}</Editor>;
+  </div><TermOptions title="Included in rent" options={options.filter((option) => option.active && option.category.startsWith('included_'))} selectedIds={value.includedOptionIds} onToggle={(option,checked) => toggle('includedOptionIds',option.id,checked)} /><TermOptions title="Tenant responsibilities" options={options.filter((option) => option.active && option.category === 'tenant_responsibility')} selectedIds={value.tenantResponsibilityOptionIds} onToggle={(option,checked) => toggle('tenantResponsibilityOptionIds',option.id,checked)} /><div className="editor-actions"><button className="primary" disabled={!!duplicate}>{isNew ? 'Create Unit' : 'Save Unit'}</button>{!isNew && <button type="button" className="text-button danger" onClick={() => onArchive(value)}>Archive</button>}</div></form>}</Editor>;
 }
 
 function StateSelect({ label, value, onChange }: { label: string; value: ConfigurationState; onChange: (value: ConfigurationState) => void }) { return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value as ConfigurationState)}><option value="unknown">Unknown / not configured</option><option value="known_empty">Known empty</option><option value="known_populated">Known populated</option></select></label>; }
