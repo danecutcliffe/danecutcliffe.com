@@ -28,6 +28,7 @@ export interface Entity {
 
 export interface Building {
   id: string;
+  entityId: string;
   displayName: string;
   streetAddress: string;
   community: string;

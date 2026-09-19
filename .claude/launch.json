@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lease-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "lease-app", "run", "dev", "--", "--host", "127.0.0.1", "--port", "4176"],
+      "port": 4176,
+      "url": "http://127.0.0.1:4176"
+    }
+  ]
+}

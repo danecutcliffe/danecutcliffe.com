@@ -25,6 +25,7 @@ export interface LeaseDataAdapter {
   saveBuilding(building: Building): Promise<Building>;
   saveUnit(unit: Unit): Promise<Unit>;
   saveStandardOption(option: StandardOption): Promise<StandardOption>;
+  deleteRecord(collection: 'entities'|'buildings'|'units'|'standardOptions', id: string, recordRevision: number): Promise<void>;
   previewPortfolioImport(source: File): Promise<ImportPreview>;
   commitPortfolioImport(preview: ImportPreview): Promise<ImportCommitResult>;
   exportDataset(): Promise<{ filename: string; json: string }>;
@@ -86,6 +87,7 @@ export function createUnavailableAdapters(): LeaseAppAdapters {
       saveBuilding: unavailable,
       saveUnit: unavailable,
       saveStandardOption: unavailable,
+      deleteRecord: unavailable,
       previewPortfolioImport: unavailable,
       commitPortfolioImport: unavailable,
       exportDataset: unavailable,
@@ -137,6 +139,10 @@ export function createInMemoryAdapters(initialDataset: LeaseDataset, initialSess
       saveStandardOption: async (value) => {
         dataset.standardOptions = replaceById(dataset.standardOptions, value);
         return structuredClone(value);
+      },
+      deleteRecord: async (collection, id) => {
+        const key = collection as keyof Pick<LeaseDataset, 'entities'|'buildings'|'units'|'standardOptions'>;
+        (dataset as any)[key] = (dataset as any)[key].filter((r: { id: string }) => r.id !== id);
       },
       previewPortfolioImport: async () => ({
         token: 'mock-preview', schemaVersion: 1, expectedRevision: dataset.revision,
