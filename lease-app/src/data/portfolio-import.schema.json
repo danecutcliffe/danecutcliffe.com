@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://danecutcliffe.com/lease/schemas/portfolio-import-v2.json",
+  "title": "Lease portfolio import",
+  "type": "object",
+  "required": ["schemaVersion", "entities", "buildings", "units", "standardOptions", "globalDefaults"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "enum": [1, 2] },
+    "generatedFrom": {
+      "type": "object",
+      "properties": {
+        "rootDirectory": { "type": "string" },
+        "cutoffDate": { "type": "string", "format": "date" },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "buildings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/building" }
+    },
+    "units": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unit" }
+    },
+    "standardOptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/standardOption" }
+    },
+    "globalDefaults": {
+      "type": "object",
+      "required": ["damageDepositMode", "rentPeriod", "rentDueDay"],
+      "properties": {
+        "damageDepositMode": { "type": "string", "minLength": 1 },
+        "rentPeriod": { "type": "string", "minLength": 1 },
+        "rentDueDay": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "schemaVersion": { "const": 2 } }, "required": ["schemaVersion"] },
+      "then": {
+        "properties": {
+          "units": {
+            "items": {
+              "required": ["inclusionsState", "responsibilitiesState"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "sourceFields": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "string" },
+        "sourceFiles": { "type": "array", "items": { "type": "string" } },
+        "active": { "type": "boolean" }
+      }
+    },
+    "entity": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceFields" },
+        {
+          "type": "object",
+          "required": ["id", "legalName", "addressForService", "community", "province", "postalCode", "phone", "rentPaymentRecipient", "rentPaymentInstructions", "rentPaymentAddress"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^entity-[a-z0-9][a-z0-9-]*$" },
+            "legalName": { "type": "string", "minLength": 1 },
+            "addressForService": { "type": "string" },
+            "community": { "type": "string" },
+            "province": { "type": "string" },
+            "postalCode": { "type": "string" },
+            "phone": { "type": "string" },
+            "rentPaymentRecipient": { "type": "string" },
+            "rentPaymentInstructions": { "type": "string" },
+            "rentPaymentAddress": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "building": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceFields" },
+        {
+          "type": "object",
+          "required": ["id", "displayName", "streetAddress", "community", "province", "postalCode"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^building-[a-z0-9][a-z0-9-]*$" },
+            "displayName": { "type": "string", "minLength": 1 },
+            "streetAddress": { "type": "string", "minLength": 1 },
+            "community": { "type": "string" },
+            "province": { "type": "string" },
+            "postalCode": { "type": "string" },
+            "sourceDirectory": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "standardOption": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceFields" },
+        {
+          "type": "object",
+          "required": ["id", "category", "label", "pdfText"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^option-[a-z0-9][a-z0-9-]*$" },
+            "systemKey": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_]*$" },
+            "category": { "enum": ["included_standard", "included_other", "tenant_responsibility"] },
+            "label": { "type": "string", "minLength": 1 },
+            "pdfText": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "unit": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceFields" },
+        {
+          "type": "object",
+          "required": ["id", "buildingId", "entityId", "displayName", "unitNumber", "premisesStreetAddress", "premisesCommunity", "premisesPostalCode", "premisesType", "defaultRentalRate", "rentPeriod", "rentDueDay", "includedOptionIds", "tenantResponsibilityOptionIds"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^unit-[a-z0-9][a-z0-9-]*$" },
+            "buildingId": { "type": "string" },
+            "entityId": { "type": "string" },
+            "displayName": { "type": "string", "minLength": 1 },
+            "unitNumber": { "type": "string" },
+            "premisesStreetAddress": { "type": "string", "minLength": 1 },
+            "premisesCommunity": { "type": "string" },
+            "premisesPostalCode": { "type": "string" },
+            "premisesType": { "type": "string" },
+            "defaultRentalRate": { "type": "number", "minimum": 0 },
+            "rentPeriod": { "type": "string", "minLength": 1 },
+            "rentDueDay": { "type": "string", "minLength": 1 },
+            "inclusionsState": { "$ref": "#/$defs/configurationState" },
+            "responsibilitiesState": { "$ref": "#/$defs/configurationState" },
+            "includedOptionIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+            "tenantResponsibilityOptionIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "configurationState": {
+      "enum": ["unknown", "known_empty", "known_populated"]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "generatedFrom": {
+    "cutoffDate": "2026-01-01",
+    "generatedAt": "2026-01-01T12:00:00Z"
+  },
+  "entities": [
+    {
+      "id": "entity-example-holdings",
+      "legalName": "Example Property Holdings Inc.",
+      "addressForService": "100 Example Street",
+      "community": "Exampletown",
+      "province": "PE",
+      "postalCode": "C0A 0A0",
+      "phone": "",
+      "rentPaymentRecipient": "Example Property Holdings Inc.",
+      "rentPaymentInstructions": "",
+      "rentPaymentAddress": "100 Example Street, Exampletown, PE C0A 0A0"
+    }
+  ],
+  "buildings": [
+    {
+      "id": "building-100-example-street",
+      "displayName": "100 Example Street",
+      "streetAddress": "100 Example Street",
+      "community": "Exampletown",
+      "province": "PE",
+      "postalCode": "C0A 0A0"
+    }
+  ],
+  "standardOptions": [
+    {
+      "id": "option-example-heat",
+      "category": "included_standard",
+      "label": "Heat",
+      "pdfText": "Heat",
+      "active": true
+    }
+  ],
+  "units": [
+    {
+      "id": "unit-1-100-example-street",
+      "buildingId": "building-100-example-street",
+      "entityId": "entity-example-holdings",
+      "displayName": "1-100 Example Street",
+      "unitNumber": "1",
+      "premisesStreetAddress": "100 Example Street",
+      "premisesCommunity": "Exampletown",
+      "premisesPostalCode": "C0A 0A0",
+      "premisesType": "Apartment",
+      "defaultRentalRate": 1000,
+      "rentPeriod": "Month",
+      "rentDueDay": "1st",
+      "inclusionsState": "known_populated",
+      "responsibilitiesState": "known_empty",
+      "includedOptionIds": ["option-example-heat"],
+      "tenantResponsibilityOptionIds": []
+    }
+  ],
+  "globalDefaults": {
+    "damageDepositMode": "one_month_rent",
+    "rentPeriod": "Month",
+    "rentDueDay": "1st"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "lease-generator-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "pdf:spike": "node scripts/pdf-spike.mjs",
+    "test": "vitest run",
+    "test:smoke": "playwright test",
+    "typecheck": "tsc -b",
+    "verify": "npm run test && npm run typecheck",
+    "build": "npm run verify && vite build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.105.4",
+    "pdf-lib": "1.17.1",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/react": "19.1.16",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.4",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
+  }
+}

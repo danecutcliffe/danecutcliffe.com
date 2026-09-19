@@ -8,5 +8,16 @@ app/.vite/
 app/dist/
 app/node_modules/
 app/tsconfig.tsbuildinfo
+lease-app/.env
+lease-app/.env.*
+!lease-app/.env.example
+!lease-app/.env.staging.example
+lease-app/.vite/
+lease-app/dist/
+lease-app/node_modules/
+lease-app/tsconfig.tsbuildinfo
+lease-app/test-results/
+lease-app/playwright-report/
 staging-site/
 supabase/.temp/
+tmp/
