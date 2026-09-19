@@ -161,6 +161,21 @@ export class LeaseRepository {
     return rpcData<SaveRecordResult<T>>(result);
   }
 
+  async deleteRecord(
+    collectionName: "entities" | "buildings" | "units" | "standardOptions",
+    recordId: string,
+    expectedRecordRevision: number,
+    expectedDatasetRevision: number,
+  ): Promise<void> {
+    const result = await this.supabase.rpc("lease_admin_delete_record", {
+      collection_name: collectionName,
+      record_id: recordId,
+      expected_record_revision: expectedRecordRevision,
+      expected_dataset_revision: expectedDatasetRevision,
+    });
+    rpcData<unknown>(result);
+  }
+
   async createStandardOption(
     id: string,
     option: { category: StandardOptionCategory; label: string; pdfText: string; active?: boolean },

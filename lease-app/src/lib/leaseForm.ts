@@ -125,15 +125,15 @@ export function validateLeaseDraft(dataset: LeaseDataset, draft: LeaseDraft): Le
   const issues: Array<LeaseValidationIssue | undefined> = [];
   const building = dataset.buildings.find((record) => record.id === draft.buildingId);
   const unit = dataset.units.find((record) => record.id === draft.unitId);
-  const entity = unit ? dataset.entities.find((record) => record.id === unit.entityId) : undefined;
+  const entity = building ? dataset.entities.find((record) => record.id === building.entityId) : undefined;
 
   issues.push(requiredIssue(building?.id, 'building', 'Choose a building.'));
   issues.push(requiredIssue(unit?.id, 'unit', 'Choose a unit.'));
   if (unit && unit.buildingId !== draft.buildingId) {
     issues.push({ id: 'unit-building', fieldId: 'unit', message: 'The selected unit does not belong to this building.' });
   }
-  if (unit && !entity) {
-    issues.push({ id: 'unit-entity', fieldId: 'unit', message: 'This unit does not resolve to a leasing entity.', manageTarget: { section: 'units', recordId: unit.id } });
+  if (building && !entity) {
+    issues.push({ id: 'building-entity', fieldId: 'building', message: 'This building does not have a leasing entity assigned. Set one in Manage → Buildings.', manageTarget: { section: 'buildings', recordId: building.id } });
   }
   if (!draft.tenants.some((value) => value.trim())) {
     issues.push({ id: 'tenant', fieldId: 'tenant-0', message: 'Enter at least one tenant name.' });
@@ -207,8 +207,8 @@ export function toLeasePdfInput(
   const issues = validateLeaseDraft(dataset, draft);
   if (issues.length) throw new Error(issues[0].message);
   const unit = dataset.units.find((record) => record.id === draft.unitId) as Unit;
-  const building = dataset.buildings.find((record) => record.id === unit.buildingId);
-  const entity = dataset.entities.find((record) => record.id === unit.entityId) as Entity;
+  const building = dataset.buildings.find((record) => record.id === unit.buildingId)!;
+  const entity = dataset.entities.find((record) => record.id === building.entityId) as Entity;
   const selectedIncluded = draft.includedOptionIds
     .map((id) => dataset.standardOptions.find((option) => option.id === id))
     .filter((option) => option?.active);

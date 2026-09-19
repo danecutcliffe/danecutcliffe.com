@@ -128,6 +128,10 @@ export function createSupabaseAdapters(supabase: SupabaseClient): LeaseAppAdapte
       saveBuilding: (value) => save('buildings', value),
       saveUnit: (value) => save('units', value),
       saveStandardOption: (value) => save('standardOptions', value),
+      deleteRecord: async (collection, id, recordRevision) => {
+        const datasetRevision = await repository.getDatasetRevision();
+        await repository.deleteRecord(collection, id, recordRevision, datasetRevision);
+      },
       previewPortfolioImport: async (file) => {
         try {
           const parsed = adaptPortfolioPackage(parsePortfolioPackage(JSON.parse(await file.text()))) as PortfolioPackage;
@@ -202,7 +206,7 @@ function relationMap(rows: Array<{unit_id:string;option_id:string}>): Map<string
 }
 function provenance(row: Record<string, unknown>) { return { confidence: row.confidence, sourceFiles: row.source_files }; }
 function mapEntity(row: any): Entity { return { id:row.id,legalName:row.legal_name,addressForService:row.address_for_service,community:row.community,province:row.province,postalCode:row.postal_code,phone:row.phone,rentPaymentRecipient:row.rent_payment_recipient,rentPaymentInstructions:row.rent_payment_instructions,rentPaymentAddress:row.rent_payment_address,provenance:provenance(row),recordRevision:Number(row.record_revision) }; }
-function mapBuilding(row: any): Building { return { id:row.id,displayName:row.display_name,streetAddress:row.street_address,community:row.community,province:row.province,postalCode:row.postal_code,provenance:provenance(row),recordRevision:Number(row.record_revision) }; }
+function mapBuilding(row: any): Building { return { id:row.id,entityId:row.entity_id??'',displayName:row.display_name,streetAddress:row.street_address,community:row.community,province:row.province,postalCode:row.postal_code,provenance:provenance(row),recordRevision:Number(row.record_revision) }; }
 function mapUnit(row:any,included:Map<string,string[]>,responsibilities:Map<string,string[]>):Unit { return { id:row.id,buildingId:row.building_id,entityId:row.entity_id,displayName:row.display_name,unitNumber:row.unit_number,premisesStreetAddress:row.premises_street_address,premisesCommunity:row.premises_community,premisesPostalCode:row.premises_postal_code,premisesType:row.premises_type,defaultRentalRate:Number(row.default_rental_rate),rentPeriod:row.rent_period,rentDueDay:row.rent_due_day,includedOptionIds:included.get(row.id)??[],tenantResponsibilityOptionIds:responsibilities.get(row.id)??[],inclusionConfigurationState:row.inclusions_state,responsibilityConfigurationState:row.responsibilities_state,provenance:provenance(row),recordRevision:Number(row.record_revision) }; }
 function mapOption(row:any):StandardOption { return { id:row.id,category:row.category,label:row.label,pdfText:row.pdf_text,active:Boolean(row.is_active),systemKey:row.system_key ?? BUILT_IN_OPTION_KEYS[row.id],recordRevision:Number(row.record_revision) }; }
 function recordPatch(collection:string,value:any):Record<string,unknown> { const common = Object.fromEntries(Object.entries(value).filter(([key]) => !['id','recordRevision','provenance','systemKey'].includes(key))); if (collection === 'units') { common.inclusionsState=common.inclusionConfigurationState; common.responsibilitiesState=common.responsibilityConfigurationState; delete common.inclusionConfigurationState; delete common.responsibilityConfigurationState; delete common.additionalIncludedTexts; delete common.additionalResponsibilityTexts; } return common; }
