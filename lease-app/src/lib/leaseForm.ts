@@ -47,6 +47,16 @@ const PREMISES_TYPES = new Set<PremisesType>([
   'mobile_home_site',
 ]);
 
+const INCLUSION_KEY_ALIASES: Record<string, InclusionKey> = {
+  washer_dryer_no_charge: 'washer_dryer_free',
+  janitorial_common: 'janitorial_common_areas',
+  snow_removal_parking_walkways: 'snow_removal',
+};
+
+export function normalizeInclusionKey(systemKey: string): InclusionKey | string {
+  return INCLUSION_KEY_ALIASES[systemKey] ?? systemKey;
+}
+
 export function todayLocal(date = new Date()): string {
   return [
     String(date.getFullYear()).padStart(4, '0'),
@@ -217,7 +227,7 @@ export function toLeasePdfInput(
     .filter((option) => option?.active);
   const builtIn = selectedIncluded
     .filter((option) => option?.category === 'included_standard' && option.systemKey)
-    .map((option) => option?.systemKey as InclusionKey);
+    .map((option) => normalizeInclusionKey(option?.systemKey as string) as InclusionKey);
   const otherIncluded = [
     ...selectedIncluded.filter((option) => option?.category === 'included_other').map((option) => option?.pdfText ?? ''),
     ...draft.additionalIncludedTexts,

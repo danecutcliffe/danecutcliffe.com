@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import manifestJson from '../../public/templates/generated/template-manifest.json';
 import type { LeaseDataset } from '../domain';
+import { buildLeaseFieldValues, type LeaseTemplateManifest } from './leasePdf';
 import {
   draftForSelectedUnit,
   effectiveDepositAmount,
@@ -23,6 +25,7 @@ const dataset: LeaseDataset = {
   standardOptions: [{ id:'option-included-heat',category:'included_standard',label:'Heat',pdfText:'Heat',active:true,systemKey:'heat' }],
   globalDefaults: { damageDepositMode:'one_month_rent',rentPeriod:'Month',rentDueDay:'1st' },
 };
+const manifest = manifestJson as unknown as LeaseTemplateManifest;
 
 describe('Building to Unit behavior', () => {
   it('filters units by Building', () => {
@@ -63,5 +66,29 @@ describe('lease defaults and validation', () => {
     expect(input.lessor.street).toBe('1 Main');
     expect(input.rent.amount).toBe(1930);
     expect(input.included).toEqual(['heat']);
+  });
+  it('normalizes stored standard-option aliases for PDF generation', () => {
+    const optionIds = ['option-washer', 'option-janitorial', 'option-snow'];
+    const aliasDataset: LeaseDataset = {
+      ...dataset,
+      units: [{ ...dataset.units[0], includedOptionIds: optionIds }],
+      standardOptions: [
+        { id:optionIds[0],category:'included_standard',label:'Washer & Dryer',pdfText:'Washer & Dryer',active:true,systemKey:'washer_dryer_no_charge' },
+        { id:optionIds[1],category:'included_standard',label:'Janitorial',pdfText:'Janitorial',active:true,systemKey:'janitorial_common' },
+        { id:optionIds[2],category:'included_standard',label:'Snow Removal',pdfText:'Snow Removal',active:true,systemKey:'snow_removal_parking_walkways' },
+      ],
+    };
+    const draft = { ...draftForSelectedUnit(initialLeaseDraft(aliasDataset),aliasDataset.units[0]),tenants:['Tenant'],startDate:'2026-10-01' };
+    const input = toLeasePdfInput(aliasDataset,draft,'2026-09-19');
+    expect(input.included).toEqual([
+      'washer_dryer_free',
+      'janitorial_common_areas',
+      'snow_removal',
+    ]);
+    const values = buildLeaseFieldValues(input,manifest,['Tenant','']);
+    const mark = manifest.selectionMarkGroups.standard.value;
+    expect(values.includedWasherDryerFree).toBe(mark);
+    expect(values.includedJanitorialCommonAreas).toBe(mark);
+    expect(values.includedSnowRemoval).toBe(mark);
   });
 });

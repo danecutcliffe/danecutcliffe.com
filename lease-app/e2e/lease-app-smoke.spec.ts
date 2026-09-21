@@ -50,6 +50,17 @@ test('end date is directly editable and can return to calculated value', async (
   await expect(page.locator('#end-date')).toHaveValue('2027-09-30');
 });
 
+test('seeded laundry options remain mutually exclusive', async ({ page }) => {
+  await page.locator('#building').selectOption('building-multi');
+  await page.locator('#unit').selectOption('unit-example-1');
+  await page.getByRole('button',{name:'Review / change'}).click();
+  const selected = page.locator('.selected-options').first();
+  await expect(selected).toContainText('Washer & Dryer (without charge)');
+  await page.getByLabel('Add from standard options').first().selectOption('option-included-washer-dryer-coin');
+  await expect(selected).toContainText('Washer & Dryer (coin operated)');
+  await expect(selected).not.toContainText('Washer & Dryer (without charge)');
+});
+
 test('Manage is usable at mobile width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button',{name:'Manage'}).click();

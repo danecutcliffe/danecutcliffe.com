@@ -53,6 +53,14 @@ begin
   assert (select inclusions_state from public.lease_units where id='unit-1-100-example-street') = 'unknown', 'v1 empty inclusions remain unknown';
   assert (select responsibilities_state from public.lease_units where id='unit-1-100-example-street') = 'unknown', 'v1 empty responsibilities remain unknown';
   assert (select count(*) from public.lease_standard_options where system_key is not null) = 14, 'structural options seeded';
+  assert (
+    select count(*) from public.lease_standard_options
+    where (id, system_key) in (
+      ('option-included-washer-dryer-no-charge', 'washer_dryer_no_charge'),
+      ('option-included-janitorial-common', 'janitorial_common'),
+      ('option-included-snow-removal', 'snow_removal_parking_walkways')
+    )
+  ) = 3, 'alias-sensitive structural option keys remain stable';
 
   begin
     perform public.lease_commit_portfolio_import(payload, 0, preview->>'payloadSha256');
