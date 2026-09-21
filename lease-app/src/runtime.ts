@@ -25,13 +25,13 @@ const BUILT_IN_OPTION_KEYS: Record<string, string> = {
   'option-included-electricity': 'electricity',
   'option-included-cooking-stove': 'cooking_stove',
   'option-included-refrigerator': 'refrigerator',
-  'option-included-washer-dryer-free': 'washer_dryer_free',
+  'option-included-washer-dryer-no-charge': 'washer_dryer_no_charge',
   'option-included-washer-dryer-coin': 'washer_dryer_coin',
   'option-included-cable-hookup': 'cable_hookup',
   'option-included-cable-service': 'cable_service',
-  'option-included-janitorial-common-areas': 'janitorial_common_areas',
+  'option-included-janitorial-common': 'janitorial_common',
   'option-included-parking': 'parking',
-  'option-included-snow-removal': 'snow_removal',
+  'option-included-snow-removal': 'snow_removal_parking_walkways',
   'option-included-grass-cutting': 'grass_cutting',
 };
 

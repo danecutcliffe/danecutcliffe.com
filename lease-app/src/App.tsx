@@ -16,6 +16,7 @@ import {
   effectiveDepositAmount,
   generateUnitDisplayName,
   initialLeaseDraft,
+  normalizeInclusionKey,
   recalculateEndDate,
   selectUnitForBuilding,
   unitsForBuilding,
@@ -178,9 +179,10 @@ function NewLease({ adapters, dataset, onDatasetChange, onManage }: {
     setDraft((current) => {
       const key = option.category === 'tenant_responsibility' ? 'tenantResponsibilityOptionIds' : 'includedOptionIds';
       let ids = checked ? [...new Set([...current[key], option.id])] : current[key].filter((id) => id !== option.id);
-      if (checked && ['washer_dryer_free', 'washer_dryer_coin'].includes(option.systemKey ?? '')) {
-        const counterpart = option.systemKey === 'washer_dryer_free' ? 'washer_dryer_coin' : 'washer_dryer_free';
-        ids = ids.filter((id) => dataset.standardOptions.find((candidate) => candidate.id === id)?.systemKey !== counterpart);
+      const normalizedKey = normalizeInclusionKey(option.systemKey ?? '');
+      if (checked && ['washer_dryer_free', 'washer_dryer_coin'].includes(normalizedKey)) {
+        const counterpart = normalizedKey === 'washer_dryer_free' ? 'washer_dryer_coin' : 'washer_dryer_free';
+        ids = ids.filter((id) => normalizeInclusionKey(dataset.standardOptions.find((candidate) => candidate.id === id)?.systemKey ?? '') !== counterpart);
       }
       const stateKey = option.category === 'tenant_responsibility' ? 'responsibilityConfigurationState' : 'inclusionConfigurationState';
       return { ...current, [key]: ids, [stateKey]: ids.length ? 'known_populated' : 'known_empty' };

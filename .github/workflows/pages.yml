@@ -2,7 +2,8 @@ name: Deploy site to GitHub Pages
 
 # Replaces the legacy Pages build pipeline (which began failing generically on
 # 2026-07-03 despite unchanged, valid content). The site is fully static with
-# committed build output, so this just uploads the repo tree and deploys it.
+# committed build output. Only the explicit public site artifacts are uploaded;
+# source, tests, migrations, and local configuration never enter the artifact.
 
 on:
   push:
@@ -26,11 +27,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Drop non-site files from the artifact
-        run: rm -rf .git .github
+      - name: Assemble public site artifact
+        run: |
+          mkdir _site
+          cp .nojekyll CNAME robots.txt sitemap.xml static-override.css ./*.html _site/
+          cp -R images.squarespace-cdn.com static1.squarespace.com time lease _site/
+          test ! -e _site/supabase
+          test ! -e _site/lease-app
+          test ! -e _site/app
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
