@@ -17,7 +17,7 @@ const baseInput: LeasePdfInput = {
   agreementDate: '2026-09-19',
   tenantNames: ['John Smith'],
   lessor: { legalName: 'Example Holdings Inc.', street: '1 Main Street', community: 'Charlottetown', province: 'PE', postalCode: 'C1A 1A1', phone: '902-555-0100' },
-  premises: { displayName: '1-12 Orlebar', street: '1-12 Orlebar Street', community: 'Charlottetown', province: 'PE', postalCode: 'C1A 1A1', type: 'apartment' },
+  premises: { displayName: '1-100 Example', street: '1-100 Example Street', community: 'Charlottetown', province: 'PE', postalCode: 'C1A 1A1', type: 'apartment' },
   term: { type: 'start_only', startDate: '2026-10-01' },
   rent: { amount: 1930, period: 'Month', dueDay: '1st', paymentRecipient: 'Example Holdings Inc.', paymentInstructions: 'e-transfer', paymentAddress: '1 Main Street' },
   included: ['heat', 'water'],
@@ -109,6 +109,6 @@ describe('total PDF field mapping', () => {
   });
 
   it('creates a deterministic sanitized filename', () => {
-    expect(buildLeaseDownloadFilename(baseInput)).toBe('Lease_1-12_Orlebar_John_Smith_20261001.pdf');
+    expect(buildLeaseDownloadFilename(baseInput)).toBe('Lease_1-100_Example_John_Smith_20261001.pdf');
   });
 });
