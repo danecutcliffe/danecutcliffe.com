@@ -77,6 +77,23 @@ begin
   );
   assert result->>'newDatasetRevision' = '2', 'option creation revision';
 
+  insert into public.lease_unit_included_options (unit_id, option_id)
+  values ('unit-1-100-example-street', 'option-example-custom');
+  begin
+    perform public.lease_admin_delete_record('standardOptions', 'option-example-custom', 1, 2);
+    assert false, 'referenced option deletion should fail';
+  exception when foreign_key_violation then
+    assert exists (select 1 from public.lease_standard_options where id = 'option-example-custom'), 'blocked delete retains option';
+  end;
+  delete from public.lease_unit_included_options where option_id = 'option-example-custom';
+
+  begin
+    perform public.lease_admin_delete_record('standardOptions', 'option-included-heat', 1, 2);
+    assert false, 'built-in option deletion should fail';
+  exception when foreign_key_violation then
+    assert exists (select 1 from public.lease_standard_options where id = 'option-included-heat'), 'blocked delete retains built-in option';
+  end;
+
   result := public.lease_admin_save_record(
     'entities', 'entity-example-holdings', '{"addressForService":"100 Verified Street"}'::jsonb,
     1, 2

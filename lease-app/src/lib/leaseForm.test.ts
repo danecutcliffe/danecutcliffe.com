@@ -59,6 +59,11 @@ describe('lease defaults and validation', () => {
     expect(draft.inclusionConfigurationState).toBe('unknown');
     expect(validateLeaseDraft(dataset,draft).some((issue) => issue.id === 'terms-unknown')).toBe(true);
   });
+  it('blocks generation when a saved term is inactive', () => {
+    const inactiveDataset: LeaseDataset = { ...dataset, standardOptions: dataset.standardOptions.map((option) => ({ ...option, active:false })) };
+    const draft = { ...draftForSelectedUnit(initialLeaseDraft(inactiveDataset),inactiveDataset.units[0]),tenants:['Tenant'],startDate:'2026-10-01' };
+    expect(validateLeaseDraft(inactiveDataset,draft).some((issue) => issue.id === 'terms-unavailable')).toBe(true);
+  });
   it('resolves the Unit Entity and canonical address for PDF input', () => {
     const draft = { ...draftForSelectedUnit(initialLeaseDraft(dataset),dataset.units[0]),tenants:['Tenant'],startDate:'2026-10-01' };
     const input = toLeasePdfInput(dataset,draft,'2026-09-19');
