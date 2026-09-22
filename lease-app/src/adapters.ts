@@ -141,6 +141,12 @@ export function createInMemoryAdapters(initialDataset: LeaseDataset, initialSess
         return structuredClone(value);
       },
       deleteRecord: async (collection, id) => {
+        if (collection === 'standardOptions') {
+          const option = dataset.standardOptions.find((record) => record.id === id);
+          if (option?.systemKey) throw new Error('DELETE_BLOCKED: built-in Form 1 options cannot be deleted. Deactivate the option instead.');
+          const isReferenced = dataset.units.some((unit) => unit.includedOptionIds.includes(id) || unit.tenantResponsibilityOptionIds.includes(id));
+          if (isReferenced) throw new Error('DELETE_BLOCKED: this option is used by Unit defaults. Remove it from those Units first.');
+        }
         const key = collection as keyof Pick<LeaseDataset, 'entities'|'buildings'|'units'|'standardOptions'>;
         (dataset as any)[key] = (dataset as any)[key].filter((r: { id: string }) => r.id !== id);
       },

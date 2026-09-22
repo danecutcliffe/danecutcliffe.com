@@ -68,3 +68,31 @@ test('Manage is usable at mobile width', async ({ page }) => {
   await page.getByRole('button',{name:'Units'}).click();
   await expect(page.getByRole('heading',{name:'Units'})).toBeVisible();
 });
+
+test('Unit configuration uses plain-language review controls', async ({ page }) => {
+  await page.getByRole('button',{name:'Manage'}).click();
+  await page.getByRole('button',{name:'Units'}).click();
+  await page.getByLabel('Select unit').selectOption('unit-example-2');
+  await expect(page.getByText('Inclusions not reviewed.')).toBeVisible();
+  await page.getByRole('button',{name:'Confirm no inclusions'}).click();
+  await expect(page.getByText('Confirmed: no inclusions')).toBeVisible();
+  await page.getByRole('button',{name:'Save Unit'}).click();
+  await expect(page.getByText('Saved.')).toBeVisible();
+  await page.getByLabel('Select unit').selectOption('unit-example-1');
+  await page.getByLabel('Select unit').selectOption('unit-example-2');
+  await expect(page.getByText('Confirmed: no inclusions')).toBeVisible();
+});
+
+test('Standard options can be deleted from Manage', async ({ page }) => {
+  await page.getByRole('button',{name:'Manage'}).click();
+  await page.getByRole('button',{name:'Standard Options'}).click();
+  await page.getByLabel('Select option').selectOption('option-unused');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button',{name:'Delete'}).click();
+  await expect(page.getByLabel('Select option').locator('option[value="option-unused"]')).toHaveCount(0);
+  await page.getByLabel('Select option').selectOption('option-waste');
+  await page.getByRole('button',{name:'Delete'}).click();
+  await expect(page.getByText('This option is used by 1 Unit default. Remove it from those Units before deleting it.')).toBeVisible();
+  await page.getByLabel('Select option').selectOption('option-included-heat');
+  await expect(page.getByRole('button',{name:'Delete'})).toHaveCount(0);
+});

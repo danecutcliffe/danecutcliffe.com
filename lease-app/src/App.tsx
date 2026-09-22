@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { LeaseAppAdapters } from './adapters';
 import type {
   Building,
-  ConfigurationState,
   Entity,
   LeaseDataset,
   LeaseDraft,
@@ -154,8 +153,8 @@ function NewLease({ adapters, dataset, onDatasetChange, onManage }: {
   const selectedBuilding = dataset.buildings.find((b) => b.id === draft.buildingId);
   const selectedEntity = selectedBuilding ? dataset.entities.find((entity) => entity.id === selectedBuilding.entityId) : undefined;
   const issues = validateLeaseDraft(dataset, draft);
-  const includedOptions = dataset.standardOptions.filter((option) => option.active && option.category.startsWith('included_'));
-  const responsibilityOptions = dataset.standardOptions.filter((option) => option.active && option.category === 'tenant_responsibility');
+  const includedOptions = dataset.standardOptions.filter((option) => option.category.startsWith('included_'));
+  const responsibilityOptions = dataset.standardOptions.filter((option) => option.category === 'tenant_responsibility');
 
   const setBuilding = (buildingId: string) => {
     const unitId = selectUnitForBuilding(dataset, buildingId);
@@ -350,11 +349,11 @@ function NewLease({ adapters, dataset, onDatasetChange, onManage }: {
 }
 
 function TermOptions({ title, options, selectedIds, onToggle }: { title: string; options: StandardOption[]; selectedIds: string[]; onToggle: (option: StandardOption, checked: boolean) => void }) {
-  const available = options.filter((option) => !selectedIds.includes(option.id));
+  const available = options.filter((option) => option.active && !selectedIds.includes(option.id));
   const selected = selectedIds.map((id) => options.find((option) => option.id === id)).filter((option): option is StandardOption => Boolean(option));
   const addOption = (id: string) => { const option = options.find((o) => o.id === id); if (option) onToggle(option, true); };
   return <fieldset className="option-list"><legend>{title}</legend>
-    {selected.length > 0 && <div className="selected-options">{selected.map((option) => <div className="selected-text" key={option.id}><span>{option.label}</span><button className="text-button" onClick={() => onToggle(option, false)}>Remove</button></div>)}</div>}
+    {selected.length > 0 && <div className="selected-options">{selected.map((option) => <div className="selected-text" key={option.id}><span>{option.label}{option.active ? '' : ' (inactive)'}</span><button className="text-button" onClick={() => onToggle(option, false)}>Remove</button></div>)}</div>}
     {available.length > 0 && <label>Add from standard options<select value="" onChange={(event) => { if (event.target.value) addOption(event.target.value); }}><option value="">Select an option to add…</option>{available.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
     {options.length === 0 && selected.length === 0 && <p className="muted">No standard options available. Create them in Manage → Standard Options.</p>}
   </fieldset>;
@@ -383,7 +382,14 @@ function Manage({ adapters, dataset, initialTarget, onDatasetChange }: {
   const archiveBuilding = (record: Building) => saved(adapters.data.saveBuilding({ ...record, active: false } as any));
   const archiveUnit = (record: Unit) => { saved(adapters.data.saveUnit({ ...record, active: false } as any)); setRecordId(''); };
   const deleteRecord = (collection: 'entities'|'buildings'|'units'|'standardOptions', record: { id: string; recordRevision?: number }) => {
-    if (!confirm(`Permanently delete this record? This cannot be undone.`)) return;
+    const optionReferenceCount = collection === 'standardOptions'
+      ? dataset.units.filter((unit) => unit.includedOptionIds.includes(record.id) || unit.tenantResponsibilityOptionIds.includes(record.id)).length
+      : 0;
+    if (optionReferenceCount > 0) {
+      setMessage(`This option is used by ${optionReferenceCount} Unit default${optionReferenceCount === 1 ? '' : 's'}. Remove it from those Units before deleting it.`);
+      return;
+    }
+    if (!confirm('Permanently delete this record? This cannot be undone.')) return;
     const op = adapters.data.deleteRecord(collection, record.id, record.recordRevision ?? 0);
     saved(op); setRecordId('');
   };
@@ -391,7 +397,7 @@ function Manage({ adapters, dataset, initialTarget, onDatasetChange }: {
     {section === 'entities' && <EntityEditor records={dataset.entities} selectedId={recordId} onSelect={setRecordId} onSave={(record) => saved(adapters.data.saveEntity(record))} onArchive={archiveEntity} onDelete={(record) => deleteRecord('entities', record)} />}
     {section === 'buildings' && <BuildingEditor records={dataset.buildings} entities={dataset.entities} selectedId={recordId} onSelect={setRecordId} onSave={(record) => saved(adapters.data.saveBuilding(record))} onArchive={archiveBuilding} onDelete={(record) => deleteRecord('buildings', record)} />}
     {section === 'units' && <UnitEditor records={dataset.units} buildings={dataset.buildings} entities={dataset.entities} options={dataset.standardOptions} selectedId={recordId} onSelect={setRecordId} onSave={(record) => saved(adapters.data.saveUnit(record))} onArchive={archiveUnit} onDelete={(record) => deleteRecord('units', record)} />}
-    {section === 'options' && <OptionEditor records={dataset.standardOptions} selectedId={recordId} onSelect={setRecordId} onSave={(record) => saved(adapters.data.saveStandardOption(record))} />}
+    {section === 'options' && <OptionEditor records={dataset.standardOptions} selectedId={recordId} onSelect={setRecordId} onSave={(record) => saved(adapters.data.saveStandardOption(record))} onDelete={(record) => deleteRecord('standardOptions', record)} />}
     {section === 'data' && <DataTools adapters={adapters} dataset={dataset} onDatasetChange={onDatasetChange} />}
   </div></div></section>;
 }
@@ -433,7 +439,13 @@ function UnitEditor({ records, buildings, entities, options, selectedId, onSelec
   const duplicate = value?.unitNumber.trim() ? records.find((r) => r.id !== value.id && r.buildingId === value.buildingId && r.unitNumber.trim().toLowerCase() === value.unitNumber.trim().toLowerCase()) : undefined;
   const selectedBuilding = value ? buildings.find((b) => b.id === value.buildingId) : undefined;
   const derivedEntity = selectedBuilding ? entities.find((e) => e.id === selectedBuilding.entityId) : undefined;
-  const handleSave = (event: FormEvent) => { event.preventDefault(); if (value && !duplicate) onSave({ ...value, displayName: computedDisplayName || value.displayName, entityId: derivedEntity?.id ?? value.entityId }); };
+  const handleSave = (event: FormEvent) => { event.preventDefault(); if (value && !duplicate) onSave({
+    ...value,
+    displayName: computedDisplayName || value.displayName,
+    entityId: derivedEntity?.id ?? value.entityId,
+    inclusionConfigurationState: value.includedOptionIds.length > 0 ? 'known_populated' : value.inclusionConfigurationState === 'unknown' ? 'unknown' : 'known_empty',
+    responsibilityConfigurationState: value.tenantResponsibilityOptionIds.length > 0 ? 'known_populated' : value.responsibilityConfigurationState === 'unknown' ? 'unknown' : 'known_empty',
+  }); };
   const isNew = (value?.recordRevision ?? 0) === 0;
   const newUnit = () => {
     const bId = filterBuildingId || buildings[0]?.id || '';
@@ -452,17 +464,18 @@ function UnitEditor({ records, buildings, entities, options, selectedId, onSelec
     {([['premisesStreetAddress','Premises street address'],['unitNumber','Unit number (numeric or letter)'],['rentPeriod','Rent period'],['rentDueDay','Rent due day']] as Array<[keyof Unit,string]>).map(([key,label]) => <label key={String(key)}>{label}<input value={String(value[key] ?? '')} onChange={(event) => setValue({...value,[key]:event.target.value})} /></label>)}
     <label>Premises type<select value={value.premisesType} onChange={(event) => setValue({...value,premisesType:event.target.value})}><option value="">Select…</option><option value="apartment">Apartment</option><option value="single_family_home">Single Family Home</option><option value="room">Room</option><option value="mobile_home">Mobile Home</option><option value="duplex_or_row_housing">Portion of Duplex or Row Housing</option><option value="mobile_home_site">Mobile Home Site</option></select></label>
     <label>Default rental rate<span className="money-input"><span>$</span><input inputMode="decimal" value={value.defaultRentalRate ?? ''} onChange={(event) => setValue({...value,defaultRentalRate:event.target.value === '' ? null : Number(event.target.value)})} /></span></label>
-    <StateSelect label="Inclusions state" value={value.inclusionConfigurationState} onChange={(state) => setValue({...value,inclusionConfigurationState:state})} />
-    <StateSelect label="Responsibilities state" value={value.responsibilityConfigurationState} onChange={(state) => setValue({...value,responsibilityConfigurationState:state})} />
-  </div><TermOptions title="Included in rent" options={options.filter((option) => option.active && option.category.startsWith('included_'))} selectedIds={value.includedOptionIds} onToggle={(option,checked) => toggle('includedOptionIds',option.id,checked)} /><TermOptions title="Tenant responsibilities" options={options.filter((option) => option.active && option.category === 'tenant_responsibility')} selectedIds={value.tenantResponsibilityOptionIds} onToggle={(option,checked) => toggle('tenantResponsibilityOptionIds',option.id,checked)} /><div className="editor-actions"><button className="primary" disabled={!!duplicate}>{isNew ? 'Create Unit' : 'Save Unit'}</button>{!isNew && <button type="button" className="text-button danger" onClick={() => onArchive(value)}>Archive</button>}{!isNew && <button type="button" className="text-button danger" onClick={() => onDelete(value)}>Delete</button>}</div></form>}</Editor>;
+  </div><ConfigurationReview label="inclusions" state={value.inclusionConfigurationState} count={value.includedOptionIds.length} onConfirmEmpty={() => setValue({...value,inclusionConfigurationState:'known_empty'})} /><TermOptions title="Included in rent" options={options.filter((option) => option.category.startsWith('included_'))} selectedIds={value.includedOptionIds} onToggle={(option,checked) => toggle('includedOptionIds',option.id,checked)} /><ConfigurationReview label="tenant responsibilities" state={value.responsibilityConfigurationState} count={value.tenantResponsibilityOptionIds.length} onConfirmEmpty={() => setValue({...value,responsibilityConfigurationState:'known_empty'})} /><TermOptions title="Tenant responsibilities" options={options.filter((option) => option.category === 'tenant_responsibility')} selectedIds={value.tenantResponsibilityOptionIds} onToggle={(option,checked) => toggle('tenantResponsibilityOptionIds',option.id,checked)} /><div className="editor-actions"><button className="primary" disabled={!!duplicate}>{isNew ? 'Create Unit' : 'Save Unit'}</button>{!isNew && <button type="button" className="text-button danger" onClick={() => onArchive(value)}>Archive</button>}{!isNew && <button type="button" className="text-button danger" onClick={() => onDelete(value)}>Delete</button>}</div></form>}</Editor>;
 }
 
-function StateSelect({ label, value, onChange }: { label: string; value: ConfigurationState; onChange: (value: ConfigurationState) => void }) { return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value as ConfigurationState)}><option value="unknown">Unknown / not configured</option><option value="known_empty">Known empty</option><option value="known_populated">Known populated</option></select></label>; }
+function ConfigurationReview({ label, state, count, onConfirmEmpty }: { label: string; state: Unit['inclusionConfigurationState']; count: number; onConfirmEmpty: () => void }) {
+  if (state === 'unknown') return <div className="notice"><span><strong>{label[0].toUpperCase() + label.slice(1)} not reviewed.</strong> Add an option below, or confirm that none apply.</span><button type="button" className="secondary" onClick={onConfirmEmpty}>Confirm no {label}</button></div>;
+  return <p className="resolved">{count > 0 ? `${count} ${label} selected` : `Confirmed: no ${label}`}</p>;
+}
 
-function OptionEditor({ records, selectedId, onSelect, onSave }: { records: StandardOption[]; selectedId: string; onSelect: (id: string) => void; onSave: (value: StandardOption) => void }) {
+function OptionEditor({ records, selectedId, onSelect, onSave, onDelete }: { records: StandardOption[]; selectedId: string; onSelect: (id: string) => void; onSave: (value: StandardOption) => void; onDelete: (value: StandardOption) => void }) {
   const source = records.find((record) => record.id === selectedId); const [value,setValue] = useState<StandardOption | undefined>(source); useEffect(() => setValue(source),[source]);
   const newOption = () => { const option: StandardOption = { id: `option-${crypto.randomUUID()}`, category:'included_other',label:'',pdfText:'',active:true }; setValue(option); onSelect(''); };
-  return <Editor title="Standard Options"><div className="picker-row"><RecordPicker title="Select option" records={records} selectedId={selectedId} onSelect={onSelect} label={(record) => record.label} /><button className="secondary" onClick={newOption}>+ New option</button></div>{value && <form onSubmit={(event) => { event.preventDefault(); onSave(value); }}><div className="form-grid two"><label>Label<input required value={value.label} onChange={(event) => setValue({...value,label:event.target.value})} /></label><label>Category<select value={value.category} onChange={(event) => setValue({...value,category:event.target.value as StandardOption['category']})}><option value="included_standard">Included standard</option><option value="included_other">Included other</option><option value="tenant_responsibility">Tenant responsibility</option></select></label><label className="span-two">PDF text<input required value={value.pdfText} onChange={(event) => setValue({...value,pdfText:event.target.value})} /></label><label className="checkbox"><input type="checkbox" checked={value.active} onChange={(event) => setValue({...value,active:event.target.checked})} />Active</label></div><button className="primary">Save Option</button></form>}</Editor>;
+  return <Editor title="Standard Options"><div className="picker-row"><RecordPicker title="Select option" records={records} selectedId={selectedId} onSelect={onSelect} label={(record) => record.label} /><button className="secondary" onClick={newOption}>+ New option</button></div>{value && <form onSubmit={(event) => { event.preventDefault(); onSave(value); }}><div className="form-grid two"><label>Label<input required value={value.label} onChange={(event) => setValue({...value,label:event.target.value})} /></label><label>Category<select value={value.category} onChange={(event) => setValue({...value,category:event.target.value as StandardOption['category']})}><option value="included_standard">Included standard</option><option value="included_other">Included other</option><option value="tenant_responsibility">Tenant responsibility</option></select></label><label className="span-two">PDF text<input required value={value.pdfText} onChange={(event) => setValue({...value,pdfText:event.target.value})} /></label><label className="checkbox"><input type="checkbox" checked={value.active} onChange={(event) => setValue({...value,active:event.target.checked})} />Active</label></div><div className="editor-actions"><button className="primary">Save Option</button>{(value.recordRevision ?? 0) > 0 && !value.systemKey && <button type="button" className="text-button danger" onClick={() => onDelete(value)}>Delete</button>}</div></form>}</Editor>;
 }
 
 function Editor({ title, children }: { title: string; children: React.ReactNode }) { return <section className="editor"><h3>{title}</h3>{children}</section>; }

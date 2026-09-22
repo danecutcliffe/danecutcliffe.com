@@ -179,6 +179,16 @@ export function validateLeaseDraft(dataset: LeaseDataset, draft: LeaseDraft): Le
       manageTarget: unit ? { section: 'units', recordId: unit.id } : undefined,
     });
   }
+  const unavailableOptionIds = [...draft.includedOptionIds, ...draft.tenantResponsibilityOptionIds]
+    .filter((id) => !dataset.standardOptions.some((option) => option.id === id && option.active));
+  if (unavailableOptionIds.length > 0) {
+    issues.push({
+      id: 'terms-unavailable',
+      fieldId: 'lease-terms',
+      message: 'Remove inactive or unavailable saved terms before generating this lease.',
+      manageTarget: unit ? { section: 'units', recordId: unit.id } : undefined,
+    });
+  }
   const responsibilityCount = draft.tenantResponsibilityOptionIds.length + draft.additionalResponsibilityTexts.length;
   if (responsibilityCount > 3) {
     issues.push({ id: 'responsibility-overflow', fieldId: 'lease-terms', message: 'The Form 1 has room for at most three tenant-responsibility lines.' });
