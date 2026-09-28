@@ -2,6 +2,13 @@ import type { Profile, TimeEntry } from '../domain/types';
 import { OVERTIME_THRESHOLD_HOURS, getAtlanticDateKey, getAtlanticWeekStart, getEntryDurationHours } from './time';
 import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 
+// Paid lunch minimum: from PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE on, an employee only earns
+// their paid lunch allowance on an Atlantic day where productive time (work time minus all
+// break time that day) reaches PAID_LUNCH_MIN_PRODUCTIVE_HOURS. Earlier days keep the old
+// rule so already-processed payroll does not change.
+export const PAID_LUNCH_MIN_PRODUCTIVE_HOURS = 7.5;
+export const PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE = '2026-09-14';
+
 // Single source of truth for per-work-entry hour accounting. Both the detailed
 // timecard report (reportModels.ts) and labour-cost reporting (labour.ts) consume
 // this so they can never drift into two different break/overtime models.
@@ -66,6 +73,14 @@ export function findAttributedWorkEntry(workEntries: TimeEntry[], breakEntry: Ti
   }) ?? null;
 }
 
+function getProductiveHoursForUserDay(workEntries: TimeEntry[], breakEntries: TimeEntry[], userId: string, dateKey: string, now: Date): number {
+  const workHours = workEntries
+    .filter((entry) => entry.userId === userId && getAtlanticDateKey(entry.clockIn) === dateKey)
+    .reduce((total, entry) => total + getEntryDurationHours(entry, now), 0);
+  const breakHours = breakEntries.reduce((total, entry) => total + getEntryDurationHours(entry, now), 0);
+  return workHours - breakHours;
+}
+
 export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Profile>, now: Date): {
   allocations: Map<string, BreakAllocation>;
   unattributedBreakHours: number;
@@ -86,7 +101,10 @@ export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Pr
     allocations.set(entry.id, { durationHours: 0, paidHours: 0, unpaidHours: 0 });
   });
 
-  breakEntriesByUserDay.forEach((breakEntries) => {
+  breakEntriesByUserDay.forEach((breakEntries, key) => {
+    const [userId, dateKey] = key.split('|');
+    const earnsPaidLunch = dateKey < PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE
+      || getProductiveHoursForUserDay(workEntries, breakEntries, userId, dateKey, now) >= PAID_LUNCH_MIN_PRODUCTIVE_HOURS - 1e-9;
     let paidBreakUsedByProfile = new Map<string, number>();
 
     breakEntries.forEach((breakEntry) => {
@@ -96,7 +114,7 @@ export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Pr
       // later break to double-count.
       const profile = profileById.get(breakEntry.userId);
       const durationHours = getEntryDurationHours(breakEntry, now);
-      const paidLimit = profile?.paidBreaks ? Math.max(0, profile.paidBreakMinutes / 60) : 0;
+      const paidLimit = profile?.paidBreaks && earnsPaidLunch ? Math.max(0, profile.paidBreakMinutes / 60) : 0;
       const paidUsed = paidBreakUsedByProfile.get(breakEntry.userId) ?? 0;
       const paidHours = Math.max(0, Math.min(durationHours, paidLimit - paidUsed));
       const unpaidHours = Math.max(0, durationHours - paidHours);

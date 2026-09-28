@@ -208,3 +208,40 @@ describe('labour cost regression fixtures', () => {
     expect(mergedQaJob?.employees.map((employee) => employee.employeeName)).toEqual(['Loaded Employee', 'Lower Loaded Contractor']);
   });
 });
+
+describe('paid lunch minimum hours', () => {
+  const now = new Date('2026-09-30T12:00:00.000Z');
+  const day = (dateKey: string, workHours: number, breakStartUtc: string) => {
+    resetEntrySequence();
+    return [
+      workEntry({ id: `work-${dateKey}`, userId: paidBreakProfile.id, clockIn: `${dateKey}T11:00:00.000Z`, hours: workHours }),
+      breakEntry({ id: `break-${dateKey}`, userId: paidBreakProfile.id, clockIn: `${dateKey}T${breakStartUtc}:00.000Z`, hours: 0.5 }),
+    ];
+  };
+
+  it('pays lunch when productive time reaches exactly 7.5 hours', () => {
+    const summary = computeTimeSummary(day('2026-09-15', 8, '15:00'), paidBreakProfile, 48, now);
+    expect(summary.paidBreakHours).toBeCloseTo(0.5, 2);
+    expect(summary.unpaidBreakHours).toBeCloseTo(0, 2);
+    expect(summary.netWorkHours).toBeCloseTo(8, 2);
+  });
+
+  it('does not pay lunch when productive time is under 7.5 hours', () => {
+    const summary = computeTimeSummary(day('2026-09-15', 7.5, '15:00'), paidBreakProfile, 48, now);
+    expect(summary.paidBreakHours).toBeCloseTo(0, 2);
+    expect(summary.unpaidBreakHours).toBeCloseTo(0.5, 2);
+    expect(summary.netWorkHours).toBeCloseTo(7, 2);
+  });
+
+  it('applies from the effective date itself', () => {
+    const summary = computeTimeSummary(day('2026-09-14', 6, '14:00'), paidBreakProfile, 48, now);
+    expect(summary.unpaidBreakHours).toBeCloseTo(0.5, 2);
+    expect(summary.netWorkHours).toBeCloseTo(5.5, 2);
+  });
+
+  it('leaves days before the effective date on the old rule', () => {
+    const summary = computeTimeSummary(day('2026-09-11', 7.5, '15:00'), paidBreakProfile, 48, now);
+    expect(summary.paidBreakHours).toBeCloseTo(0.5, 2);
+    expect(summary.netWorkHours).toBeCloseTo(7.5, 2);
+  });
+});

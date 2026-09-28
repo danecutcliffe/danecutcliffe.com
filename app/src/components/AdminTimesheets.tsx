@@ -150,7 +150,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
       {/* Pay period summary */}
       <div id="ts-summary" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
         <h2 className="text-lg font-bold">Pay period summary</h2>
-        <p className="mt-1 text-sm font-semibold text-muted">{employee?.paidBreaks ? `${employee.paidBreakMinutes} paid lunch minutes included` : 'Lunches excluded for this employee'}</p>
+        <p className="mt-1 text-sm font-semibold text-muted">{employee?.paidBreaks ? `${employee.paidBreakMinutes} paid lunch minutes included on days with 7.5+ productive hours` : 'Lunches excluded for this employee'}</p>
         <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
           <Metric label="Net work hours" value={`${summary.netWorkHours.toFixed(2)}h`} />
           <Metric label="OT hours" value={`${summary.overtimeHours.toFixed(2)}h`} />
