@@ -510,7 +510,7 @@ function PayrollSettingsPanel({
               </select>
             </label>
             <label className="block min-w-0 text-xs font-semibold text-muted" htmlFor="weekly-overtime-threshold">
-              Weekly overtime threshold
+              Weekly OT threshold before Jun 30, 2026
               <input
                 id="weekly-overtime-threshold"
                 className="mt-1 block box-border h-10 w-full min-w-0 max-w-full rounded-md border border-input-border bg-card px-3"
@@ -716,7 +716,7 @@ function EmployeeRow({
   hasTimeHistory: boolean;
   isCurrentProfile: boolean;
   onDelete: () => void;
-  onSave: (patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive'>>) => void;
+  onSave: (patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'otAveragingTwoWeek' | 'canAccessScopes' | 'isActive'>>) => void;
 }) {
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
@@ -726,13 +726,14 @@ function EmployeeRow({
   const [rate, setRate] = useState(profile.hourlyRate.toString());
   const [paidBreaks, setPaidBreaks] = useState(profile.paidBreaks);
   const [paidBreakMinutes, setPaidBreakMinutes] = useState(profile.paidBreakMinutes.toString());
+  const [otAveragingTwoWeek, setOtAveragingTwoWeek] = useState(profile.otAveragingTwoWeek);
   const [canAccessScopes, setCanAccessScopes] = useState(profile.canAccessScopes);
   const [canPunch, setCanPunch] = useState(profile.isActive);
   const [isExpanded, setIsExpanded] = useState(false);
   const rateNumber = Number(rate);
   const paidBreakMinutesNumber = Math.max(0, Math.min(240, Number(paidBreakMinutes)));
   const nextContractorHstApplicable = workerType === 'contractor' ? contractorHstApplicable : false;
-  const hasChanges = firstName !== profile.firstName || lastName !== profile.lastName || role !== profile.role || workerType !== profile.workerType || nextContractorHstApplicable !== profile.contractorHstApplicable || rateNumber !== profile.hourlyRate || paidBreaks !== profile.paidBreaks || paidBreakMinutesNumber !== profile.paidBreakMinutes || canAccessScopes !== profile.canAccessScopes || canPunch !== profile.isActive;
+  const hasChanges = firstName !== profile.firstName || lastName !== profile.lastName || role !== profile.role || workerType !== profile.workerType || nextContractorHstApplicable !== profile.contractorHstApplicable || rateNumber !== profile.hourlyRate || paidBreaks !== profile.paidBreaks || paidBreakMinutesNumber !== profile.paidBreakMinutes || otAveragingTwoWeek !== profile.otAveragingTwoWeek || canAccessScopes !== profile.canAccessScopes || canPunch !== profile.isActive;
   const summaryWorkerLabel = profileTypeLabel(profile);
 
   return (
@@ -839,6 +840,13 @@ function EmployeeRow({
               />
             </label>
             <div className="text-sm font-semibold text-muted">
+              <span>9x9 two-week OT averaging</span>
+              <div className="mt-1.5 flex min-h-11 items-center rounded-md border border-input-border bg-card px-3">
+                <ToggleSwitch label="" checked={workerType !== 'contractor' && otAveragingTwoWeek} onChange={setOtAveragingTwoWeek} disabled={isBusy || workerType === 'contractor'} />
+              </div>
+              <p className="mt-1 text-xs font-semibold text-muted-light">{workerType === 'contractor' ? 'Contractors do not earn overtime.' : 'Only with a written averaging agreement. OT after 88h per pay period instead of 44h per week.'}</p>
+            </div>
+            <div className="text-sm font-semibold text-muted">
               <span>Active</span>
               <div className="mt-1.5 flex min-h-11 items-center rounded-md border border-input-border bg-card px-3">
                 <ToggleSwitch label="" checked={canPunch} onChange={setCanPunch} disabled={isBusy} />
@@ -858,7 +866,7 @@ function EmployeeRow({
               className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-bold text-white disabled:bg-app-border disabled:text-muted sm:flex-none"
               type="button"
               disabled={isBusy || !hasChanges || !firstName.trim() || !lastName.trim() || Number.isNaN(rateNumber) || Number.isNaN(paidBreakMinutesNumber)}
-              onClick={() => onSave({ firstName: firstName.trim(), lastName: lastName.trim(), role, workerType, contractorHstApplicable: nextContractorHstApplicable, hourlyRate: rateNumber, paidBreaks, paidBreakMinutes: paidBreakMinutesNumber, canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: canPunch })}
+              onClick={() => onSave({ firstName: firstName.trim(), lastName: lastName.trim(), role, workerType, contractorHstApplicable: nextContractorHstApplicable, hourlyRate: rateNumber, paidBreaks, paidBreakMinutes: paidBreakMinutesNumber, otAveragingTwoWeek, canAccessScopes: role === 'admin' ? true : canAccessScopes, isActive: canPunch })}
             >
               <Save size={15} aria-hidden="true" />
               Save Changes

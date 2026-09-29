@@ -11,6 +11,7 @@ export const employeeProfile: Profile = {
   hourlyRate: 18,
   paidBreaks: false,
   paidBreakMinutes: 30,
+  otAveragingTwoWeek: false,
   canAccessScopes: true,
   isActive: true,
   createdAt: '2026-01-01T12:00:00.000Z',
@@ -158,4 +159,8 @@ function entry(params: {
     createdBy: params.userId ?? employeeProfile.id,
     createdAt: params.clockIn,
   };
+}
+
+export function overtimeSettings(weeklyOvertimeThresholdHours = 48) {
+  return { anchorStart: payPeriodSettings.anchorStart, lengthDays: payPeriodSettings.lengthDays, weeklyOvertimeThresholdHours };
 }

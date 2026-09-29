@@ -53,7 +53,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const employeesWithoutTime = employees.filter((profile) => !employeeIdsWithTime.has(profile.id)).sort(byEmployeeName);
   const profileEntries = entries.filter((entry) => entry.userId === employee?.id && periodDays.includes(getAtlanticDateKey(entry.clockIn)));
   const summary = employee
-    ? computeTimeSummary(profileEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
+    ? computeTimeSummary(profileEntries, employee, payPeriodSettings)
     : emptyTimeSummary();
   const groupedEntries = groupEntriesByAtlanticDate(profileEntries);
   const timesheetWeeks = employee
@@ -61,7 +61,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
         periodDays,
         entries: profileEntries,
         profile: employee,
-        weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+        overtimeSettings: payPeriodSettings,
       })
     : [];
   const displayWeeks = getDisplayTimesheetWeeks(timesheetWeeks);
@@ -151,6 +151,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
       <div id="ts-summary" className="scroll-mt-20 rounded-md border border-app-border bg-card p-4 shadow-soft">
         <h2 className="text-lg font-bold">Pay period summary</h2>
         <p className="mt-1 text-sm font-semibold text-muted">{employee?.paidBreaks ? `${employee.paidBreakMinutes} paid lunch minutes included on days with 7.5+ productive hours` : 'Lunches excluded for this employee'}</p>
+        {employee && <p className="mt-1 text-sm font-semibold text-muted">{employee.workerType === 'contractor' ? 'Contractor: no overtime' : employee.otAveragingTwoWeek ? 'OT: 9x9 averaging, after 88 work hours per pay period' : 'OT: after 44 work hours per week'}</p>}
         <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
           <Metric label="Net work hours" value={`${summary.netWorkHours.toFixed(2)}h`} />
           <Metric label="OT hours" value={`${summary.overtimeHours.toFixed(2)}h`} />
@@ -198,7 +199,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
                     const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
                     if (dayEntries.length === 0) return null;
                     const daySummary = employee
-                      ? computeTimeSummary(dayEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours)
+                      ? computeTimeSummary(dayEntries, employee, payPeriodSettings, undefined, profileEntries)
                       : emptyTimeSummary();
                     const isOpen = dayEntries.some((entry) => !entry.clockOut);
 

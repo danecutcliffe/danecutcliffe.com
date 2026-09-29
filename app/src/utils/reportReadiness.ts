@@ -11,7 +11,7 @@ export interface PayrollExportReadiness {
 export function buildPayrollExportReadiness(
   entries: TimeEntry[],
   profileById: Map<string, Profile>,
-  payPeriodSettings: Pick<PayPeriodSettings, 'weeklyOvertimeThresholdHours'>,
+  payPeriodSettings: Pick<PayPeriodSettings, 'anchorStart' | 'lengthDays' | 'weeklyOvertimeThresholdHours'>,
   now = new Date(),
 ): PayrollExportReadiness {
   const openWorkCount = entries.filter((entry) => entry.eventType === 'work' && !entry.clockOut).length;
@@ -25,7 +25,7 @@ export function buildPayrollExportReadiness(
     .filter((entry) => entry.eventType === 'work')
     .map((entry) => profileById.get(entry.userId))
     .filter((profile): profile is Profile => profile !== undefined && profile.role === 'employee' && profile.hourlyRate <= 0));
-  const hoursResult = computeEntryHours(entries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const hoursResult = computeEntryHours(entries, profileById, payPeriodSettings, now);
 
   return {
     blockers: [

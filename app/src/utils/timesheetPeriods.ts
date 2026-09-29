@@ -1,12 +1,12 @@
 import type { Profile, TimeEntry } from '../domain/types';
-import { computeTimeSummary, type TimeSummary } from './timecardHours';
+import { computeTimeSummary, type OvertimeSettings, type TimeSummary } from './timecardHours';
 import { getAtlanticDateKey, getAtlanticWeekStart } from './time';
 
 interface BuildTimesheetWeeksArgs {
   periodDays: string[];
   entries: TimeEntry[];
   profile: Profile;
-  weeklyOvertimeThresholdHours: number;
+  overtimeSettings: OvertimeSettings;
   todayKey?: string;
   now?: Date;
 }
@@ -28,7 +28,7 @@ export function buildTimesheetWeeks({
   periodDays,
   entries,
   profile,
-  weeklyOvertimeThresholdHours,
+  overtimeSettings,
   todayKey = getAtlanticDateKey(new Date()),
   now,
 }: BuildTimesheetWeeksArgs): TimesheetWeek[] {
@@ -64,7 +64,7 @@ export function buildTimesheetWeeks({
       weekEnd,
       days: week.days,
       entries: weekEntries,
-      summary: computeTimeSummary(weekEntries, profile, weeklyOvertimeThresholdHours, now),
+      summary: computeTimeSummary(weekEntries, profile, overtimeSettings, now, entries),
       title: `Week of ${rangeLabel}`,
       rangeLabel,
       isCurrentWeek: index === currentWeekIndex,

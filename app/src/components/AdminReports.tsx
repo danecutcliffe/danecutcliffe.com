@@ -8,6 +8,7 @@ import { buildDetailedTimecardReport, buildHoursByLocationReport, buildPayrollSu
 import { buildReportContextEntries, buildReportWarningEntries } from '../utils/reportContext';
 import { buildPayPeriodOptions, resolveReportRange, type ReportRangeMode } from '../utils/reportRange';
 import { buildPayrollExportReadiness } from '../utils/reportReadiness';
+import type { OvertimeSettings } from '../utils/timecardHours';
 import { computeTimeSummary } from '../utils/timecardHours';
 import { downloadReportXlsx } from '../utils/xlsxReports';
 import {
@@ -89,15 +90,15 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   );
   const filteredWorkEntries = useMemo(() => filteredEntries.filter((entry) => entry.eventType === 'work'), [filteredEntries]);
   const reportContextEntries = useMemo(
-    () => buildReportContextEntries(entries, filteredEntries, filteredWorkEntries, reportPeriodStartKey, reportPeriodEnd),
-    [entries, filteredEntries, filteredWorkEntries, reportPeriodEnd, reportPeriodStartKey],
+    () => buildReportContextEntries(entries, filteredEntries, filteredWorkEntries, reportPeriodStartKey, reportPeriodEnd, payPeriodSettings),
+    [entries, filteredEntries, filteredWorkEntries, reportPeriodEnd, reportPeriodStartKey, payPeriodSettings],
   );
   const reportWarningEntries = useMemo(
     () => buildReportWarningEntries(periodEntries, filteredEntries, filteredWorkEntries),
     [filteredEntries, filteredWorkEntries, periodEntries],
   );
   const selectedPeriodReadiness = useMemo(() => buildPayrollExportReadiness(periodEntries, profileById, payPeriodSettings), [payPeriodSettings, periodEntries, profileById]);
-  const topPeriodSummary = useMemo(() => calculatePayrollSummary(periodEntries, reportPeople, payPeriodSettings.weeklyOvertimeThresholdHours), [payPeriodSettings.weeklyOvertimeThresholdHours, reportPeople, periodEntries]);
+  const topPeriodSummary = useMemo(() => calculatePayrollSummary(periodEntries, reportPeople, payPeriodSettings), [payPeriodSettings, reportPeople, periodEntries]);
   const labourBreakdown = useMemo(
     () => buildLabourCostBreakdownAcrossPayPeriods({
       entries,
@@ -696,8 +697,8 @@ function DetailedReport({ entries, profileById, jobById, siteById }: { entries: 
   );
 }
 
-function HoursReport({ entries, profiles, weeklyOvertimeThresholdHours }: { entries: TimeEntry[]; profiles: Profile[]; weeklyOvertimeThresholdHours: number }) {
-  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${computeTimeSummary(entries.filter((entry) => entry.userId === profile.id), profile, weeklyOvertimeThresholdHours).netWorkHours.toFixed(2)} payable hours` }))} />;
+function HoursReport({ entries, profiles, overtimeSettings }: { entries: TimeEntry[]; profiles: Profile[]; overtimeSettings: OvertimeSettings }) {
+  return <ReportList title="Hours summary" items={profiles.map((profile) => ({ title: name(profile), body: `${computeTimeSummary(entries.filter((entry) => entry.userId === profile.id), profile, overtimeSettings).netWorkHours.toFixed(2)} payable hours` }))} />;
 }
 
 function JobReport({ model }: { model: ReportModel }) {
@@ -802,11 +803,11 @@ function Metric({ label, value, sublabel, className }: { label: string; value: s
   );
 }
 
-function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[], weeklyOvertimeThresholdHours: number) {
+function calculatePayrollSummary(entries: TimeEntry[], employees: Profile[], overtimeSettings: OvertimeSettings) {
   return employees.reduce(
     (total, employee) => {
       const employeeEntries = entries.filter((entry) => entry.userId === employee.id);
-      const summary = computeTimeSummary(employeeEntries, employee, weeklyOvertimeThresholdHours);
+      const summary = computeTimeSummary(employeeEntries, employee, overtimeSettings);
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,

@@ -15,6 +15,8 @@ export interface Profile {
   hourlyRate: number;
   paidBreaks: boolean;
   paidBreakMinutes: number;
+  // PEI two-week (9x9) overtime averaging agreement: 88h per 14-day pay period instead of 44h/week.
+  otAveragingTwoWeek: boolean;
   canAccessScopes: boolean;
   isActive: boolean;
   isRejected?: boolean;

@@ -11,6 +11,7 @@ export interface ProfileRow {
   hourly_rate: number | string;
   paid_breaks: boolean;
   paid_break_minutes: number | string;
+  ot_averaging_two_week?: boolean | null;
   can_access_scopes?: boolean;
   is_active: boolean;
   is_rejected?: boolean;
@@ -128,6 +129,7 @@ export const mapProfile = (row: ProfileRow): Profile => ({
   hourlyRate: Number(row.hourly_rate),
   paidBreaks: row.paid_breaks,
   paidBreakMinutes: Number(row.paid_break_minutes ?? 30),
+  otAveragingTwoWeek: row.ot_averaging_two_week ?? false,
   canAccessScopes: row.can_access_scopes ?? true,
   isActive: row.is_active,
   isRejected: row.is_rejected ?? false,

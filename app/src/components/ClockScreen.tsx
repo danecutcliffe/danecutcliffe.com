@@ -59,7 +59,7 @@ export function ClockScreen({ profile, service, jobSites, jobCodes, entries, ope
   const activeSite = activeJob?.jobSiteId ? siteById.get(activeJob.jobSiteId) : null;
   const todayKey = getAtlanticDateKey(now);
   const todaysEntries = entries.filter((entry) => getAtlanticDateKey(entry.clockIn) === todayKey).sort((a, b) => b.clockIn.localeCompare(a.clockIn));
-  const todaySummary = computeTimeSummary(todaysEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const todaySummary = computeTimeSummary(todaysEntries, profile, payPeriodSettings, now);
   const finalClockOutNote = shiftNotes.trim();
 
   useEffect(() => {

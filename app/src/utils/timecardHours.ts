@@ -1,5 +1,5 @@
-import type { Profile, TimeEntry } from '../domain/types';
-import { OVERTIME_THRESHOLD_HOURS, getAtlanticDateKey, getAtlanticWeekStart, getEntryDurationHours } from './time';
+import type { PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
+import { OVERTIME_THRESHOLD_HOURS, addDaysToDateKey, dayDiff, getAtlanticDateKey, getAtlanticWeekStart, getEntryDurationHours } from './time';
 import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 
 // Paid lunch minimum: from PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE on, an employee only earns
@@ -7,7 +7,12 @@ import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 // break time that day) reaches PAID_LUNCH_MIN_PRODUCTIVE_HOURS. Earlier days keep the old
 // rule so already-processed payroll does not change.
 export const PAID_LUNCH_MIN_PRODUCTIVE_HOURS = 7.5;
-export const PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE = '2026-09-14';
+export const PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE = '2026-09-28';
+
+export const PEI_OVERTIME_EFFECTIVE_DATE = '2026-06-30';
+export const PEI_WEEKLY_OVERTIME_THRESHOLD_HOURS = 44;
+
+export type OvertimeSettings = Pick<PayPeriodSettings, 'anchorStart' | 'lengthDays' | 'weeklyOvertimeThresholdHours'>;
 
 // Single source of truth for per-work-entry hour accounting. Both the detailed
 // timecard report (reportModels.ts) and labour-cost reporting (labour.ts) consume
@@ -18,8 +23,16 @@ export const PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE = '2026-09-14';
 // work entry for that employee. Keying on the break START means a job switch that
 // happens right after a break does not steal the break onto the new job.
 //
-// Overtime: weekly threshold, attributed chronologically — the hours that push the
-// employee-week over the threshold are the overtime hours.
+// Overtime: attributed chronologically — the work hours that push the employee
+// over the threshold are the overtime hours. Only actual work time (shift time
+// minus ALL break time, paid or unpaid) counts toward the threshold, so a paid
+// break is always paid at the regular rate and never itself becomes overtime.
+// Contractors never earn overtime.
+//
+// Thresholds by work date:
+// - before PEI_OVERTIME_EFFECTIVE_DATE: legacy weekly threshold from pay period settings.
+// - from PEI_OVERTIME_EFFECTIVE_DATE: 44 hours per week, or, for employees on a
+//   two-week averaging agreement (9x9), one 88-hour pool per 14-day pay period.
 
 export interface BreakAllocation {
   durationHours: number;
@@ -140,31 +153,53 @@ export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Pr
   return { allocations, unattributedBreakHours };
 }
 
+// Which overtime pool a work entry belongs to, and that pool's threshold.
+export function getOvertimeBucket(entry: TimeEntry, profile: Profile | undefined, settings: OvertimeSettings) {
+  const dateKey = getAtlanticDateKey(entry.clockIn);
+  const weekStart = getAtlanticWeekStart(entry.clockIn);
+  if (dateKey < PEI_OVERTIME_EFFECTIVE_DATE) {
+    const legacyThreshold = settings.weeklyOvertimeThresholdHours > 0 ? settings.weeklyOvertimeThresholdHours : OVERTIME_THRESHOLD_HOURS;
+    return { key: `${entry.userId}|week|${weekStart}`, thresholdHours: legacyThreshold, averaging: false };
+  }
+  if (profile?.otAveragingTwoWeek && settings.lengthDays > 0) {
+    const periodStart = addDaysToDateKey(settings.anchorStart, Math.floor(dayDiff(settings.anchorStart, dateKey) / settings.lengthDays) * settings.lengthDays);
+    return {
+      key: `${entry.userId}|period|${periodStart}`,
+      thresholdHours: PEI_WEEKLY_OVERTIME_THRESHOLD_HOURS * (settings.lengthDays / 7),
+      averaging: true,
+    };
+  }
+  return { key: `${entry.userId}|week|${weekStart}`, thresholdHours: PEI_WEEKLY_OVERTIME_THRESHOLD_HOURS, averaging: false };
+}
+
 export function computeEntryHours(
   entries: TimeEntry[],
   profileById: Map<string, Profile>,
-  weeklyOvertimeThresholdHours: number | undefined,
+  overtimeSettings: OvertimeSettings,
   now: Date,
 ): EntryHoursResult {
-  const threshold = weeklyOvertimeThresholdHours && weeklyOvertimeThresholdHours > 0
-    ? weeklyOvertimeThresholdHours
-    : OVERTIME_THRESHOLD_HOURS;
   const { allocations, unattributedBreakHours } = allocateBreaks(entries, profileById, now);
   const workEntries = entries
     .filter((entry) => entry.eventType === 'work')
     .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
-  const cumulativePaidByUserWeek = new Map<string, number>();
+  const cumulativeWorkByBucket = new Map<string, number>();
   const byEntryId = new Map<string, EntryHours>();
 
   workEntries.forEach((entry) => {
     const allocation = allocations.get(entry.id) ?? { durationHours: 0, paidHours: 0, unpaidHours: 0 };
     const durationHours = getEntryDurationHours(entry, now);
     const paidHours = Math.max(0, durationHours - allocation.unpaidHours);
-    const overtimeKey = `${entry.userId}|${getAtlanticWeekStart(entry.clockIn)}`;
-    const currentCumulative = cumulativePaidByUserWeek.get(overtimeKey) ?? 0;
-    const regularHours = Math.max(0, Math.min(paidHours, threshold - currentCumulative));
-    const otHours = Math.max(0, paidHours - regularHours);
-    cumulativePaidByUserWeek.set(overtimeKey, currentCumulative + paidHours);
+    // Actual work time: all attributed break time (paid or unpaid) is excluded.
+    const workHours = Math.max(0, durationHours - allocation.durationHours);
+    const profile = profileById.get(entry.userId);
+    let otHours = 0;
+    if (profile?.workerType !== 'contractor') {
+      const bucket = getOvertimeBucket(entry, profile, overtimeSettings);
+      const currentCumulative = cumulativeWorkByBucket.get(bucket.key) ?? 0;
+      otHours = Math.max(0, Math.min(workHours, currentCumulative + workHours - bucket.thresholdHours));
+      cumulativeWorkByBucket.set(bucket.key, currentCumulative + workHours);
+    }
+    const regularHours = Math.max(0, paidHours - otHours);
 
     byEntryId.set(entry.id, {
       durationHours,
@@ -180,14 +215,18 @@ export function computeEntryHours(
   return { byEntryId, unattributedBreakHours };
 }
 
+// `contextEntries` lets a caller summarise a slice (e.g. one week) while overtime
+// is still computed across the whole pay period an averaging agreement spans.
 export function computeTimeSummary(
   entries: TimeEntry[],
   profile: Profile,
-  weeklyOvertimeThresholdHours: number | undefined,
+  overtimeSettings: OvertimeSettings,
   now = new Date(),
+  contextEntries: TimeEntry[] = entries,
 ): TimeSummary {
   const profileById = new Map([[profile.id, profile]]);
-  const { byEntryId, unattributedBreakHours } = computeEntryHours(entries, profileById, weeklyOvertimeThresholdHours, now);
+  const { byEntryId, unattributedBreakHours: contextUnattributedBreakHours } = computeEntryHours(contextEntries, profileById, overtimeSettings, now);
+  const unattributedBreakHours = contextEntries === entries ? contextUnattributedBreakHours : allocateBreaks(entries, profileById, now).unattributedBreakHours;
   const workEntryHours = entries
     .filter((entry) => entry.eventType === 'work')
     .map((entry) => byEntryId.get(entry.id))

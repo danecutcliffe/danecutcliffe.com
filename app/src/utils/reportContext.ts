@@ -1,13 +1,20 @@
-import type { TimeEntry } from '../domain/types';
+import type { PayPeriodSettings, TimeEntry } from '../domain/types';
+import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { addDaysToDateKey, getAtlanticDateKey, getAtlanticWeekStart } from './time';
 
-export function buildReportContextEntries(entries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[], periodStart: string, periodEnd: string) {
+// Context widens the report range to whole weeks (weekly OT) and, when pay period
+// settings are given, whole pay periods (two-week averaging OT).
+export function buildReportContextEntries(entries: TimeEntry[], visibleEntries: TimeEntry[], visibleWorkEntries: TimeEntry[], periodStart: string, periodEnd: string, payPeriodSettings?: PayPeriodSettings) {
   const userIds = new Set(visibleWorkEntries.map((entry) => entry.userId));
   const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
   if (userIds.size === 0) return visibleWorkEntries;
 
-  const contextStart = weekStartForDateKey(periodStart);
-  const contextEnd = addDaysToDateKey(weekStartForDateKey(periodEnd), 6);
+  const weekContextStart = weekStartForDateKey(periodStart);
+  const weekContextEnd = addDaysToDateKey(weekStartForDateKey(periodEnd), 6);
+  const payPeriodStart = payPeriodSettings ? getPayPeriodForDate(payPeriodSettings, periodStart).start : weekContextStart;
+  const payPeriodEnd = payPeriodSettings ? getPayPeriodForDate(payPeriodSettings, periodEnd).end : weekContextEnd;
+  const contextStart = payPeriodStart < weekContextStart ? payPeriodStart : weekContextStart;
+  const contextEnd = payPeriodEnd > weekContextEnd ? payPeriodEnd : weekContextEnd;
 
   return entries.filter((entry) => {
     if (!userIds.has(entry.userId)) return false;

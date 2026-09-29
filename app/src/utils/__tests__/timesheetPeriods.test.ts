@@ -16,7 +16,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: getPayPeriodDays(baseSettings, '2026-05-25'),
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-06-05',
     });
 
@@ -32,7 +32,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: ['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05'],
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-07-03',
     });
 
@@ -46,7 +46,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: ['2026-07-11', '2026-07-12'],
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-07-12',
     });
 
@@ -59,7 +59,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: ['2026-05-27', '2026-05-28', '2026-05-29', '2026-05-30', '2026-05-31', '2026-06-01'],
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-06-10',
     });
 
@@ -78,7 +78,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: getPayPeriodDays(baseSettings, '2026-05-25'),
       entries: [first, second],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 8,
+      overtimeSettings: { ...baseSettings, weeklyOvertimeThresholdHours: 8 },
       todayKey: '2026-06-05',
       now: new Date('2026-06-05T12:00:00.000Z'),
     });
@@ -92,7 +92,7 @@ describe('buildTimesheetWeeks', () => {
       periodDays: getPayPeriodDays(baseSettings, '2026-05-25'),
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-06-05',
     });
 
@@ -108,7 +108,7 @@ describe('buildTimesheetWeeks', () => {
       }, '2026-06-08'),
       entries: [],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-06-09',
     });
 
@@ -128,7 +128,7 @@ describe('buildTimesheetWeeks', () => {
       }, '2026-06-08'),
       entries: [futureEntry],
       profile: employeeProfile,
-      weeklyOvertimeThresholdHours: 48,
+      overtimeSettings: baseSettings,
       todayKey: '2026-06-09',
     });
 

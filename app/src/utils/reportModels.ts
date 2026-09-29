@@ -2,7 +2,7 @@ import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '..
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getAtlanticDateKey } from './time';
 import { jobDisplayNameById, jobPropertyName, jobSiteById } from './jobs';
-import { computeEntryHours } from './timecardHours';
+import { PEI_OVERTIME_EFFECTIVE_DATE, computeEntryHours } from './timecardHours';
 import { calculatePayrollGrossPay, roundHours, roundMoney } from './payrollRounding';
 
 export type ReportCellValue = string | number | null;
@@ -93,10 +93,10 @@ export function buildDetailedTimecardReport({
     .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
   const calculationEntries = contextEntries ?? entries;
   const warningScopeEntries = warningEntries ?? entries;
-  const hoursResult = computeEntryHours(calculationEntries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+  const hoursResult = computeEntryHours(calculationEntries, profileById, payPeriodSettings, now);
   const warningResult = warningScopeEntries === calculationEntries
     ? hoursResult
-    : computeEntryHours(warningScopeEntries, profileById, payPeriodSettings.weeklyOvertimeThresholdHours, now);
+    : computeEntryHours(warningScopeEntries, profileById, payPeriodSettings, now);
   const { byEntryId } = hoursResult;
 
   const rows = workEntries.map((entry) => {
@@ -135,7 +135,7 @@ export function buildDetailedTimecardReport({
 
   return {
     title: 'Timecard Detail',
-    subtitle: `${periodLabel ?? `${periodStart} to ${periodEnd}`} | OT after ${payPeriodSettings.weeklyOvertimeThresholdHours} paid hours/week`,
+    subtitle: `${periodLabel ?? `${periodStart} to ${periodEnd}`} | ${periodEnd >= PEI_OVERTIME_EFFECTIVE_DATE ? 'OT after 44 work hours/week, or 88 per pay period on 9x9 averaging' : `OT after ${payPeriodSettings.weeklyOvertimeThresholdHours} work hours/week`}`,
     columns: DETAIL_COLUMNS,
     rows,
     summary: [

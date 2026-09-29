@@ -1,7 +1,7 @@
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import { jobSiteById } from './jobs';
 import { addDaysToDateKey, dayDiff, getAtlanticDateKey, getEntryDurationHours } from './time';
-import { computeEntryHours } from './timecardHours';
+import { computeEntryHours, type OvertimeSettings } from './timecardHours';
 import { calculateLoadedPayrollCost, calculatePayrollGrossPay, roundHours, roundMoney } from './payrollRounding';
 
 export interface GrossUpScheduleEntry {
@@ -58,11 +58,11 @@ interface BuildLabourCostBreakdownParams {
   jobCodes: JobCode[];
   grossUpSchedule: GrossUpScheduleEntry[];
   selectedJobCodeId?: string;
-  weeklyOvertimeThresholdHours?: number;
+  overtimeSettings: OvertimeSettings;
   now?: Date;
 }
 
-interface BuildLabourCostBreakdownAcrossPayPeriodsParams extends BuildLabourCostBreakdownParams {
+interface BuildLabourCostBreakdownAcrossPayPeriodsParams extends Omit<BuildLabourCostBreakdownParams, 'overtimeSettings'> {
   payPeriodSettings: PayPeriodSettings;
 }
 
@@ -99,7 +99,7 @@ export function buildLabourCostBreakdown({
   jobCodes,
   grossUpSchedule,
   selectedJobCodeId,
-  weeklyOvertimeThresholdHours,
+  overtimeSettings,
   now = new Date(),
 }: BuildLabourCostBreakdownParams): LabourCostBreakdown {
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -123,7 +123,7 @@ export function buildLabourCostBreakdown({
     const { byEntryId, unattributedBreakHours: employeeUnattributedBreakHours } = computeEntryHours(
       employeeEntries,
       profileById,
-      weeklyOvertimeThresholdHours,
+      overtimeSettings,
       now,
     );
     unattributedBreakHours += employeeUnattributedBreakHours;
@@ -261,7 +261,7 @@ export function buildLabourCostBreakdownAcrossPayPeriods({
   const breakdowns = Array.from(periods.values()).map((periodEntries) => buildLabourCostBreakdown({
     ...params,
     entries: periodEntries,
-    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+    overtimeSettings: payPeriodSettings,
   }));
   const merged = mergeLabourCostBreakdowns(breakdowns);
 

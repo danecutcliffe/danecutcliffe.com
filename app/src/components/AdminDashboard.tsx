@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry } from '../domain/types';
 import { getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
 import { getEntryGpsVerification, jobDisplayNameById, jobSiteById } from '../utils/jobs';
-import { computeTimeSummary } from '../utils/timecardHours';
+import { computeTimeSummary, type OvertimeSettings } from '../utils/timecardHours';
 import { addDaysToDateKey, formatAtlanticDate, formatAtlanticDateTime, formatAtlanticTime, formatDurationCompact, getAtlanticDateKey, getEntryDurationHours } from '../utils/time';
 import { formatWorkdayCount, getWorkdayProgress, getWorkdayProjectionFactor } from '../utils/workdayProjection';
 
@@ -55,7 +55,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   const periodSummary = employees.reduce(
     (total, employee) => {
       const employeeEntries = periodEntries.filter((entry) => entry.userId === employee.id);
-      const summary = computeTimeSummary(employeeEntries, employee, payPeriodSettings.weeklyOvertimeThresholdHours);
+      const summary = computeTimeSummary(employeeEntries, employee, payPeriodSettings);
       return {
         netWorkHours: total.netWorkHours + summary.netWorkHours,
         overtimeHours: total.overtimeHours + summary.overtimeHours,
@@ -175,7 +175,7 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
                 flags={flags.filter((flag) => flag.entry?.userId === employee.id)}
                 jobById={jobById}
                 siteById={siteById}
-                weeklyOvertimeThresholdHours={payPeriodSettings.weeklyOvertimeThresholdHours}
+                overtimeSettings={payPeriodSettings}
                 onOpenTimesheets={onOpenTimesheets}
               />
             ))}
@@ -232,8 +232,8 @@ export function AdminDashboard({ profiles, jobSites, jobCodes, entries, payPerio
   );
 }
 
-function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, weeklyOvertimeThresholdHours, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; weeklyOvertimeThresholdHours: number; onOpenTimesheets?: (employeeId: string) => void }) {
-  const summary = computeTimeSummary(entries, employee, weeklyOvertimeThresholdHours);
+function EmployeeReviewCard({ employee, entries, flags, jobById, siteById, overtimeSettings, onOpenTimesheets }: { employee: Profile; entries: TimeEntry[]; flags: ReviewFlag[]; jobById: Map<string, JobCode>; siteById: Map<string, JobSite>; overtimeSettings: OvertimeSettings; onOpenTimesheets?: (employeeId: string) => void }) {
+  const summary = computeTimeSummary(entries, employee, overtimeSettings);
   const lastEntry = [...entries].sort((a, b) => b.clockIn.localeCompare(a.clockIn))[0];
   const jobSplits = getJobSplits(entries, jobById, siteById, employee);
   return (

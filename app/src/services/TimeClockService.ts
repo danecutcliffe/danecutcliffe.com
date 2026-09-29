@@ -126,7 +126,7 @@ export interface AdminTimeClockService extends TimeClockService {
 
   updateProfile(params: {
     profileId: string;
-    patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>>;
+    patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'otAveragingTwoWeek' | 'canAccessScopes' | 'isActive' | 'isRejected'>>;
   }): Promise<Profile>;
 
   deleteProfile?(params: {

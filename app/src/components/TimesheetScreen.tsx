@@ -24,12 +24,12 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
   const periodEntries = entries.filter((entry) => periodDays.includes(getAtlanticDateKey(entry.clockIn)));
   const periodApproval = approvals.find((approval) => approval.userId === profile.id && approval.weekStart === periodStart && approval.status === 'approved');
   const groupedEntries = groupEntriesByAtlanticDate(periodEntries);
-  const summary = computeTimeSummary(periodEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
+  const summary = computeTimeSummary(periodEntries, profile, payPeriodSettings);
   const timesheetWeeks = buildTimesheetWeeks({
     periodDays,
     entries: periodEntries,
     profile,
-    weeklyOvertimeThresholdHours: payPeriodSettings.weeklyOvertimeThresholdHours,
+    overtimeSettings: payPeriodSettings,
   });
   const displayWeeks = getDisplayTimesheetWeeks(timesheetWeeks);
 
@@ -70,7 +70,7 @@ export function TimesheetScreen({ profile, jobSites, jobCodes, entries, approval
                   {[...week.days].reverse().map((day) => {
                     const dayEntries = [...(groupedEntries[day] ?? [])].sort((a, b) => b.clockIn.localeCompare(a.clockIn));
                     if (dayEntries.length === 0) return null;
-                    const daySummary = computeTimeSummary(dayEntries, profile, payPeriodSettings.weeklyOvertimeThresholdHours);
+                    const daySummary = computeTimeSummary(dayEntries, profile, payPeriodSettings, undefined, periodEntries);
           return (
                       <section key={day} className="rounded-md border border-app-border-subtle bg-card p-3">
                         <div className="flex items-center justify-between gap-3">

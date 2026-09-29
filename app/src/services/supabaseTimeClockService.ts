@@ -392,7 +392,7 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     );
   }
 
-  async updateProfile({ profileId, patch }: { profileId: string; patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'canAccessScopes' | 'isActive' | 'isRejected'>> }) {
+  async updateProfile({ profileId, patch }: { profileId: string; patch: Partial<Pick<Profile, 'firstName' | 'lastName' | 'role' | 'workerType' | 'contractorHstApplicable' | 'hourlyRate' | 'paidBreaks' | 'paidBreakMinutes' | 'otAveragingTwoWeek' | 'canAccessScopes' | 'isActive' | 'isRejected'>> }) {
     await this.assertAdmin();
     const update: Record<string, string | number | boolean> = {};
     if (patch.firstName !== undefined) update.first_name = patch.firstName;
@@ -403,6 +403,7 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     if (patch.hourlyRate !== undefined) update.hourly_rate = patch.hourlyRate;
     if (patch.paidBreaks !== undefined) update.paid_breaks = patch.paidBreaks;
     if (patch.paidBreakMinutes !== undefined) update.paid_break_minutes = patch.paidBreakMinutes;
+    if (patch.otAveragingTwoWeek !== undefined) update.ot_averaging_two_week = patch.otAveragingTwoWeek;
     if (patch.canAccessScopes !== undefined) update.can_access_scopes = patch.canAccessScopes;
     if (patch.isActive !== undefined) update.is_active = patch.isActive;
     if (patch.isRejected !== undefined) update.is_rejected = patch.isRejected;
