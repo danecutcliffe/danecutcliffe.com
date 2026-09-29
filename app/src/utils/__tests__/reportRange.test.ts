@@ -118,6 +118,8 @@ describe('buildPayPeriodOptions', () => {
 
     expect(options.map((option) => option.value)).toEqual(['2026-06-29', '2026-06-15', '2026-06-01']);
     expect(options[0].label.startsWith('Current: ')).toBe(true);
+    expect(options[1].label.startsWith('Previous: ')).toBe(true);
+    expect(options[2].label).not.toMatch(/^(Current|Previous): /);
   });
 
   it('keeps a future selection in the list so the select never renders blank', () => {

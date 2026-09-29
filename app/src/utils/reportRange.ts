@@ -93,7 +93,9 @@ export function buildPayPeriodOptions(
 
 function periodOption(start: string, currentPeriodStart: string, lengthDays: number): ReportPeriodOption {
   const end = addDaysToDateKey(start, lengthDays - 1);
-  const prefix = start === currentPeriodStart ? 'Current: ' : '';
+  const prefix = start === currentPeriodStart
+    ? 'Current: '
+    : start === addDaysToDateKey(currentPeriodStart, -lengthDays) ? 'Previous: ' : '';
   return { value: start, label: `${prefix}${formatAtlanticDate(start)} - ${formatAtlanticDate(end)}` };
 }
 

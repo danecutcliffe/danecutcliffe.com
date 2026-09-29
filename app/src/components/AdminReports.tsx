@@ -40,7 +40,7 @@ export function AdminReports({ profiles, jobSites, jobCodes, entries, auditLogs,
   const [reportPeriodThroughStart, setReportPeriodThroughStart] = useState(currentPeriod.start);
   const [isLabourCostsOpen, setIsLabourCostsOpen] = useState(true);
   const [openPropertyIds, setOpenPropertyIds] = useState<Record<string, boolean>>({});
-  const [reportType, setReportType] = useState<ReportType>('detailed');
+  const [reportType, setReportType] = useState<ReportType>('hoursByLocation');
   const [employeeIds, setEmployeeIds] = useState<string[]>([]);
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [jobCodeIds, setJobCodeIds] = useState<string[]>([]);
