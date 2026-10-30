@@ -324,3 +324,27 @@ describe('PEI overtime (from 2026-06-30)', () => {
     expect(summary.overtimeHours).toBeCloseTo(0, 2);
   });
 });
+
+describe('paid lunch 7-minute grace', () => {
+  const now = new Date('2026-11-10T12:00:00.000Z');
+  // 08:00 Atlantic start (UTC-3 until Nov 1); break at noon.
+  const day = (dateKey: string, productiveMinutes: number) => {
+    resetEntrySequence();
+    return [
+      workEntry({ id: `work-${dateKey}`, userId: paidBreakProfile.id, clockIn: `${dateKey}T11:00:00.000Z`, hours: (productiveMinutes + 30) / 60 }),
+      breakEntry({ id: `break-${dateKey}`, userId: paidBreakProfile.id, clockIn: `${dateKey}T15:00:00.000Z`, hours: 0.5 }),
+    ];
+  };
+
+  it('pays lunch within 7 minutes of 7.5 hours from 2026-10-26', () => {
+    expect(computeTimeSummary(day('2026-10-30', 443), paidBreakProfile, overtimeSettings(), now).paidBreakHours).toBeCloseTo(0.5, 2);
+  });
+
+  it('does not pay lunch more than 7 minutes short', () => {
+    expect(computeTimeSummary(day('2026-10-30', 442), paidBreakProfile, overtimeSettings(), now).paidBreakHours).toBeCloseTo(0, 2);
+  });
+
+  it('keeps the strict 7.5-hour minimum before 2026-10-26', () => {
+    expect(computeTimeSummary(day('2026-10-14', 443), paidBreakProfile, overtimeSettings(), now).paidBreakHours).toBeCloseTo(0, 2);
+  });
+});

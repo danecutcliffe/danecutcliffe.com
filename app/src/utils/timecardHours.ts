@@ -8,6 +8,10 @@ import { calculatePayrollGrossPay, roundHours } from './payrollRounding';
 // rule so already-processed payroll does not change.
 export const PAID_LUNCH_MIN_PRODUCTIVE_HOURS = 7.5;
 export const PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE = '2026-09-28';
+// 7-minute grace on the minimum, from the pay period starting 2026-10-26. Earlier
+// periods were already paid without it.
+export const PAID_LUNCH_GRACE_MINUTES = 7;
+export const PAID_LUNCH_GRACE_EFFECTIVE_DATE = '2026-10-26';
 
 export const PEI_OVERTIME_EFFECTIVE_DATE = '2026-06-30';
 export const PEI_WEEKLY_OVERTIME_THRESHOLD_HOURS = 44;
@@ -86,6 +90,11 @@ export function findAttributedWorkEntry(workEntries: TimeEntry[], breakEntry: Ti
   }) ?? null;
 }
 
+function getPaidLunchMinimumHours(dateKey: string): number {
+  const graceHours = dateKey >= PAID_LUNCH_GRACE_EFFECTIVE_DATE ? PAID_LUNCH_GRACE_MINUTES / 60 : 0;
+  return PAID_LUNCH_MIN_PRODUCTIVE_HOURS - graceHours;
+}
+
 function getProductiveHoursForUserDay(workEntries: TimeEntry[], breakEntries: TimeEntry[], userId: string, dateKey: string, now: Date): number {
   const workHours = workEntries
     .filter((entry) => entry.userId === userId && getAtlanticDateKey(entry.clockIn) === dateKey)
@@ -117,7 +126,7 @@ export function allocateBreaks(entries: TimeEntry[], profileById: Map<string, Pr
   breakEntriesByUserDay.forEach((breakEntries, key) => {
     const [userId, dateKey] = key.split('|');
     const earnsPaidLunch = dateKey < PAID_LUNCH_MIN_HOURS_EFFECTIVE_DATE
-      || getProductiveHoursForUserDay(workEntries, breakEntries, userId, dateKey, now) >= PAID_LUNCH_MIN_PRODUCTIVE_HOURS - 1e-9;
+      || getProductiveHoursForUserDay(workEntries, breakEntries, userId, dateKey, now) >= getPaidLunchMinimumHours(dateKey) - 1e-9;
     let paidBreakUsedByProfile = new Map<string, number>();
 
     breakEntries.forEach((breakEntry) => {
