@@ -118,6 +118,7 @@ export interface AdminTimeClockService extends TimeClockService {
     entryId: string;
     patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>;
     editedBy: string;
+    allowStrandedBreaks?: boolean;
   }): Promise<TimeEntry>;
 
   deleteTimeEntry(params: {

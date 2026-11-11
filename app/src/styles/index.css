@@ -254,6 +254,21 @@ input[type="datetime-local"]::-webkit-date-and-time-value {
   text-align: left;
 }
 
+/*
+ * iOS only: native selects ignore our min-height and render compact (about 24px
+ * tall). Date/time inputs honour min-height once the native appearance is off,
+ * which made them twice as tall as the select beside them. Keep them compact on
+ * iOS so every field in a form is the same height. Unlayered on purpose so it
+ * beats the min-h-* utility classes on those inputs.
+ */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    min-height: 1.625rem;
+  }
+}
+
 /* Override WebKit autofill yellow background (iOS PWA / Safari) */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

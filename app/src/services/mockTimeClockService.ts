@@ -860,7 +860,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     return cloneEntry(entry);
   },
 
-  async updateTimeEntry({ entryId, patch, editedBy }) {
+  async updateTimeEntry({ entryId, patch, editedBy, allowStrandedBreaks }) {
     await delay();
     const entry = findEntry(entryId);
     assertTimeEntryUnlocked(entry.userId, entry.clockIn, entry.clockOut, 'editing');
@@ -876,7 +876,7 @@ export const mockTimeClockService: AdminTimeClockService = {
     if (candidate.eventType === 'break') {
       assertManualBreakHasWorkEntry(candidate.userId, candidate.clockIn);
     }
-    assertWorkChangePreservesBreaks(entry, candidate);
+    if (!allowStrandedBreaks) assertWorkChangePreservesBreaks(entry, candidate);
     assertTimeEntryUnlocked(candidate.userId, candidate.clockIn, candidate.clockOut, 'editing');
     assertNoClosedWorkOverlap(candidate);
     Object.assign(entry, candidate);

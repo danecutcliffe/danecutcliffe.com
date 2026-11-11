@@ -562,6 +562,34 @@ describe('SupabaseTimeClockService admin time-entry writes', () => {
     expect(entry.notes).toBe('Corrected note');
   });
 
+  it('routes a break-rule override through the admin RPC with only the changed fields', async () => {
+    const { service, rpc } = createFakeClient({ profile: adminProfileRow });
+
+    await service.updateTimeEntry({
+      entryId: 'entry-1',
+      patch: { clockOut: '2026-06-04T13:00:00.000Z' },
+      editedBy: adminProfileRow.id,
+      allowStrandedBreaks: true,
+    });
+
+    expect(rpc).toHaveBeenCalledWith('admin_update_time_entry_allow_stranded_breaks', {
+      p_entry_id: 'entry-1',
+      p_patch: { clock_out: '2026-06-04T13:00:00.000Z' },
+    });
+  });
+
+  it('does not use the override RPC for a normal edit', async () => {
+    const { service, rpc } = createFakeClient({ profile: adminProfileRow });
+
+    await service.updateTimeEntry({
+      entryId: 'entry-1',
+      patch: { notes: 'Plain edit' },
+      editedBy: adminProfileRow.id,
+    });
+
+    expect(rpc).not.toHaveBeenCalledWith('admin_update_time_entry_allow_stranded_breaks', expect.anything());
+  });
+
   it('requires delete readback so missing time entries are not silent no-ops', async () => {
     const { service } = createFakeClient({
       profile: adminProfileRow,

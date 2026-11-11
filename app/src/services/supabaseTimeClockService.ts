@@ -342,7 +342,7 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     return mapTimeEntry(row);
   }
 
-  async updateTimeEntry({ entryId, patch, editedBy }: { entryId: string; patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>; editedBy: string }) {
+  async updateTimeEntry({ entryId, patch, editedBy, allowStrandedBreaks }: { entryId: string; patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>; editedBy: string; allowStrandedBreaks?: boolean }) {
     await this.assertAdmin();
     const existing = await this.getTimeEntryForAdminValidation(entryId);
     if (patch.jobCodeId !== undefined) {
@@ -354,6 +354,19 @@ export class SupabaseTimeClockService implements AdminTimeClockService {
     }
     if (existing.event_type === 'break') {
       await this.assertManualBreakHasWorkEntry(existing.user_id, patch.clockIn ?? existing.clock_in);
+    }
+
+    if (allowStrandedBreaks && existing.event_type === 'work') {
+      const rpcPatch: Record<string, string | null> = {};
+      if (patch.clockIn !== undefined) rpcPatch.clock_in = patch.clockIn;
+      if (patch.clockOut !== undefined) rpcPatch.clock_out = patch.clockOut;
+      if (patch.jobCodeId !== undefined) rpcPatch.job_code_id = patch.jobCodeId;
+      if (patch.notes !== undefined) rpcPatch.notes = patch.notes;
+      const row = unwrap(
+        await this.client.rpc('admin_update_time_entry_allow_stranded_breaks', { p_entry_id: entryId, p_patch: rpcPatch }) as SupabaseResponse<TimeEntryRow>,
+        'Unable to update time entry.',
+      );
+      return mapTimeEntry(row);
     }
 
     const update: Record<string, string | null> = {

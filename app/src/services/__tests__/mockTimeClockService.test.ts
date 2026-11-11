@@ -194,5 +194,13 @@ describe('mockTimeClockService production parity', () => {
       patch: { notes: 'Still covered' },
       editedBy: 'profile-admin-1',
     })).resolves.toMatchObject({ notes: 'Still covered' });
+
+    // Admin override: the same shrink is allowed when explicitly requested.
+    await expect(mockTimeClockService.updateTimeEntry({
+      entryId: work.id,
+      patch: { clockOut: isoAt(dayOffset, 10) },
+      editedBy: 'profile-admin-1',
+      allowStrandedBreaks: true,
+    })).resolves.toMatchObject({ clockOut: isoAt(dayOffset, 10) });
   });
 });

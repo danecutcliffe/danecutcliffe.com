@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { JobCode, JobSite, PayPeriodSettings, Profile, TimeEntry, TimesheetApproval } from '../domain/types';
 import { getPayPeriodDays, getPayPeriodForDate } from '../hooks/usePayPeriodSettings';
@@ -44,6 +44,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   const [viewMode, setViewMode] = useState<AdminTimesheetView>('summary');
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [modalError, setModalError] = useState<{ source: ModalErrorSource; message: string } | null>(null);
   const employee = employees.find((profile) => profile.id === selectedEmployeeId) ?? employees[0];
   const periodDays = getPayPeriodDays(payPeriodSettings, periodStart);
   const periodDaySet = new Set(periodDays);
@@ -100,6 +101,43 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
   useEffect(() => {
     setPeriodStart(currentPeriod.start);
   }, [currentPeriod.start, payPeriodSettings.lengthDays]);
+
+  // Errors from the Edit / Manual entry pop-ups are kept separately so they can be
+  // shown inside the pop-up (the page banner is hidden behind it), tagged with the
+  // action that failed, and never leak into a different pop-up opened later.
+  const runModalAction = async (source: ModalErrorSource, action: () => Promise<void>) => {
+    setIsBusy(true);
+    setError(null);
+    setModalError(null);
+    try {
+      await action();
+      await onDataChange();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save change.';
+      setError(message);
+      setModalError({ source, message });
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    setModalError(null);
+  }, [editingEntryId, manualOpen]);
+
+  // Breaks whose start is not inside any work entry (possible after an admin
+  // override). Flagged on the timesheet so they are not left that way by accident.
+  const strandedBreakIds = new Set(
+    profileEntries
+      .filter((candidate) => candidate.eventType === 'break')
+      .filter((breakEntry) => {
+        const breakStart = new Date(breakEntry.clockIn).getTime();
+        return !entries.some((work) => work.userId === breakEntry.userId && work.eventType === 'work'
+          && new Date(work.clockIn).getTime() <= breakStart
+          && (!work.clockOut || breakStart < new Date(work.clockOut).getTime()));
+      })
+      .map((breakEntry) => breakEntry.id),
+  );
 
   const runAction = async (action: () => Promise<void>) => {
     setIsBusy(true);
@@ -218,6 +256,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
                               siteById={siteById}
                               profileById={profileById}
                               isPeriodApproved={isPeriodApproved}
+                              isStrandedBreak={strandedBreakIds.has(entry.id)}
                               onEdit={() => setEditingEntryId(entry.id)}
                               onSplit={() => setSplittingEntryId(entry.id)}
                             />
@@ -244,7 +283,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           )}
         </div>
       </div>
-      {editingEntry && !isPeriodApproved && <EntryEditor entry={editingEntry} jobSites={jobSites} jobCodes={jobCodes} isBusy={isBusy} onCancel={() => setEditingEntryId(null)} onSave={(patch) => runAction(async () => { await service.updateTimeEntry({ entryId: editingEntry.id, patch, editedBy: adminProfile.id }); setEditingEntryId(null); })} onDelete={() => runAction(async () => { await service.deleteTimeEntry({ entryId: editingEntry.id }); setEditingEntryId(null); })} />}
+      {editingEntry && !isPeriodApproved && <EntryEditor entry={editingEntry} jobSites={jobSites} jobCodes={jobCodes} isBusy={isBusy} saveError={modalError?.source === 'save' ? modalError.message : null} deleteError={modalError?.source === 'delete' ? modalError.message : null} onFieldsChange={() => setModalError(null)} onCancel={() => { setError(null); setEditingEntryId(null); }} onSave={(patch, options) => runModalAction('save', async () => { await service.updateTimeEntry({ entryId: editingEntry.id, patch, editedBy: adminProfile.id, allowStrandedBreaks: options?.allowStrandedBreaks }); setEditingEntryId(null); })} onDelete={() => runModalAction('delete', async () => { await service.deleteTimeEntry({ entryId: editingEntry.id }); setEditingEntryId(null); })} />}
       {splittingEntry && !isPeriodApproved && (
         <SplitEntryModal
           entry={splittingEntry}
@@ -280,7 +319,7 @@ export function AdminTimesheets({ adminProfile, profiles, jobSites, jobCodes, en
           })}
         />
       )}
-      {manualOpen && employee && !isPeriodApproved && <ManualEntryForm employee={employee} jobSites={jobSites} jobCodes={selectableJobCodes} isBusy={isBusy} onCancel={() => setManualOpen(false)} onSave={(values) => runAction(async () => { await service.createManualEntry({ ...values, userId: employee.id, createdBy: adminProfile.id }); setManualOpen(false); })} />}
+      {manualOpen && employee && !isPeriodApproved && <ManualEntryForm employee={employee} jobSites={jobSites} jobCodes={selectableJobCodes} isBusy={isBusy} error={modalError?.source === 'save' ? modalError.message : null} onCancel={() => { setError(null); setManualOpen(false); }} onSave={(values) => runModalAction('save', async () => { await service.createManualEntry({ ...values, userId: employee.id, createdBy: adminProfile.id }); setManualOpen(false); })} />}
     </section>
   );
 }
@@ -319,9 +358,11 @@ function TimesheetEntryCard({
   siteById,
   profileById,
   isPeriodApproved,
+  isStrandedBreak,
   onEdit,
   onSplit,
 }: {
+  isStrandedBreak: boolean;
   entry: TimeEntry;
   jobById: Map<string, JobCode>;
   siteById: Map<string, JobSite>;
@@ -343,6 +384,7 @@ function TimesheetEntryCard({
           <span className="text-sm font-bold">{getEntryDurationHours(entry).toFixed(2)}h</span>
         </div>
         {entry.notes && <p className="mt-2 text-sm text-muted">{entry.notes}</p>}
+        {isStrandedBreak && <p className="mt-2 rounded-md bg-warn-bg px-2 py-1 text-xs font-bold text-warning">This break is outside every work entry. Move a work entry to cover it, or edit or delete the break.</p>}
         <GpsCue entry={entry} jobById={jobById} siteById={siteById} />
         <EntryTrustCue entry={entry} profileById={profileById} />
       </div>
@@ -576,7 +618,13 @@ function PunchGpsCue({ lat, lng, site }: { lat?: number | null; lng?: number | n
   );
 }
 
-function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDelete }: { entry: TimeEntry; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; onCancel: () => void; onSave: (patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>) => void; onDelete: () => void }) {
+// Exact text raised by the database (guard_work_change_preserves_breaks) and the
+// mock service when a work-entry change would leave a break outside every work entry.
+type ModalErrorSource = 'save' | 'delete';
+
+export const STRANDED_BREAK_ERROR = 'Work entry changes cannot leave existing break entries without a containing work entry.';
+
+function EntryEditor({ entry, jobSites, jobCodes, isBusy, saveError, deleteError, onFieldsChange, onCancel, onSave, onDelete }: { entry: TimeEntry; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; saveError: string | null; deleteError: string | null; onFieldsChange: () => void; onCancel: () => void; onSave: (patch: Partial<Pick<TimeEntry, 'jobCodeId' | 'clockIn' | 'clockOut' | 'notes'>>, options?: { allowStrandedBreaks?: boolean }) => void; onDelete: () => void }) {
   const [originalEntry] = useState(entry);
   const initialClockIn = splitAtlanticDateTimeInput(originalEntry.clockIn);
   const initialClockOut = originalEntry.clockOut ? splitAtlanticDateTimeInput(originalEntry.clockOut) : { date: initialClockIn.date, time: '' };
@@ -590,6 +638,20 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
   const [confirmDelete, setConfirmDelete] = useState(false);
   const clockIn = combineManualDateTime(clockInDate, clockInTime);
   const clockOut = combineManualDateTime(clockOutDate, clockOutTime);
+  const buildPatch = () => buildEntryEditorPatch({ entry: originalEntry, jobCodeId, clockIn, clockOut, notes });
+  const canOverrideBreakRule = saveError === STRANDED_BREAK_ERROR && originalEntry.eventType === 'work';
+
+  // A shown error (and the Save anyway offer) only applies to the values that were
+  // actually rejected. Clear it as soon as any field changes.
+  const fieldsTouched = useRef(false);
+  useEffect(() => {
+    if (!fieldsTouched.current) {
+      fieldsTouched.current = true;
+      return;
+    }
+    onFieldsChange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobCodeId, clockInDate, clockInTime, clockOutDate, clockOutTime, notes]);
 
   useEffect(() => {
     if (!clockOutDateEdited) setClockOutDate(clockInDate);
@@ -598,13 +660,20 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
   return (
     <FormModal onClose={onCancel}>
       <FormBox
+        errorNotice={canOverrideBreakRule ? (
+          <div className="mx-4 rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text" role="alert">
+            <p>Not saved. These times would leave a break outside of any work entry.</p>
+            <p className="mt-1 font-normal">If you are about to move another entry so it covers that break, you can save anyway. Until then the break is charged to the earlier entry that day.</p>
+            <button className="mt-3 min-h-10 rounded-md border border-error-border px-4 text-sm font-bold disabled:opacity-60" type="button" disabled={isBusy} onClick={() => onSave(buildPatch(), { allowStrandedBreaks: true })}>Save anyway</button>
+          </div>
+        ) : saveError ? <FormErrorNotice message={saveError} /> : undefined}
         title="Edit time entry"
         helperText="These fields load from the original punch record in Atlantic time. Change only the part that needs correction."
         isBusy={isBusy}
         requireJobCode={entry.eventType === 'work'}
         requireNotes={false}
         onCancel={onCancel}
-        onSave={() => onSave(buildEntryEditorPatch({ entry: originalEntry, jobCodeId, clockIn, clockOut, notes }))}
+        onSave={() => onSave(buildPatch())}
         submitLabel="Save Entry"
         jobSites={jobSites}
         jobCodes={jobCodes}
@@ -625,6 +694,7 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
         )}
       />
       <div className="border-t border-app-border-subtle px-4 pb-4 pt-3">
+        {deleteError && <p className="mb-3 rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text" role="alert">Not deleted. {deleteError === STRANDED_BREAK_ERROR ? 'This entry has a break inside it. Delete or move the break first.' : deleteError}</p>}
         {!confirmDelete && (
           <button className="min-h-10 rounded-md border border-error-border px-4 text-sm font-bold text-error-text disabled:opacity-60" type="button" disabled={isBusy} onClick={() => setConfirmDelete(true)}>Delete Entry</button>
         )}
@@ -771,7 +841,7 @@ export function buildEntryEditorPatch({
   return patch;
 }
 
-function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSave }: { employee: Profile; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; onCancel: () => void; onSave: (values: { jobCodeId: string | null; eventType: TimeEntry['eventType']; clockIn: string; clockOut: string | null; notes: string }) => void }) {
+function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, error, onCancel, onSave }: { employee: Profile; jobSites: JobSite[]; jobCodes: JobCode[]; isBusy: boolean; error: string | null; onCancel: () => void; onSave: (values: { jobCodeId: string | null; eventType: TimeEntry['eventType']; clockIn: string; clockOut: string | null; notes: string }) => void }) {
   const [eventType, setEventType] = useState<TimeEntry['eventType']>('work');
   const [jobCodeId, setJobCodeId] = useState(jobCodes[0]?.id ?? '');
   const [clockInDate, setClockInDate] = useState(() => getAtlanticDateKey(new Date()));
@@ -805,6 +875,7 @@ function ManualEntryForm({ employee, jobSites, jobCodes, isBusy, onCancel, onSav
   return (
     <FormModal onClose={onCancel}>
       <FormBox
+        errorNotice={error ? <FormErrorNotice message={error} /> : undefined}
         title={`Manual entry for ${employee.firstName}`}
         helperText={isBreak ? 'Create a completed admin-entered break in Atlantic time.' : 'Create a new admin-entered work entry in Atlantic time. Leave punch out blank to create an open shift.'}
         isBusy={isBusy}
@@ -937,7 +1008,11 @@ function FormModal({ children, onClose }: { children: ReactNode; onClose?: () =>
   );
 }
 
-function FormBox(props: { title: string; helperText?: string; isBusy: boolean; requireJobCode: boolean; requireClockOut?: boolean; requireNotes: boolean; onCancel: () => void; onSave: () => void; submitLabel: string; jobSites: JobSite[]; jobCodes: JobCode[]; jobCodeId: string; setJobCodeId: (value: string) => void; clockIn: string; setClockIn: (value: string) => void; clockOut: string; setClockOut: (value: string) => void; notes: string; setNotes: (value: string) => void; entryTypeControl?: ReactNode; clockInLabel?: string; clockOutLabel?: string; timeSectionLabel?: string; notesLabel?: string; timeFields?: ReactNode; extraSaveDisabled?: boolean; validationMessage?: ReactNode }) {
+function FormErrorNotice({ message }: { message: string }) {
+  return <p className="mx-4 rounded-md border border-error-border bg-error-bg p-3 text-sm font-semibold text-error-text" role="alert">Not saved. {message}</p>;
+}
+
+function FormBox(props: { errorNotice?: ReactNode; title: string; helperText?: string; isBusy: boolean; requireJobCode: boolean; requireClockOut?: boolean; requireNotes: boolean; onCancel: () => void; onSave: () => void; submitLabel: string; jobSites: JobSite[]; jobCodes: JobCode[]; jobCodeId: string; setJobCodeId: (value: string) => void; clockIn: string; setClockIn: (value: string) => void; clockOut: string; setClockOut: (value: string) => void; notes: string; setNotes: (value: string) => void; entryTypeControl?: ReactNode; clockInLabel?: string; clockOutLabel?: string; timeSectionLabel?: string; notesLabel?: string; timeFields?: ReactNode; extraSaveDisabled?: boolean; validationMessage?: ReactNode }) {
   const hasInvalidRange = Boolean(props.clockIn && props.clockOut && new Date(parseAtlanticDateTimeInput(props.clockOut)).getTime() <= new Date(parseAtlanticDateTimeInput(props.clockIn)).getTime());
   const isIncomplete = (props.requireJobCode && !props.jobCodeId) || !props.clockIn || (props.requireClockOut && !props.clockOut) || (props.requireNotes && !props.notes.trim());
   const isSaveDisabled = props.isBusy || isIncomplete || hasInvalidRange || Boolean(props.extraSaveDisabled);
@@ -987,6 +1062,7 @@ function FormBox(props: { title: string; helperText?: string; isBusy: boolean; r
       {props.requireClockOut && !props.clockOut && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">Break entries need a punch out time.</p>}
       {props.requireNotes && !props.notes.trim() && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">Manual entries need a short note.</p>}
       {props.validationMessage && <p className="mx-4 rounded-md bg-card-alt p-3 text-sm font-semibold text-muted">{props.validationMessage}</p>}
+      {props.errorNotice}
       <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
         <button className="min-h-12 rounded-md border border-input-border px-4 font-bold" type="button" onClick={props.onCancel}>Cancel</button>
         <button className="min-h-12 rounded-md bg-accent px-4 font-bold text-white disabled:opacity-60" type="button" disabled={isSaveDisabled} onClick={props.onSave}>{props.submitLabel}</button>
