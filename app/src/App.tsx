@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminEmployees } from './components/AdminEmployees';
 import { AdminReports } from './components/AdminReports';
@@ -38,6 +38,14 @@ const hasScopeAccess = (profile: Profile | null) => profile?.role === 'admin' ||
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>(() => tabFromHash() ?? 'clock');
+  // refresh() is async and can finish after the tab has changed (for example a
+  // role switch followed by a quick tab click). Its tab guard must check the tab
+  // that is showing now, not the one captured when the refresh started.
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  // Several refreshes can overlap. Only the newest one may correct the tab, so an
+  // older refresh that started under a different role cannot bounce the user.
+  const refreshSequence = useRef(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [jobSites, setJobSites] = useState<JobSite[]>([]);
@@ -60,6 +68,7 @@ export default function App() {
   }, [themePreference]);
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -98,8 +107,11 @@ export default function App() {
         setOpenBreakEntry(openBreak);
         const navigationRole = appConfig.isStaging && isAdmin && stagingViewRole === 'employee' ? 'employee' : currentProfile.role;
         const navigationProfile = navigationRole === 'employee' && isAdmin ? { ...currentProfile, role: 'employee' as AppRole } : currentProfile;
-        if (navigationRole === 'admin' && !adminTabs.includes(activeTab)) setActiveTab(adminDefaultTab);
-        if (navigationRole !== 'admin' && !(hasScopeAccess(navigationProfile) ? employeeTabs : employeeTabsWithoutScope).includes(activeTab)) setActiveTab(employeeDefaultTab);
+        if (sequence === refreshSequence.current) {
+          const currentTab = activeTabRef.current;
+          if (navigationRole === 'admin' && !adminTabs.includes(currentTab)) setActiveTab(adminDefaultTab);
+          if (navigationRole !== 'admin' && !(hasScopeAccess(navigationProfile) ? employeeTabs : employeeTabsWithoutScope).includes(currentTab)) setActiveTab(employeeDefaultTab);
+        }
       } else {
         setEntries([]);
         setTimesheetApprovals([]);

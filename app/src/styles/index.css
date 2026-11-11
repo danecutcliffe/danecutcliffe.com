@@ -255,17 +255,31 @@ input[type="datetime-local"]::-webkit-date-and-time-value {
 }
 
 /*
- * iOS only: native selects ignore our min-height and render compact (about 24px
- * tall). Date/time inputs honour min-height once the native appearance is off,
- * which made them twice as tall as the select beside them. Keep them compact on
- * iOS so every field in a form is the same height. Unlayered on purpose so it
- * beats the min-h-* utility classes on those inputs.
+ * iOS only: field heights in the entry pop-ups.
+ *
+ * Native iOS selects ignore min-height and render cramped (about 24px), while
+ * date/time inputs honour min-h-12 (48px) once their native appearance is off.
+ * Meet in the middle at 36px so every field in the form is the same height.
+ * The select needs its native appearance turned off for the height to apply, so
+ * it gets its own chevron. Unlayered on purpose so it beats the min-h-* utility
+ * classes on those controls.
  */
 @supports (-webkit-touch-callout: none) {
   input[type="date"],
   input[type="time"],
-  input[type="datetime-local"] {
-    min-height: 1.625rem;
+  input[type="datetime-local"],
+  select.entry-form-select {
+    min-height: 2.25rem;
+  }
+
+  select.entry-form-select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 18' fill='none' stroke='%23a8a29e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5 6 3l3.5 3.5M2.5 11.5 6 15l3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 0.6rem 0.9rem;
   }
 }
 

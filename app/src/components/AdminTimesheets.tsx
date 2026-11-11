@@ -752,7 +752,7 @@ function SplitEntryModal({ entry, jobSites, jobCodes, breakEntries, isBusy, onCa
             <p className="text-sm font-bold text-muted-strong">First segment · starts at {formatAtlanticTime(entry.clockIn)}</p>
             <label className="mt-2 block text-sm font-semibold text-muted">
               Job code
-              <select className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={firstJobCodeId} onChange={(event) => setFirstJobCodeId(event.target.value)}>
+              <select className="entry-form-select mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={firstJobCodeId} onChange={(event) => setFirstJobCodeId(event.target.value)}>
                 {jobCodeOptions}
               </select>
             </label>
@@ -772,7 +772,7 @@ function SplitEntryModal({ entry, jobSites, jobCodes, breakEntries, isBusy, onCa
                 </label>
                 <label className="block text-sm font-semibold text-muted">
                   Job code after the switch
-                  <select className="mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" value={divider.jobCodeId} onChange={(event) => setDivider(index, { jobCodeId: event.target.value })}>
+                  <select className="entry-form-select mt-1.5 min-h-12 w-full min-w-0 rounded-md border border-input-border bg-card px-3" value={divider.jobCodeId} onChange={(event) => setDivider(index, { jobCodeId: event.target.value })}>
                     {jobCodeOptions}
                   </select>
                 </label>
@@ -1030,7 +1030,7 @@ function FormBox(props: { errorNotice?: ReactNode; title: string; helperText?: s
           <div className="rounded-md border border-app-border-subtle bg-card-alt p-3">
             <label className="block text-sm font-semibold text-muted">
               Job code
-              <select className="mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={props.jobCodeId} onChange={(event) => props.setJobCodeId(event.target.value)}>
+              <select className="entry-form-select mt-1.5 min-h-12 w-full rounded-md border border-input-border bg-card px-3" value={props.jobCodeId} onChange={(event) => props.setJobCodeId(event.target.value)}>
                 {props.jobCodes.map((job) => <option key={job.id} value={job.id}>{jobDisplayName(job, job.jobSiteId ? siteById.get(job.jobSiteId) : null)}</option>)}
               </select>
             </label>
