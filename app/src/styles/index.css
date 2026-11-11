@@ -192,6 +192,52 @@ textarea {
 }
 
 /*
+ * Form controls must never be wider than the box they sit in.
+ *
+ * iOS Safari draws date/time inputs as a native control that sizes itself from
+ * its own content and ignores `width: 100%` / `min-width: 0`, so the field ends
+ * up wider than its card by its own padding and border. Turning off the native
+ * appearance makes it lay out like an ordinary text field (the native picker
+ * still opens on tap).
+ *
+ * This lives here, once, on purpose. Do NOT fix this per input with utility
+ * classes: every new date/time field added later would be missing the patch.
+ * It is in the base layer so Tailwind utilities can still override it.
+ */
+@layer base {
+  input,
+  select,
+  textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    -webkit-appearance: none;
+    appearance: none;
+    /* flex (not block) keeps the value vertically centred, as the native control does */
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* Without the native appearance, an empty value collapses to zero height on iOS. */
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value,
+  input[type="week"]::-webkit-date-and-time-value {
+    min-height: 1.5em;
+    margin: 0;
+  }
+}
+
+/*
  * iOS Safari centers the displayed value of native date/time inputs by default,
  * which looks broken next to our left-aligned selects and text fields. Force the
  * value and any placeholder text to the left edge so every field reads the same.

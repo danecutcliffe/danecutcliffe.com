@@ -629,7 +629,7 @@ function EntryEditor({ entry, jobSites, jobCodes, isBusy, onCancel, onSave, onDe
           <button className="min-h-10 rounded-md border border-error-border px-4 text-sm font-bold text-error-text disabled:opacity-60" type="button" disabled={isBusy} onClick={() => setConfirmDelete(true)}>Delete Entry</button>
         )}
         {confirmDelete && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-semibold text-error-text">Permanently delete this entry?</p>
             <button className="min-h-10 rounded-md bg-warning px-4 text-sm font-bold text-white disabled:opacity-60" type="button" disabled={isBusy} onClick={onDelete}>Yes, delete</button>
             <button className="min-h-10 rounded-md border border-input-border px-4 text-sm font-bold" type="button" disabled={isBusy} onClick={() => setConfirmDelete(false)}>No</button>
